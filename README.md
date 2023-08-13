@@ -17,6 +17,14 @@ Please click "FAQ" if you have good suggestions or questions .
 #### 更新历史
 
 ```
+ 2023-08-13(0.9)
+  1.增加日志导入时Web界面交互模式。
+  2.修正当日志数据量过大时，地图崩溃的问题。
+  3.优化数据库结构，提升日志数据导入、更新速度（更新此版本前，建议备份日志以防不测）。
+  4.修正部分单词拼写错误。
+  5.增加电台UA3REO Wolf SDR。
+  6.增加电台GUOHE(国赫) PMR-171。
+
 2023-07-08(0.89)
   1.增加多重解码功能，在多重解码模式下，提高解码深度，尝试解码叠加的信号。
   2.解决导入ADI后通联过的分区没有及时更新的问题。
@@ -271,7 +279,8 @@ Please click "FAQ" if you have good suggestions or questions .
    BG7YXN，提供某型号电台用于测试。
    BG7YRB，对呼号规则运算提供帮助。
    BG8KAH，提供设备用于测试。
-   BA7LVG、JE6WUD，完成日文的翻译校对工作。
+   BA7LVG，完成日文的翻译校对工作。
+   JE6WUD，完成日文的翻译校对工作。
    BG6RI，帮助解决日志的信号报告问题。
    SV1EEX，完成希腊文、西班牙文UI的翻译工作。
    VR2VRC，帮助修正历史呼号读取规则。
@@ -290,6 +299,9 @@ Please click "FAQ" if you have good suggestions or questions .
    BH4FTI，发现并协助对一些BUG进行调试。
    BG8BXM（M哥），为FT8CN的使用做推广，抖音和B站上有很多他的教学视频。
    BG7MFQ，为FT8CN的使用做推广，帮助测试。
+   BG2EFX，提供大数据量的日志用于测试。
+
+  
 ```
 
 
