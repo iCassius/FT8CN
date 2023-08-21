@@ -293,7 +293,7 @@ Please click "FAQ" if you have good suggestions or questions .
    BG6DRU，协助对某型号电台进行测试。
    BG7NQF，提供某型号电台的隐藏指令，对一些设备做兼容性测试。
    BH2VSQ，协助对某型号电台进行测试。
-   BG7YBW，协助对部分功能惊醒测试。
+   BG7YBW，协助对部分功能进行测试。
    BH1RNN，协助对部分功能进行测试。
    BG7BSM，协助对一些BUG进行调试。
    BH4FTI，发现并协助对一些BUG进行调试。
