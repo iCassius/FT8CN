@@ -23,7 +23,7 @@ Please click "FAQ" if you have good suggestions or questions .
   3.修正生成双方都是复合呼号的消息时，发送方的呼号可能不正确的问题。
   4.优化自动程序。
 
-  5.增加（tr)uSDX Audio over cat功能，由DS1UFX贡献代码。
+  5.增加(tr)uSDX Audio over cat功能，由DS1UFX贡献代码。
   6.增加支持XieGu(协谷)X6100的Wifi模式（固件版本 1.1.7，发射音频还未解决）。
   7.增加支持Kenwood TS-570D。
   8.增加Yaesu FT-891/991 USB-DATA模式。
