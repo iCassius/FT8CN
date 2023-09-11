@@ -493,6 +493,7 @@
     <string name="config_msg_mode">Message mode</string>
     <string name="config_msg_std_mode">Standard</string>
     <string name="config_msg_simple_mode">Simple</string>
+    <string name="message_mode_help">messageMode_en.txt</string>
 
 
 </resources>

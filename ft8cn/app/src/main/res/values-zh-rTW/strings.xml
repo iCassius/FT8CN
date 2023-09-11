@@ -489,6 +489,7 @@
     <string name="config_msg_mode">消息模式</string>
     <string name="config_msg_std_mode">標准</string>
     <string name="config_msg_simple_mode">精簡</string>
+    <string name="message_mode_help">messageMode.txt</string>
 
 
 </resources>

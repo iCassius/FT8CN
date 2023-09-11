@@ -1067,6 +1067,16 @@ public class ConfigFragment extends Fragment {
                             , true).show();
             }
         });
+        //显示列表方式
+        binding.messageModeeHelpImageButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                new HelpDialog(requireContext(),requireActivity()
+                        ,GeneralVariables.getStringFromResource(R.string.message_mode_help)
+                        ,true).show();
+            }
+        });
+
         //设置ABOUT
         binding.aboutButton.setOnClickListener(new View.OnClickListener() {
             @Override

@@ -773,6 +773,7 @@
     <string name="config_msg_mode">メッセージモード</string>
     <string name="config_msg_std_mode">標準</string>
     <string name="config_msg_simple_mode">わかりやすい</string>
+    <string name="message_mode_help">messageMode_en.txt</string>
 
 
 </resources>
