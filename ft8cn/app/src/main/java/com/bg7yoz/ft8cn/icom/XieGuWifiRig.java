@@ -1,8 +1,8 @@
 package com.bg7yoz.ft8cn.icom;
 /**
- * WIFI模式下iCom电台操作。
+ * WIFI模式下协谷电台操作。
  * @author BGY70Z
- * @date 2023-03-20
+ * @date 2023-08-27
  */
 
 import android.media.AudioTrack;
@@ -14,9 +14,9 @@ import com.bg7yoz.ft8cn.ui.ToastMessage;
 
 import java.io.IOException;
 
-public class IComWifiRig extends WifiRig{
+public class XieGuWifiRig extends WifiRig{
 
-    public IComWifiRig(String ip, int port, String userName, String password) {
+    public XieGuWifiRig(String ip, int port, String userName, String password) {
         super(ip,port,userName,password);
     }
 
@@ -24,7 +24,7 @@ public class IComWifiRig extends WifiRig{
     public void start(){
         opened=true;
         openAudio();//打开音频
-        controlUdp=new IcomControlUdp(userName,password,ip,port);
+        controlUdp=new XieGuControlUdp(userName,password,ip,port);
 
         //设置事件，这里可以处理电台状态，和接收电台送来的音频数据
         controlUdp.setOnStreamEvents(new IcomUdpBase.OnStreamEvents() {
@@ -46,10 +46,8 @@ public class IComWifiRig extends WifiRig{
                     onDataEvents.onReceivedWaveData(audioData);
                 }
                 if (audioTrack!=null){
-                   // if (!isPttOn) {//如果ptt没有按下
                         audioTrack.write(audioData, 0, audioData.length
                                 , AudioTrack.WRITE_NON_BLOCKING);
-                 //   }
                 }
             }
 
