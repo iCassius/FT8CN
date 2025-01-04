@@ -30,7 +30,7 @@ public class IcomRig extends BaseRig {
     private boolean swrAlert = false;
     private Timer meterTimer;//查询meter的Timer
 
-    private boolean oldVersion=false;//针对老电台，可能不支持SWR查询
+    private boolean oldVersion = false;//针对老电台，可能不支持SWR查询
     //private boolean isPttOn = false;
 
     @Override
@@ -140,8 +140,8 @@ public class IcomRig extends BaseRig {
     public void sendWaveData(Ft8Message message) {//发送音频数据到电台，用于网络方式
         if (getConnector() != null) {//把生成的具体音频数据传递到Connector，
             float[] data = GenerateFT8.generateFt8(message, GeneralVariables.getBaseFrequency()
-                    ,12000);//此处icom电台发射音频的采样率是12000
-            if (data==null){
+                    , 12000);//此处icom电台发射音频的采样率是12000
+            if (data == null) {
                 setPTT(false);
                 return;
             }
@@ -194,7 +194,7 @@ public class IcomRig extends BaseRig {
     }
 
     private void showAlert() {
-        if (swr >= IcomRigConstant.swr_alert_max) {
+        if ((swr >= IcomRigConstant.swr_alert_max) && GeneralVariables.swr_switch_on) {
             if (!swrAlert) {
                 swrAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.swr_high_alert));
@@ -202,7 +202,7 @@ public class IcomRig extends BaseRig {
         } else {
             swrAlert = false;
         }
-        if (alc > IcomRigConstant.alc_alert_max) {//网络模式下不警告ALC
+        if ((alc > IcomRigConstant.alc_alert_max) && GeneralVariables.alc_switch_on) {//网络模式下不警告ALC
             if (!alcMaxAlert) {
                 alcMaxAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.alc_high_alert));
@@ -275,9 +275,9 @@ public class IcomRig extends BaseRig {
     }
 
 
-    public IcomRig(int civAddress,boolean newRig) {
+    public IcomRig(int civAddress, boolean newRig) {
         Log.d(TAG, "IcomRig: Create.");
-        this.oldVersion = !newRig;
+        this.oldVersion = !newRig;//有的老电台不支持swr查询
         setCivAddress(civAddress);
         startMeterTimer();
     }

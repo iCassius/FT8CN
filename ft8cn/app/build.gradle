@@ -22,9 +22,9 @@ android {
         minSdk 23
         targetSdk 33
         versionCode 1
-        versionName '0.92'
+        versionName '0.93'
 
-        //testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
         dataBinding{
             enabled true
         }
@@ -82,6 +82,7 @@ dependencies {
     implementation 'com.google.android.gms:play-services-maps:18.1.0'
 
     implementation 'com.google.guava:guava:31.1-jre'//用于HashTable（多key的HashMap）
+
 
 
     implementation files('src/libs/MPAndroidChartv_3.1.0.jar')

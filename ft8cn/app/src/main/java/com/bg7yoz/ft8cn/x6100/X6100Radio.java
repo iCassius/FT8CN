@@ -4,8 +4,6 @@ import static com.bg7yoz.ft8cn.flex.VITA.XIEGU_METER_CLASS_ID;
 import static com.bg7yoz.ft8cn.flex.VITA.XIEGU_METER_Stream_Id;
 import static com.bg7yoz.ft8cn.flex.VITA.XIEGU_PING_CLASS_ID;
 import static com.bg7yoz.ft8cn.flex.VITA.XIEGU_PING_Stream_Id;
-import static com.bg7yoz.ft8cn.flex.VITA.byteToStr;
-import static com.bg7yoz.ft8cn.flex.VITA.readShortData;
 import static com.bg7yoz.ft8cn.x6100.X6100Radio.XieguResponseStyle.RESPONSE;
 
 import android.annotation.SuppressLint;
@@ -18,9 +16,6 @@ import androidx.lifecycle.MutableLiveData;
 
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.R;
-import com.bg7yoz.ft8cn.flex.FlexCommand;
-import com.bg7yoz.ft8cn.flex.FlexRadio;
-import com.bg7yoz.ft8cn.flex.FlexResponseStyle;
 import com.bg7yoz.ft8cn.flex.RadioTcpClient;
 import com.bg7yoz.ft8cn.flex.RadioUdpClient;
 import com.bg7yoz.ft8cn.flex.VITA;
@@ -28,6 +23,7 @@ import com.bg7yoz.ft8cn.flex.VitaPacketType;
 import com.bg7yoz.ft8cn.flex.VitaTSF;
 import com.bg7yoz.ft8cn.flex.VitaTSI;
 import com.bg7yoz.ft8cn.rigs.BaseRig;
+import com.bg7yoz.ft8cn.rigs.IcomRigConstant;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
 
 import java.net.DatagramPacket;
@@ -35,7 +31,6 @@ import java.net.DatagramSocket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -106,6 +101,8 @@ public class X6100Radio {
 
     private boolean swrAlert = false;
     private boolean alcAlert = false;
+
+
 
 
     private Timer pingTimer = new Timer();
@@ -301,7 +298,7 @@ public class X6100Radio {
             public void onConnectionClosed() {
                 tcpClient.disconnect();
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.tcp_connect_closed));
-                if (onTcpConnectStatus != null){
+                if (onTcpConnectStatus != null) {
                     onTcpConnectStatus.onConnectionClosed(tcpClient);
                 }
             }
@@ -391,6 +388,7 @@ public class X6100Radio {
     public synchronized void commandSetTxPower(int power) {
         sendCommand(XieguCommand.SET, String.format("set tx %d", power));
     }
+
     @SuppressLint("DefaultLocale")
     public synchronized void commandSetTxVol(int volume) {
         sendCommand(XieguCommand.SET, String.format("set tx_vol %d", volume));
@@ -398,7 +396,7 @@ public class X6100Radio {
 
     private void showAlert() {
         Log.e(TAG, String.format("ALC:%f", meters.alc));
-        if (meters.swr >= 5) {
+        if ((meters.swr >= 3) && GeneralVariables.swr_switch_on) {
             if (!swrAlert) {
                 swrAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.swr_high_alert));
@@ -408,10 +406,12 @@ public class X6100Radio {
         }
 
 
-        if (meters.alc > 50 || meters.alc < 20) {
+        if ((meters.alc > IcomRigConstant.xiegu_alc_alert_max
+                || meters.alc < IcomRigConstant.xiegu_alc_alert_min)
+                && GeneralVariables.alc_switch_on) {
             if (!alcAlert) {
                 alcAlert = true;
-                if (meters.alc > 50) {
+                if (meters.alc > IcomRigConstant.xiegu_alc_alert_max) {
                     ToastMessage.show(GeneralVariables.getStringFromResource(R.string.alc_high_alert));
                 } else {
                     ToastMessage.show(GeneralVariables.getStringFromResource(R.string.alc_low_alert));
@@ -448,26 +448,28 @@ public class X6100Radio {
 
                     //判断数据包丢失情况
                     int temp = lossCount;
-                    if (currentCount <= -1) {
+                    if (currentCount <= -1) {//初始化当前包的计数器
                         currentCount = vita.packetCount;
                     }
-                    if (currentCount > vita.packetCount) {
+                    if (currentCount > vita.packetCount) {//说明丢失的数据包超过16个了
                         lossCount = lossCount + vita.packetCount + 16 - currentCount - 1;
-                    } else if (currentCount < vita.packetCount) {
+                    } else if (currentCount < vita.packetCount) {//说明丢失的数据包少于16个
                         lossCount = lossCount + vita.packetCount - currentCount - 1;
                     }
-                    currentCount = vita.packetCount;
+
+                    currentCount = vita.packetCount;//复位包计数器
                     if (lossCount > temp) {
                         Log.e(TAG, String.format("丢包数量:%d", lossCount));
-
                         for (int i = 0; i < (lossCount - temp); i++) {
                             Log.d(TAG, String.format("补发数据,%d,size:%d", i, vita.payload.length));
                             sendReceivedAudio(vita.payload);//把当前的数据补发给录音对象
                         }
                         mutableLossPackets.postValue(lossCount);
                     }
+                    //copyVoiceData(vita.payload);//
                     sendReceivedAudio(vita.payload);//把音频发给录音对象
                     playReceiveAudio(vita.payload);//发送当前的音频数据
+
                 } else if (vita.classId64 == XIEGU_PING_CLASS_ID//ping数据
                         && vita.streamId == XIEGU_PING_Stream_Id
                         && vita.integerTimestamp == 1) {//ping的回包
@@ -485,7 +487,7 @@ public class X6100Radio {
                                 alcAlert = false;
                                 swrAlert = false;
                             }
-                            if (onReceiveStreamData != null){
+                            if (onReceiveStreamData != null) {
                                 onReceiveStreamData.onReceiveMeter(meters);
                             }
                         }
@@ -503,6 +505,7 @@ public class X6100Radio {
         try {
             streamClient.setActivated(true);
             pingTimer.schedule(pingTask(), 1000, 1000);//启动ping计时器
+
         } catch (SocketException e) {
             ToastMessage.show(e.getMessage());
             e.printStackTrace();
@@ -566,7 +569,6 @@ public class X6100Radio {
             audioTrack = null;
         }
     }
-
 
 
     /**
@@ -649,7 +651,7 @@ public class X6100Radio {
 
                         if (status[i].startsWith("play_volume")) {//判断PTT
                             String temp[] = status[i].split("=");
-                            float vol = Integer.parseInt(temp[1].trim())*1.0f/100f;
+                            float vol = Integer.parseInt(temp[1].trim()) * 1.0f / 100f;
                             GeneralVariables.volumePercent = vol;
                             GeneralVariables.mutableVolumePercent.postValue(vol);
                         }
@@ -855,6 +857,7 @@ public class X6100Radio {
         void onConnectSuccess(RadioTcpClient tcpClient);
 
         void onConnectFail(RadioTcpClient tcpClient);
+
         void onConnectionClosed(RadioTcpClient tcpClient);
     }
 

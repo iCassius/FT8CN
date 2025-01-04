@@ -19,12 +19,12 @@ import java.util.TimerTask;
 public class Yaesu39Rig extends BaseRig {
     private static final String TAG = "Yaesu3Rig";
     private final StringBuilder buffer = new StringBuilder();
-    private int swr=0;
-    private int alc=0;
+    private int swr = 0;
+    private int alc = 0;
     private boolean alcMaxAlert = false;
     private boolean swrAlert = false;
 
-    private boolean isDataUsb=false;//是不是DATA-USB模式
+    private boolean isDataUsb = false;//是不是DATA-USB模式
 
     private Timer readFreqTimer = new Timer();
 
@@ -61,8 +61,10 @@ public class Yaesu39Rig extends BaseRig {
             getConnector().sendData(Yaesu3RigConstant.setRead39Meters_SWR());
         }
     }
+
     private void showAlert() {
-        if (swr >= Yaesu3RigConstant.swr_39_alert_max) {
+        if ((swr >= Yaesu3RigConstant.swr_39_alert_max)
+                && GeneralVariables.swr_switch_on) {
             if (!swrAlert) {
                 swrAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.swr_high_alert));
@@ -70,7 +72,8 @@ public class Yaesu39Rig extends BaseRig {
         } else {
             swrAlert = false;
         }
-        if (alc > Yaesu3RigConstant.alc_39_alert_max) {//网络模式下不警告ALC
+        if ((alc > Yaesu3RigConstant.alc_39_alert_max)
+                && GeneralVariables.alc_switch_on) {//网络模式下不警告ALC
             if (!alcMaxAlert) {
                 alcMaxAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.alc_high_alert));
@@ -80,6 +83,7 @@ public class Yaesu39Rig extends BaseRig {
         }
 
     }
+
     /**
      * 清空缓存数据
      */
@@ -116,7 +120,7 @@ public class Yaesu39Rig extends BaseRig {
         if (getConnector() != null) {
             if (isDataUsb) {//使用DATA-USB模式
                 getConnector().sendData(Yaesu3RigConstant.setOperationUSB_Data_Mode());
-            }else {
+            } else {
                 getConnector().sendData(Yaesu3RigConstant.setOperationUSBMode());
             }
         }
@@ -157,12 +161,12 @@ public class Yaesu39Rig extends BaseRig {
                 if (tempFreq != 0) {//如果tempFreq==0，说明频率不正常
                     setFreq(Yaesu3Command.getFrequency(yaesu3Command));
                 }
-            }else if (yaesu3Command.getCommandID().equalsIgnoreCase("RM")){//METER
-                if (Yaesu3Command.isSWRMeter39(yaesu3Command)){
-                    swr=Yaesu3Command.getSWROrALC39(yaesu3Command);
+            } else if (yaesu3Command.getCommandID().equalsIgnoreCase("RM")) {//METER
+                if (Yaesu3Command.isSWRMeter39(yaesu3Command)) {
+                    swr = Yaesu3Command.getSWROrALC39(yaesu3Command);
                 }
-                if (Yaesu3Command.isALCMeter39(yaesu3Command)){
-                    alc=Yaesu3Command.getSWROrALC39(yaesu3Command);
+                if (Yaesu3Command.isALCMeter39(yaesu3Command)) {
+                    alc = Yaesu3Command.getSWROrALC39(yaesu3Command);
                 }
                 showAlert();
             }
@@ -185,7 +189,7 @@ public class Yaesu39Rig extends BaseRig {
     }
 
     public Yaesu39Rig(boolean isDataUsb) {
-        this.isDataUsb=isDataUsb;
+        this.isDataUsb = isDataUsb;
         readFreqTimer.schedule(readTask(), START_QUERY_FREQ_DELAY, QUERY_FREQ_TIMEOUT);
     }
 }

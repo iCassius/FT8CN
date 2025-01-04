@@ -15,7 +15,6 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.wifi.WifiInfo;
@@ -41,6 +40,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.MainViewModel;
 import com.bg7yoz.ft8cn.R;
+import com.bg7yoz.ft8cn.log.ShareLogs;
 import com.bg7yoz.ft8cn.databinding.FragmentLogBinding;
 import com.bg7yoz.ft8cn.grid_tracker.GridTrackerMainActivity;
 import com.bg7yoz.ft8cn.html.LogHttpServer;
@@ -50,15 +50,12 @@ import com.bg7yoz.ft8cn.log.OnQueryQSLCallsign;
 import com.bg7yoz.ft8cn.log.OnQueryQSLRecordCallsign;
 import com.bg7yoz.ft8cn.log.QSLCallsignRecord;
 import com.bg7yoz.ft8cn.log.QSLRecordStr;
+import com.bg7yoz.ft8cn.log.OnShareLogEvents;
 
-import java.io.Serializable;
+import java.io.File;
 import java.util.ArrayList;
 
-/**
- * A simple {@link Fragment} subclass.
- * Use the {@link LogFragment#newInstance} factory method to
- * create an instance of this fragment.
- */
+
 public class LogFragment extends Fragment {
     private static final String TAG = "LogFragment";
     private FragmentLogBinding binding;
@@ -68,6 +65,7 @@ public class LogFragment extends Fragment {
     private LogQSLAdapter logQSLAdapter;
     private boolean loading = false;//防止滑动触发多次查询
     private int lastItemPosition;
+    private ShareLogsProgressDialog dialog = null;//生成共享log的对话框
 
 
     public LogFragment() {
@@ -75,11 +73,7 @@ public class LogFragment extends Fragment {
     }
 
 
-    public static LogFragment newInstance(String param1, String param2) {
-        LogFragment fragment = new LogFragment();
 
-        return fragment;
-    }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -154,17 +148,25 @@ public class LogFragment extends Fragment {
         binding.exportImageButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                if (getLocalIp()==null) {
+                if (getLocalIp() == null) {
                     new HelpDialog(requireContext(), requireActivity()
                             , GeneralVariables.getStringFromResource(R.string.export_null)
-                            ,false).show();
-                }else {
+                            , false).show();
+                } else {
                     new HelpDialog(requireContext(), requireActivity()
                             , String.format(GeneralVariables.getStringFromResource(R.string.export_info)
                             , getLocalIp(), LogHttpServer.DEFAULT_PORT)
                             , false).show();
                 }
 
+            }
+        });
+
+        //分享日志按钮
+        binding.shareLogImageButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                buildShareLogs();
             }
         });
 
@@ -188,9 +190,92 @@ public class LogFragment extends Fragment {
             }
         });
 
+        //判断生成共享log文件的工作线程还在，如果在，就显示对话框
+        if (Boolean.TRUE.equals(mainViewModel.mutableShareRunning.getValue())) {
+            showShareDialog();
+        }
+
         return binding.getRoot();
     }
 
+
+    /**
+     * 显示生成log的对话框
+     */
+    private void showShareDialog() {
+        mainViewModel.mutableShareRunning.setValue(true);
+        dialog = new ShareLogsProgressDialog(
+                binding.getRoot().getContext()
+                , mainViewModel,false);
+
+        dialog.show();
+        mainViewModel.mutableSharePosition.postValue(0);
+        mainViewModel.mutableShareInfo.postValue("");
+        mainViewModel.mutableShareCount.postValue(0);
+    }
+
+
+    /**
+     * 创建共享日志的数据文件
+     */
+    private void buildShareLogs() {
+
+        //先显示生成log的对话框
+        showShareDialog();
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+
+                File adiFile = GeneralVariables.writeToTempFile(requireContext()
+                        , "FT8CN"
+                        , ".txt"
+                        , "");
+
+
+                new ShareLogs().doShareLogs(requireContext(), adiFile
+                        , GeneralVariables.getStringFromResource(R.string.share_logs)
+                        , mainViewModel.databaseOpr.getDb()
+                        , mainViewModel.queryKey
+                        , mainViewModel.queryFilter
+                        , adiFile
+                        , false
+                        , new OnShareLogEvents() {
+                            @Override
+                            public void onPreparing(String info) {
+                                mainViewModel.mutableShareInfo.postValue(info);
+                            }
+
+                            @Override
+                            public void onShareStart(int count, String info) {
+                                mainViewModel.mutableSharePosition.postValue(0);
+                                mainViewModel.mutableShareInfo.postValue(info);
+                                mainViewModel.mutableShareRunning.postValue(true);
+                                mainViewModel.mutableShareCount.postValue(count);
+                            }
+
+                            @Override
+                            public boolean onShareProgress(int count, int position, String info) {
+                                mainViewModel.mutableSharePosition.postValue(position);
+                                mainViewModel.mutableShareInfo.postValue(info);
+                                mainViewModel.mutableShareCount.postValue(count);
+                                return Boolean.TRUE.equals(mainViewModel.mutableShareRunning.getValue());
+                            }
+
+                            @Override
+                            public void afterGet(int count, String info) {
+                                mainViewModel.mutableShareInfo.postValue(info);
+                                mainViewModel.mutableShareRunning.postValue(false);
+                            }
+
+                            @Override
+                            public void onShareFailed(String info) {
+                                mainViewModel.mutableShareInfo.postValue(info);
+                            }
+                        });
+            }
+        }).start();
+    }
 
     /**
      * 弹出菜单选项
@@ -216,8 +301,6 @@ public class LogFragment extends Fragment {
                     break;
                 case 3:
                     Intent intent = new Intent(requireContext(), GridTrackerMainActivity.class);
-                    //ArrayList<QSLRecordStr> records=new ArrayList<>();
-                    //records.add(logQSLAdapter.getRecord(position));
                     intent.putExtra("qslList", logQSLAdapter.getRecord(position));
                     startActivity(intent);
                     break;
@@ -232,22 +315,18 @@ public class LogFragment extends Fragment {
         return super.onContextItemSelected(item);
     }
 
-    private boolean itemIsOnScreen(View view) {
-        if (view != null) {
-            int width = view.getWidth();
-            int height = view.getHeight();
-            Rect rect = new Rect(0, 0, width, height);
-            return view.getLocalVisibleRect(rect);
-        }
-        return false;
-    }
+//    private boolean itemIsOnScreen(View view) {
+//        if (view != null) {
+//            int width = view.getWidth();
+//            int height = view.getHeight();
+//            Rect rect = new Rect(0, 0, width, height);
+//            return view.getLocalVisibleRect(rect);
+//        }
+//        return false;
+//    }
 
-    private void loadQueryData(RecyclerView recyclerView) {
-//        if ((!loading)&&(recyclerView.computeVerticalScrollRange()
-//                - recyclerView.computeVerticalScrollExtent()
-//                - recyclerView.computeVerticalScrollOffset() < 100)) {
+    private void loadQueryData() {
         if ((!loading)) {
-            //ToastMessage.show("查询");
             if (mainViewModel.logListShowCallsign) {
                 queryByCallsign(mainViewModel.queryKey, logCallsignAdapter.getItemCount());
             } else {
@@ -274,7 +353,7 @@ public class LogFragment extends Fragment {
                 }
                 if (newState == SCROLL_STATE_IDLE &&
                         lastItemPosition == itemCount) {
-                    loadQueryData(recyclerView);
+                    loadQueryData();
 
                 }
             }
@@ -288,23 +367,7 @@ public class LogFragment extends Fragment {
                     int firstVisibleItem = manager.findFirstVisibleItemPosition();
                     int l = manager.findLastCompletelyVisibleItemPosition();
                     lastItemPosition = firstVisibleItem + (l - firstVisibleItem) + 1;
-
                 }
-
-//                if (dy>0){//列表向上移动
-//                    loadQueryData(recyclerView);
-//                }
-                //当列表上滑，接近底部时，开始查询
-//                if ((!loading)&&(dy>0)&&(recyclerView.computeVerticalScrollRange()
-//                        - recyclerView.computeVerticalScrollExtent()
-//                        - recyclerView.computeVerticalScrollOffset() < 100)) {
-//                    ToastMessage.show("查询");
-//                    if (mainViewModel.logListShowCallsign){
-//                        queryByCallsign(mainViewModel.queryKey, logCallsignAdapter.getItemCount());
-//                    }else {
-//                        queryByCallsign(mainViewModel.queryKey, logQSLAdapter.getItemCount());
-//                    }
-//                }
             }
         });
 
@@ -321,47 +384,39 @@ public class LogFragment extends Fragment {
             @Override
             public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
                 if (direction == ItemTouchHelper.END) {
-                    if (mainViewModel.logListShowCallsign) {//此时是显示QSL呼号日志
-                        //logCallsignAdapter.notifyItemRemoved(viewHolder.getAdapterPosition());
-                    } else {
-                        //做一个是否删除确认对话框
-                        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
-                        builder.setIcon(null);
-                        builder.setTitle(GeneralVariables.getStringFromResource(R.string.delete_confirmation));
-                        builder.setMessage(GeneralVariables.getStringFromResource(R.string.are_you_sure_delete));
-                        builder.setPositiveButton(GeneralVariables.getStringFromResource(R.string.ok_confirmed)
-                                , new DialogInterface.OnClickListener() {
-                                    @Override
-                                    public void onClick(DialogInterface dialogInterface, int i) {
-                                        logQSLAdapter.deleteRecord(viewHolder.getAdapterPosition());//删除日志
-                                        logQSLAdapter.notifyItemRemoved(viewHolder.getAdapterPosition());
-                                    }
-                                });
-                        builder.setOnCancelListener(new DialogInterface.OnCancelListener() {
-                            @Override
-                            public void onCancel(DialogInterface dialogInterface) {
-                                logQSLAdapter.notifyDataSetChanged();
-                            }
-                        });
-                        builder.setNegativeButton(GeneralVariables.getStringFromResource(R.string.cancel)
-                                , new DialogInterface.OnClickListener() {
-                                    @Override
-                                    public void onClick(DialogInterface dialogInterface, int i) {
-                                        logQSLAdapter.notifyDataSetChanged();
-                                    }
-                                }).show();
+                    //做一个是否删除确认对话框
+                    AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
+                    builder.setIcon(null);
+                    builder.setTitle(GeneralVariables.getStringFromResource(R.string.delete_confirmation));
+                    builder.setMessage(GeneralVariables.getStringFromResource(R.string.are_you_sure_delete));
+                    builder.setPositiveButton(GeneralVariables.getStringFromResource(R.string.ok_confirmed)
+                            , new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dialogInterface, int i) {
+                                    logQSLAdapter.deleteRecord(viewHolder.getAdapterPosition());//删除日志
+                                    logQSLAdapter.notifyItemRemoved(viewHolder.getAdapterPosition());
+                                }
+                            });
+                    builder.setOnCancelListener(new DialogInterface.OnCancelListener() {
+                        @Override
+                        public void onCancel(DialogInterface dialogInterface) {
+                            logQSLAdapter.notifyDataSetChanged();
+                        }
+                    });
+                    builder.setNegativeButton(GeneralVariables.getStringFromResource(R.string.cancel)
+                            , new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dialogInterface, int i) {
+                                    logQSLAdapter.notifyDataSetChanged();
+                                }
+                            }).show();
 
-                    }
                 }
 
                 if (direction == ItemTouchHelper.START) {
-                    if (mainViewModel.logListShowCallsign) {//修改手工确认
-                        //logCallsignAdapter.notifyItemChanged(viewHolder.getAdapterPosition());
-                    } else {
-                        logQSLAdapter.setRecordIsQSL(viewHolder.getAdapterPosition()
-                                , !logQSLAdapter.getRecord(viewHolder.getAdapterPosition()).isQSL);
-                        logQSLAdapter.notifyItemChanged(viewHolder.getAdapterPosition());
-                    }
+                    logQSLAdapter.setRecordIsQSL(viewHolder.getAdapterPosition()
+                            , !logQSLAdapter.getRecord(viewHolder.getAdapterPosition()).isQSL);
+                    logQSLAdapter.notifyItemChanged(viewHolder.getAdapterPosition());
                 }
             }
 
@@ -379,9 +434,11 @@ public class LogFragment extends Fragment {
             }
 
             //制作删除背景的图标显示
-            Drawable delIcon = ContextCompat.getDrawable(requireActivity(), R.drawable.log_item_delete_icon);
-            Drawable qslIcon = ContextCompat.getDrawable(requireActivity(), R.drawable.ic_baseline_library_add_check_24);
-            Drawable background = new ColorDrawable(Color.LTGRAY);
+            final Drawable delIcon = ContextCompat.getDrawable(requireActivity()
+                    , R.drawable.log_item_delete_icon);
+            final Drawable qslIcon = ContextCompat.getDrawable(requireActivity()
+                    , R.drawable.ic_baseline_library_add_check_24);
+            final Drawable background = new ColorDrawable(Color.LTGRAY);
 
             @Override
             public void onChildDraw(@NonNull Canvas c, @NonNull RecyclerView recyclerView
@@ -506,8 +563,6 @@ public class LogFragment extends Fragment {
                 .getSupportFragmentManager().findFragmentById(R.id.fragmentContainerView);
         assert navHostFragment != null;//断言不为空
         navHostFragment.getNavController().navigate(R.id.countFragment);
-        ;
-
     }
 
     /**
@@ -541,5 +596,18 @@ public class LogFragment extends Fragment {
         }
         return ((ipAddress & 0xff) + "." + (ipAddress >> 8 & 0xff) + "." + (ipAddress >> 16 & 0xff)
                 + "." + (ipAddress >> 24 & 0xff));
+    }
+
+    @Override
+    public void onDestroy() {
+        //判断生成共享log线程是否还在工作，如果还在工作，要销毁对话框，防止出现not attached to window manager错误
+        if (Boolean.TRUE.equals(mainViewModel.mutableShareRunning.getValue())) {
+            if (dialog != null) {
+                dialog.dismiss();
+                dialog = null;
+            }
+        }
+
+        super.onDestroy();
     }
 }

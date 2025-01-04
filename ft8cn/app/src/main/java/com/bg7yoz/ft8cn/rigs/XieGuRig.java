@@ -21,6 +21,9 @@ public class XieGuRig extends BaseRig {
     private final int ctrAddress = 0xE0;//接收地址，默认0xE0;电台回复命令有时也可以是0x00
     private byte[] dataBuffer = new byte[0];//数据缓冲区
     private int swr = 0;
+    private int alc = 0;
+    private boolean alcMaxAlert = false;
+    private boolean alcMinAlert = false;
     private boolean swrAlert = false;
     private Timer readFreqTimer = new Timer();
 
@@ -35,9 +38,9 @@ public class XieGuRig extends BaseRig {
                         readFreqTimer = null;
                         return;
                     }
-                    if (isPttOn()){
+                    if (isPttOn()) {
                         readSWRMeter();
-                    }else {
+                    } else {
                         readFreqFromRig();
                     }
 
@@ -155,9 +158,16 @@ public class XieGuRig extends BaseRig {
             case IcomRigConstant.CMD_READ_METER://读meter//此处的指令，只在网络模式实现，以后可能会在串口方面实现
                 if (icomCommand.getSubCommand() == IcomRigConstant.CMD_READ_METER_SWR) {
                     //协谷的小端模式
-                    int temp=IcomRigConstant.twoByteBcdToIntBigEnd(icomCommand.getData(true));
-                    if (temp!=255) {
+                    int temp = IcomRigConstant.twoByteBcdToIntBigEnd(icomCommand.getData(true));
+                    if (temp != 255) {
                         swr = temp;//
+                    }
+                }
+                if (icomCommand.getSubCommand() == IcomRigConstant.CMD_READ_METER_ALC) {
+                    //协谷的小端模式
+                    int temp = IcomRigConstant.twoByteBcdToIntBigEnd(icomCommand.getData(true));
+                    if (temp != 255) {
+                        alc = temp;//
                     }
                 }
                 showAlert();//检查meter值是否在告警范围
@@ -168,7 +178,8 @@ public class XieGuRig extends BaseRig {
 
 
     private void showAlert() {
-        if (swr >= IcomRigConstant.swr_alert_max) {
+        if ((swr >= IcomRigConstant.swr_alert_max)
+                && GeneralVariables.swr_switch_on) {
             if (!swrAlert) {
                 swrAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.swr_high_alert));
@@ -176,8 +187,29 @@ public class XieGuRig extends BaseRig {
         } else {
             swrAlert = false;
         }
-    }
 
+        //协谷的alc值，是在指定范围之内
+        //alc太高
+        if ((alc > IcomRigConstant.xiegu_alc_alert_max)
+                && GeneralVariables.alc_switch_on) {//网络模式下不警告ALC
+            if (!alcMaxAlert) {
+                alcMaxAlert = true;
+                ToastMessage.show(GeneralVariables.getStringFromResource(R.string.alc_high_alert));
+            }
+        } else {
+            alcMaxAlert = false;
+        }
+        //alc太低
+        if ((alc < IcomRigConstant.xiegu_alc_alert_min)
+                && GeneralVariables.alc_switch_on) {//网络模式下不警告ALC
+            if (!alcMinAlert) {
+                alcMinAlert = true;
+                ToastMessage.show(GeneralVariables.getStringFromResource(R.string.alc_low_alert));
+            }
+        } else {
+            alcMinAlert = false;
+        }
+    }
 
 
     @Override
@@ -219,6 +251,7 @@ public class XieGuRig extends BaseRig {
     private void readSWRMeter() {
         if (getConnector() != null) {
             getConnector().sendData(IcomRigConstant.getSWRState(ctrAddress, getCivAddress()));
+            getConnector().sendData(IcomRigConstant.getALCState(ctrAddress, getCivAddress()));
         }
     }
 
@@ -231,8 +264,8 @@ public class XieGuRig extends BaseRig {
     public void sendWaveData(Ft8Message message) {//发送音频数据到电台，用于网络方式
         if (getConnector() != null) {//把生成的具体音频数据传递到Connector，
             float[] data = GenerateFT8.generateFt8(message, GeneralVariables.getBaseFrequency()
-                    ,12000);//此处icom电台发射音频的采样率是12000
-            if (data==null){
+                    , 12000);//此处icom电台发射音频的采样率是12000
+            if (data == null) {
                 setPTT(false);
                 return;
             }

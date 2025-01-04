@@ -22,8 +22,8 @@ public class KenwoodTS590Rig extends BaseRig {
     private final StringBuilder buffer = new StringBuilder();
 
     private Timer readFreqTimer = new Timer();
-    private int swr=0;
-    private int alc=0;
+    private int swr = 0;
+    private int alc = 0;
     private boolean alcMaxAlert = false;
     private boolean swrAlert = false;
 
@@ -38,9 +38,9 @@ public class KenwoodTS590Rig extends BaseRig {
                         readFreqTimer = null;
                         return;
                     }
-                    if (isPttOn()){
+                    if (isPttOn()) {
                         readMeters();//读METER
-                    }else {
+                    } else {
                         readFreqFromRig();//读频率
                     }
 
@@ -54,7 +54,7 @@ public class KenwoodTS590Rig extends BaseRig {
     /**
      * 读取Meter RM;
      */
-    private void readMeters(){
+    private void readMeters() {
         if (getConnector() != null) {
             clearBufferData();//清空一下缓存
             getConnector().sendData(KenwoodTK90RigConstant.setRead590Meters());
@@ -110,31 +110,30 @@ public class KenwoodTS590Rig extends BaseRig {
     public void onReceiveData(byte[] data) {
         String s = new String(data);
 
-        if (!s.contains("\r"))
-        {
+        if (!s.contains("\r")) {
             buffer.append(s);
-            if (buffer.length()>1000) clearBufferData();
+            if (buffer.length() > 1000) clearBufferData();
             //return;//说明数据还没接收完。
-        }else {
-            if (s.indexOf("\r")>0){//说明接到结束的数据了，并且不是第一个字符是;
-              buffer.append(s.substring(0,s.indexOf("\r")));
+        } else {
+            if (s.indexOf("\r") > 0) {//说明接到结束的数据了，并且不是第一个字符是;
+                buffer.append(s.substring(0, s.indexOf("\r")));
             }
             //开始分析数据
             Yaesu3Command yaesu3Command = Yaesu3Command.getCommand(buffer.toString());
             clearBufferData();//清一下缓存
             //要把剩下的数据放到缓存里
-            buffer.append(s.substring(s.indexOf("\r")+1));
+            buffer.append(s.substring(s.indexOf("\r") + 1));
 
             if (yaesu3Command == null) {
                 return;
             }
-            String cmd=yaesu3Command.getCommandID();
+            String cmd = yaesu3Command.getCommandID();
             if (cmd.equalsIgnoreCase("FA")) {//频率
-                long tempFreq=Yaesu3Command.getFrequency(yaesu3Command);
-                if (tempFreq!=0) {//如果tempFreq==0，说明频率不正常
+                long tempFreq = Yaesu3Command.getFrequency(yaesu3Command);
+                if (tempFreq != 0) {//如果tempFreq==0，说明频率不正常
                     setFreq(Yaesu3Command.getFrequency(yaesu3Command));
                 }
-            }else if (cmd.equalsIgnoreCase("RM")){//meter
+            } else if (cmd.equalsIgnoreCase("RM")) {//meter
                 if (Yaesu3Command.is590MeterSWR(yaesu3Command)) {
                     swr = Yaesu3Command.get590ALCOrSWR(yaesu3Command);
                 }
@@ -147,8 +146,10 @@ public class KenwoodTS590Rig extends BaseRig {
         }
 
     }
+
     private void showAlert() {
-        if (swr >= KenwoodTK90RigConstant.ts_590_swr_alert_max) {
+        if ((swr >= KenwoodTK90RigConstant.ts_590_swr_alert_max)
+                && GeneralVariables.swr_switch_on) {
             if (!swrAlert) {
                 swrAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.swr_high_alert));
@@ -156,7 +157,8 @@ public class KenwoodTS590Rig extends BaseRig {
         } else {
             swrAlert = false;
         }
-        if (alc > KenwoodTK90RigConstant.ts_590_alc_alert_max) {//网络模式下不警告ALC
+        if ((alc > KenwoodTK90RigConstant.ts_590_alc_alert_max)
+                && GeneralVariables.alc_switch_on) {//网络模式下不警告ALC
             if (!alcMaxAlert) {
                 alcMaxAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.alc_high_alert));
@@ -166,6 +168,7 @@ public class KenwoodTS590Rig extends BaseRig {
         }
 
     }
+
     @Override
     public void readFreqFromRig() {
         if (getConnector() != null) {
@@ -183,11 +186,11 @@ public class KenwoodTS590Rig extends BaseRig {
         new Handler().postDelayed(new Runnable() {
             @Override
             public void run() {
-                if (getConnector()!=null){
+                if (getConnector() != null) {
                     getConnector().sendData(KenwoodTK90RigConstant.setTS590VFOMode());
                 }
             }
-        },START_QUERY_FREQ_DELAY-500);
-        readFreqTimer.schedule(readTask(), START_QUERY_FREQ_DELAY,QUERY_FREQ_TIMEOUT);
+        }, START_QUERY_FREQ_DELAY - 500);
+        readFreqTimer.schedule(readTask(), START_QUERY_FREQ_DELAY, QUERY_FREQ_TIMEOUT);
     }
 }

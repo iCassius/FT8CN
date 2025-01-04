@@ -7,6 +7,7 @@ package com.bg7yoz.ft8cn;
  * 2.录音、存储的权限申请。
  * 3.实现Fragment的导航管理。
  * 4.USB串口连接后的提示
+ *
  * @author BG7YOZ
  * @date 2022.5.6
  */
@@ -24,8 +25,10 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.media.AudioManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
@@ -52,15 +55,19 @@ import com.bg7yoz.ft8cn.databinding.MainActivityBinding;
 import com.bg7yoz.ft8cn.floatview.FloatView;
 import com.bg7yoz.ft8cn.floatview.FloatViewButton;
 import com.bg7yoz.ft8cn.grid_tracker.GridTrackerMainActivity;
+import com.bg7yoz.ft8cn.log.ImportSharedLogs;
+import com.bg7yoz.ft8cn.log.OnShareLogEvents;
 import com.bg7yoz.ft8cn.maidenhead.MaidenheadGrid;
 import com.bg7yoz.ft8cn.timer.UtcTimer;
 import com.bg7yoz.ft8cn.ui.FreqDialog;
 import com.bg7yoz.ft8cn.ui.SetVolumeDialog;
+import com.bg7yoz.ft8cn.ui.ShareLogsProgressDialog;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
-import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 
@@ -74,6 +81,8 @@ public class MainActivity extends AppCompatActivity {
 
     private MainActivityBinding binding;
     private FloatView floatView;
+
+    private ShareLogsProgressDialog dialog = null;//生成共享log的对话框
 
 
     String[] permissions = new String[]{Manifest.permission.RECORD_AUDIO
@@ -307,6 +316,76 @@ public class MainActivity extends AppCompatActivity {
                         binding.transmittingMessageTextView.setText(s);
                     }
                 });
+
+        //判断导入共享log文件的工作线程还在，如果在，就显示对话框
+        if (Boolean.TRUE.equals(mainViewModel.mutableImportShareRunning.getValue())) {
+            showShareDialog();
+        }else {
+            //读取共享的文件
+            doReceiveShareFile(getIntent());
+        }
+
+    }
+
+
+    /**
+     * 接收共享文件
+     * @param intent intent
+     */
+    private void doReceiveShareFile(Intent intent) {
+        Uri uri = (Uri) intent.getData();
+
+        if (uri != null) {
+            ImportSharedLogs importSharedLogs = null;
+            //先显示导入log的对话框
+            showShareDialog();
+            try {
+
+                importSharedLogs = new ImportSharedLogs(mainViewModel);
+                Log.e(TAG,"开始导入。。。");
+                mainViewModel.mutableImportShareRunning.setValue(true);
+                importSharedLogs.doImport(getBaseContext().getContentResolver().openInputStream(uri)
+                        ,new OnShareLogEvents() {
+                    @Override
+                    public void onPreparing(String info) {
+                        mainViewModel.mutableShareInfo.postValue(info);
+                    }
+
+                    @Override
+                    public void onShareStart(int count, String info) {
+                        mainViewModel.mutableSharePosition.postValue(0);
+                        mainViewModel.mutableShareInfo.postValue(info);
+                        mainViewModel.mutableImportShareRunning.postValue(true);
+                        mainViewModel.mutableShareCount.postValue(count);
+                    }
+
+                    @Override
+                    public boolean onShareProgress(int count, int position, String info) {
+                        mainViewModel.mutableSharePosition.postValue(position);
+                        mainViewModel.mutableShareInfo.postValue(info);
+                        mainViewModel.mutableShareCount.postValue(count);
+                        return Boolean.TRUE.equals(mainViewModel.mutableImportShareRunning.getValue());
+                    }
+
+                    @Override
+                    public void afterGet(int count, String info) {
+                        mainViewModel.mutableShareInfo.postValue(info);
+                        mainViewModel.mutableImportShareRunning.postValue(false);
+                    }
+
+                    @Override
+                    public void onShareFailed(String info) {
+                        mainViewModel.mutableShareInfo.postValue(info);
+                    }
+                });
+            } catch (IOException e) {
+                mainViewModel.mutableImportShareRunning.postValue(false);
+                Log.e(TAG,String.format("错误：%s",e.getMessage()));
+                ToastMessage.show(e.getMessage());
+            }
+        } else {
+            Log.e(TAG, "读文件类型时，文件没有找到。");
+        }
     }
 
 
@@ -435,6 +514,21 @@ public class MainActivity extends AppCompatActivity {
 
 
     /**
+     * 显示生成log的对话框
+     */
+    private void showShareDialog() {
+        dialog = new ShareLogsProgressDialog(
+                binding.getRoot().getContext()
+                , mainViewModel,true);
+
+        dialog.show();
+        mainViewModel.mutableSharePosition.postValue(0);
+        mainViewModel.mutableShareInfo.postValue("");
+        mainViewModel.mutableShareCount.postValue(0);
+    }
+
+
+    /**
      * 检查权限
      */
     private void checkPermission() {
@@ -499,25 +593,25 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * 删除指定文件夹中的所有文件
-     *
-     * @param filePath 指定的文件夹
-     */
-    public static void deleteFolderFile(String filePath) {
-        try {
-            File file = new File(filePath);//获取SD卡指定路径
-            File[] files = file.listFiles();//获取SD卡指定路径下的文件或者文件夹
-            for (int i = 0; i < files.length; i++) {
-                if (files[i].isFile()) {//如果是文件直接删除
-                    File tempFile = new File(files[i].getPath());
-                    tempFile.delete();
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
+//    /**
+//     * 删除指定文件夹中的所有文件
+//     *
+//     * @param filePath 指定的文件夹
+//     */
+//    public static void deleteFolderFile(String filePath) {
+//        try {
+//            File file = new File(filePath);//获取SD卡指定路径
+//            File[] files = file.listFiles();//获取SD卡指定路径下的文件或者文件夹
+//            for (int i = 0; i < files.length; i++) {
+//                if (files[i].isFile()) {//如果是文件直接删除
+//                    File tempFile = new File(files[i].getPath());
+//                    tempFile.delete();
+//                }
+//            }
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        }
+//    }
 
     private void animationImage() {
 
@@ -567,6 +661,9 @@ public class MainActivity extends AppCompatActivity {
     protected void onNewIntent(Intent intent) {
         if ("android.hardware.usb.action.USB_DEVICE_ATTACHED".equals(intent.getAction())) {
             mainViewModel.getUsbDevice();
+        }else {
+            setIntent(intent);//因为处于单例模式，所以要更新一下intent
+            doReceiveShareFile(getIntent());
         }
         super.onNewIntent(intent);
     }
@@ -651,6 +748,14 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         unregisterBluetoothReceiver();
+        //保证屏幕方向切换后，不会因为对话框导致闪退
+        if (Boolean.TRUE.equals(mainViewModel.mutableImportShareRunning.getValue())) {
+            if (dialog != null) {
+                dialog.dismiss();
+                dialog = null;
+            }
+        }
+
         super.onDestroy();
     }
 

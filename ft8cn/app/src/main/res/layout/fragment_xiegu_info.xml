@@ -43,11 +43,12 @@
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/xieguRulersLayout"
                 android:layout_width="0dp"
-                android:layout_height="124dp"
+                android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:layout_marginTop="24dp"
                 android:layout_marginEnd="8dp"
                 android:background="@drawable/flex_meter_style"
+                android:paddingBottom="4dp"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/xieguInfoTextView">
@@ -55,7 +56,7 @@
                 <com.bg7yoz.ft8cn.ui.FlexMeterRulerView
                     android:id="@+id/xieguSMeterRulerView"
                     android:layout_width="0dp"
-                    android:layout_height="20dp"
+                    android:layout_height="28dp"
                     android:layout_marginStart="4dp"
                     android:layout_marginTop="4dp"
                     android:layout_marginEnd="4dp"
@@ -67,7 +68,7 @@
                 <com.bg7yoz.ft8cn.ui.FlexMeterRulerView
                     android:id="@+id/xieguAlcMeterRulerView"
                     android:layout_width="0dp"
-                    android:layout_height="20dp"
+                    android:layout_height="28dp"
                     android:layout_marginStart="4dp"
                     android:layout_marginTop="4dp"
                     android:layout_marginEnd="4dp"
@@ -79,7 +80,7 @@
                 <com.bg7yoz.ft8cn.ui.FlexMeterRulerView
                     android:id="@+id/xieguSwrMeterRulerView"
                     android:layout_width="0dp"
-                    android:layout_height="20dp"
+                    android:layout_height="28dp"
                     android:layout_marginStart="4dp"
                     android:layout_marginTop="4dp"
                     android:layout_marginEnd="4dp"
@@ -91,7 +92,7 @@
                 <com.bg7yoz.ft8cn.ui.FlexMeterRulerView
                     android:id="@+id/xieguPowerMeterRulerView"
                     android:layout_width="0dp"
-                    android:layout_height="20dp"
+                    android:layout_height="28dp"
                     android:layout_marginStart="4dp"
                     android:layout_marginTop="4dp"
                     android:layout_marginEnd="4dp"
@@ -103,7 +104,7 @@
                 <com.bg7yoz.ft8cn.ui.FlexMeterRulerView
                     android:id="@+id/xieguVoltMeterRulerView"
                     android:layout_width="0dp"
-                    android:layout_height="20dp"
+                    android:layout_height="28dp"
                     android:layout_marginStart="4dp"
                     android:layout_marginTop="4dp"
                     android:layout_marginEnd="4dp"

@@ -36,6 +36,20 @@
                 tools:ignore="SpeakableTextPresentCheck,TouchTargetSizeCheck" />
 
             <ImageButton
+                android:id="@+id/shareLogImageButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/imagebutton_style"
+                android:contentDescription="@string/share_logs"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toEndOf="@+id/exportImageButton"
+                app:layout_constraintTop_toTopOf="parent"
+                app:srcCompat="@drawable/share_button_icon_24"
+                tools:ignore="SpeakableTextPresentCheck,TouchTargetSizeCheck" />
+
+
+            <ImageButton
                 android:id="@+id/locationInMapImageButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -43,7 +57,7 @@
                 android:background="@drawable/imagebutton_style"
                 android:contentDescription="@string/map_location_image"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintStart_toEndOf="@+id/exportImageButton"
+                app:layout_constraintStart_toEndOf="@+id/shareLogImageButton"
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/baseline_location_on_24"
                 tools:ignore="SpeakableTextPresentCheck,TouchTargetSizeCheck" />
