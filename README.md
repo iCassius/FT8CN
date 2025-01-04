@@ -17,6 +17,13 @@ Please click "FAQ" if you have good suggestions or questions .
 #### 更新历史
 
 ```
+ 2025-01-04(0.93)
+  1.修正发射监管时间计算错误。
+  2.修正下载日志数据缺少第一条数据的问题。
+  3.增加日志数据分享功能。
+  4.增加自动向QRZ、CloudLog上传日志的功能（由SydneyOwl贡献代码）。
+  5.增加SWR，ALC告警开关。
+
  2024-01-22(0.92)
   1.增加瀑布图中消息的已通联标识。
   2.新增支持的电台型号。
@@ -329,6 +336,7 @@ Please click "FAQ" if you have good suggestions or questions .
    DS1UFX，贡献(tr)uSDX audio over cat代码。
    BG8HT，提供某型号电台进行测试。
    UB6LUM，帮助解决某型号电台的操作模式设置。
+   SydneyOwl，提供向QRZ、Cloudlog上传日志的代码。
   
 ```
 
