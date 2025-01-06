@@ -25,9 +25,6 @@ public class ToastMessage {
         return toastMessage;
     }
 
-    //public ToastMessage(Activity activity) {
-    //    this.activity = activity;
-    //}
     public ToastMessage() {
         //this.activity = activity;
     }

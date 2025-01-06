@@ -46,15 +46,15 @@ public class FlexRadioInfoFragment extends Fragment {
         if (mainViewModel.baseRig != null) {
             connector = (FlexConnector) mainViewModel.baseRig.getConnector();
             connector.subAllMeters();
-            connector.mutableMeterList.observe(this, new Observer<FlexMeterList>() {
+            connector.mutableMeterList.observe(getViewLifecycleOwner(), new Observer<FlexMeterList>() {
                 @Override
                 public void onChanged(FlexMeterList meters) {
                     //binding.flexInfoTextView.setText(String.format("%f",meters.alcVal));
-                    binding.sMeterRulerView.setValue(meters.sMeterVal);
-                    binding.alcMeterRulerView.setValue(meters.alcVal);
-                    binding.swrMeterRulerView.setValue(meters.swrVal);
-                    binding.powerMeterRulerView.setValue(meters.pwrVal);
-                    binding.tempMeterRulerView.setValue(meters.tempCVal);
+                    binding.sMeterRulerView.setValue(meters.sMeterVal,null);
+                    binding.alcMeterRulerView.setValue(meters.alcVal,null);
+                    binding.swrMeterRulerView.setValue(meters.swrVal,null);
+                    binding.powerMeterRulerView.setValue(meters.pwrVal,null);
+                    binding.tempMeterRulerView.setValue(meters.tempCVal,null);
 
                     binding.flexInfoTextView.setText(meters.getMeters());
                 }

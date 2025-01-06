@@ -46,8 +46,12 @@ public class FlexMeterRulerView extends View {
     private int valueWidth=dpToPixel(65);//值标签宽度
 
     @SuppressLint("DefaultLocale")
-    public void setValue(float value) {
-        valueLabel=String.format("%.1f%s",value,unit);
+    public void setValue(float value,OnSetValue onSetValue) {
+        if (onSetValue!=null){
+            valueLabel = onSetValue.setLabel(value);
+        }else {
+            valueLabel = String.format("%.1f%s", value, unit);
+        }
         if (value>maxVal) {
             this.value = maxVal;
         }else if(value<lowVal){
@@ -121,10 +125,10 @@ public class FlexMeterRulerView extends View {
         labelPaint.setAntiAlias(true);
         labelPaint.setDither(true);
         labelPaint.setTextAlign(Paint.Align.RIGHT);
-        canvas.drawText(label, labelWidth-5,  dpToPixel(labelDp)+5, labelPaint);
+        canvas.drawText(label, labelWidth-5,  dpToPixel(labelDp)+10, labelPaint);
         labelPaint.setTextAlign(Paint.Align.LEFT);
         canvas.drawText(valueLabel, rulerWidth+labelWidth+5
-                ,  dpToPixel(labelDp)+5, labelPaint);
+                ,  dpToPixel(labelDp)+10, labelPaint);
 
         rulerPaint.setColor(0xff00FF00);
 
@@ -188,6 +192,10 @@ public class FlexMeterRulerView extends View {
         }
 
         invalidate();
+    }
+
+    public interface OnSetValue{
+        String setLabel(float val);
     }
 
 }

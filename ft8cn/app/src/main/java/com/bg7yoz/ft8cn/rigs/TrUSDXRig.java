@@ -171,7 +171,8 @@ public class TrUSDXRig extends BaseRig {
     }
 
     private void showAlert() {
-        if (swr >= KenwoodTK90RigConstant.ts_590_swr_alert_max) {
+        if ((swr >= KenwoodTK90RigConstant.ts_590_swr_alert_max)
+                && GeneralVariables.swr_switch_on) {
             if (!swrAlert) {
                 swrAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.swr_high_alert));
@@ -179,7 +180,8 @@ public class TrUSDXRig extends BaseRig {
         } else {
             swrAlert = false;
         }
-        if (alc > KenwoodTK90RigConstant.ts_590_alc_alert_max) {//网络模式下不警告ALC
+        if ((alc > KenwoodTK90RigConstant.ts_590_alc_alert_max)
+                && GeneralVariables.alc_switch_on) {//网络模式下不警告ALC
             if (!alcMaxAlert) {
                 alcMaxAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.alc_high_alert));
@@ -249,7 +251,7 @@ public class TrUSDXRig extends BaseRig {
         if (rxStreamBuffer.size() >= 256 || force) {//8位转16位，7812Hz转12000Hz
             //byte[] resampled = rxResample.processCopy(toWaveSamples8To16(rxStreamBuffer.toByteArray()));
             float[] resampled = FT8Resample.get32Resample16(
-                    toWaveSamples8To16Int(rxStreamBuffer.toByteArray()), rxSampling, 12000,1);
+                    toWaveSamples8To16Int(rxStreamBuffer.toByteArray()), rxSampling, 12000, 1);
             rxStreamBuffer.reset();
             getConnector().receiveWaveData(resampled);
         }
@@ -270,7 +272,7 @@ public class TrUSDXRig extends BaseRig {
         }
         //调整信号强度
         for (int i = 0; i < wave.length; i++) {
-            wave[i]=wave[i]*GeneralVariables.volumePercent;
+            wave[i] = wave[i] * GeneralVariables.volumePercent;
         }
 
 //
@@ -281,7 +283,7 @@ public class TrUSDXRig extends BaseRig {
 //        txResample.close();
 //        byte[] pcm8 = toWaveSamples16To8(resampled);
 
-        byte[] pcm8 = FT8Resample.get8Resample32(wave, 24000, txSampling,1);
+        byte[] pcm8 = FT8Resample.get8Resample32(wave, 24000, txSampling, 1);
 
 
         for (int i = 0; i < pcm8.length; i++) {

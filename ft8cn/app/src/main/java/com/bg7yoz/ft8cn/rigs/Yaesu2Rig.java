@@ -16,8 +16,8 @@ import java.util.TimerTask;
 /**
  * YAESU的部分电台，回送的数据不是连续的，所以，要做一个缓冲区，接受5字节长度。满了就复位。或发送指令时，就复位。
  */
-public class Yaesu2Rig extends BaseRig{
-    private static final String TAG="Yaesu2Rig";
+public class Yaesu2Rig extends BaseRig {
+    private static final String TAG = "Yaesu2Rig";
     private Timer readFreqTimer = new Timer();
 
     private int swr = 0;
@@ -25,15 +25,15 @@ public class Yaesu2Rig extends BaseRig{
     private boolean alcMaxAlert = false;
     private boolean swrAlert = false;
 
-    private TimerTask readTask(){
+    private TimerTask readTask() {
         return new TimerTask() {
             @Override
             public void run() {
                 try {
-                    if (!isConnected()){
+                    if (!isConnected()) {
                         readFreqTimer.cancel();
                         readFreqTimer.purge();
-                        readFreqTimer=null;
+                        readFreqTimer = null;
                         return;
                     }
                     if (isPttOn()) {
@@ -41,9 +41,8 @@ public class Yaesu2Rig extends BaseRig{
                     } else {
                         readFreqFromRig();
                     }
-                }catch (Exception e)
-                {
-                    Log.e(TAG, "readFreq error:"+e.getMessage() );
+                } catch (Exception e) {
+                    Log.e(TAG, "readFreq error:" + e.getMessage());
                 }
             }
         };
@@ -54,8 +53,8 @@ public class Yaesu2Rig extends BaseRig{
     public void setPTT(boolean on) {
         super.setPTT(on);
 
-        if (getConnector()!=null){
-            switch (getControlMode()){
+        if (getConnector() != null) {
+            switch (getControlMode()) {
                 case ControlMode.CAT://以CIV指令
                     getConnector().setPttOn(Yaesu2RigConstant.setPTTState(on));
                     break;
@@ -68,11 +67,9 @@ public class Yaesu2Rig extends BaseRig{
     }
 
 
-
-
     @Override
     public boolean isConnected() {
-        if (getConnector()==null) {
+        if (getConnector() == null) {
             return false;
         }
         return getConnector().isConnected();
@@ -80,14 +77,14 @@ public class Yaesu2Rig extends BaseRig{
 
     @Override
     public void setUsbModeToRig() {
-        if (getConnector()!=null){
+        if (getConnector() != null) {
             getConnector().sendData(Yaesu2RigConstant.setOperationUSBMode());
         }
     }
 
     @Override
     public void setFreqToRig() {
-        if (getConnector()!=null){
+        if (getConnector() != null) {
             getConnector().sendData(Yaesu2RigConstant.setOperationFreq(getFreq()));
         }
     }
@@ -117,8 +114,10 @@ public class Yaesu2Rig extends BaseRig{
             getConnector().sendData(Yaesu2RigConstant.readMeter());
         }
     }
+
     private void showAlert() {
-        if (swr > Yaesu2RigConstant.swr_817_alert_min) {
+        if ((swr > Yaesu2RigConstant.swr_817_alert_min)
+                && GeneralVariables.swr_switch_on) {
             if (!swrAlert) {
                 swrAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.swr_high_alert));
@@ -126,7 +125,8 @@ public class Yaesu2Rig extends BaseRig{
         } else {
             swrAlert = false;
         }
-        if (alc >= Yaesu2RigConstant.alc_817_alert_max) {//网络模式下不警告ALC
+        if ((alc >= Yaesu2RigConstant.alc_817_alert_max)
+                && GeneralVariables.alc_switch_on) {//网络模式下不警告ALC
             if (!alcMaxAlert) {
                 alcMaxAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.alc_high_alert));
@@ -136,9 +136,10 @@ public class Yaesu2Rig extends BaseRig{
         }
 
     }
+
     @Override
-    public void readFreqFromRig(){
-        if (getConnector()!=null){
+    public void readFreqFromRig() {
+        if (getConnector() != null) {
             //clearBuffer();//清除一下缓冲区
             getConnector().sendData(Yaesu2RigConstant.setReadOperationFreq());
         }
@@ -150,7 +151,7 @@ public class Yaesu2Rig extends BaseRig{
     }
 
     public Yaesu2Rig() {
-        readFreqTimer.schedule(readTask(),START_QUERY_FREQ_DELAY,QUERY_FREQ_TIMEOUT);
+        readFreqTimer.schedule(readTask(), START_QUERY_FREQ_DELAY, QUERY_FREQ_TIMEOUT);
     }
 
 }

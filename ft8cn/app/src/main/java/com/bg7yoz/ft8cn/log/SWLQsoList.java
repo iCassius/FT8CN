@@ -44,6 +44,7 @@ public class SWLQsoList {
      */
     public void findSwlQso(ArrayList<Ft8Message> newMessages, ArrayList<Ft8Message> allMessages
             , OnFoundSwlQso onFoundSwlQso) {
+
         for (int i = 0; i < newMessages.size(); i++) {
             Ft8Message msg = newMessages.get(i);
             if (msg.inMyCall()) continue;//对包含我自己的消息不处理

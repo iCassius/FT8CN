@@ -36,6 +36,8 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -743,6 +745,277 @@ public class DatabaseOpr extends SQLiteOpenHelper {
      */
     public void getCallsignQTH(String callsign) {
         new GetCallsignQTH(db).execute(callsign);
+    }
+
+
+//    /**
+//     * 写字符串到文件
+//     * @param file
+//     * @param data
+//     */
+//    private void writeStrToFile(File file, String data) {
+//        FileOutputStream fileOutputStream = null;
+//        try {
+//            fileOutputStream = new FileOutputStream(file, true);
+//            fileOutputStream.write(data.getBytes());
+//        } catch (IOException e) {
+//            Log.e(TAG, String.format("写文件出错：%s", e.getMessage()));
+//        } finally {
+//            try {
+//                if (fileOutputStream != null) {
+//                    fileOutputStream.close();
+//                }
+//            } catch (IOException e) {
+//                Log.e(TAG, String.format("关闭写文件出错：%s", e.getMessage()));
+//            }
+//        }
+//    }
+
+//    /**
+//     * 把日志数据写入到文件中，用于分享等处理
+//     * @param cursor 游标
+//     * @param isSWL 是否是swl模式
+//     */
+//    @SuppressLint({"DefaultLocale", "Range"})
+//    public void downQSLTableToFile(File adiFile, Cursor cursor, boolean isSWL){
+//
+//        writeStrToFile(adiFile,"FT8CN ADIF Export<eoh>\n");
+//        int count =0;
+//        cursor.moveToPosition(-1);
+//        while (cursor.moveToNext()) {
+//            count++;
+//            writeStrToFile(adiFile,String.format("<call:%d>%s "
+//                    , cursor.getString(cursor.getColumnIndex("call")).length()
+//                    , cursor.getString(cursor.getColumnIndex("call"))));
+//            if (!isSWL) {
+//                if (cursor.getInt(cursor.getColumnIndex("isLotW_QSL")) == 1) {
+//                    writeStrToFile(adiFile,"<QSL_RCVD:1>Y ");
+//                } else {
+//                    writeStrToFile(adiFile,"<QSL_RCVD:1>N ");
+//                }
+//                if (cursor.getInt(cursor.getColumnIndex("isQSL")) == 1) {
+//                    writeStrToFile(adiFile,"<QSL_MANUAL:1>Y ");
+//                } else {
+//                    writeStrToFile(adiFile,"<QSL_MANUAL:1>N ");
+//                }
+//            } else {
+//                writeStrToFile(adiFile,"<swl:1>Y ");
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("gridsquare")) != null) {
+//                writeStrToFile(adiFile,String.format("<gridsquare:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("gridsquare")).length()
+//                        , cursor.getString(cursor.getColumnIndex("gridsquare"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("mode")) != null) {
+//                writeStrToFile(adiFile,String.format("<mode:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("mode")).length()
+//                        , cursor.getString(cursor.getColumnIndex("mode"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("rst_sent")) != null) {
+//                writeStrToFile(adiFile,String.format("<rst_sent:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("rst_sent")).length()
+//                        , cursor.getString(cursor.getColumnIndex("rst_sent"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("rst_rcvd")) != null) {
+//                writeStrToFile(adiFile,String.format("<rst_rcvd:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("rst_rcvd")).length()
+//                        , cursor.getString(cursor.getColumnIndex("rst_rcvd"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("qso_date")) != null) {
+//                writeStrToFile(adiFile,String.format("<qso_date:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("qso_date")).length()
+//                        , cursor.getString(cursor.getColumnIndex("qso_date"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("time_on")) != null) {
+//                writeStrToFile(adiFile,String.format("<time_on:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("time_on")).length()
+//                        , cursor.getString(cursor.getColumnIndex("time_on"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("qso_date_off")) != null) {
+//                writeStrToFile(adiFile,String.format("<qso_date_off:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("qso_date_off")).length()
+//                        , cursor.getString(cursor.getColumnIndex("qso_date_off"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("time_off")) != null) {
+//                writeStrToFile(adiFile,String.format("<time_off:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("time_off")).length()
+//                        , cursor.getString(cursor.getColumnIndex("time_off"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("band")) != null) {
+//                writeStrToFile(adiFile,String.format("<band:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("band")).length()
+//                        , cursor.getString(cursor.getColumnIndex("band"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("freq")) != null) {
+//                writeStrToFile(adiFile,String.format("<freq:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("freq")).length()
+//                        , cursor.getString(cursor.getColumnIndex("freq"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("station_callsign")) != null) {
+//                writeStrToFile(adiFile,String.format("<station_callsign:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("station_callsign")).length()
+//                        , cursor.getString(cursor.getColumnIndex("station_callsign"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("my_gridsquare")) != null) {
+//                writeStrToFile(adiFile,String.format("<my_gridsquare:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("my_gridsquare")).length()
+//                        , cursor.getString(cursor.getColumnIndex("my_gridsquare"))));
+//            }
+//
+//            if (cursor.getColumnIndex("operator") != -1) {
+//                if (cursor.getString(cursor.getColumnIndex("operator")) != null) {
+//                    writeStrToFile(adiFile,String.format("<operator:%d>%s "
+//                            , cursor.getString(cursor.getColumnIndex("operator")).length()
+//                            , cursor.getString(cursor.getColumnIndex("operator"))));
+//                }
+//            }
+//            String comment = cursor.getString(cursor.getColumnIndex("comment"));
+//
+//            //<comment:15>Distance: 99 km <eor>
+//            //在写库的时候，一定要加" km"
+//            writeStrToFile(adiFile,String.format("<comment:%d>%s <eor>\n"
+//                    , comment.length()
+//                    , comment));
+//        }
+//        Log.e(TAG,String.format("写入数据%d条",count));
+//
+//        cursor.close();
+//    }
+
+    /**
+     * 生成ADIF文本内容
+     * @param cursor 游标
+     * @param isSWL 是否是swl模式
+     * @return ADIF文本内容
+     */
+    @SuppressLint({"Range", "DefaultLocale"})
+    public String downQSLTable(Cursor cursor, boolean isSWL) {
+        StringBuilder logStr = new StringBuilder();
+
+        logStr.append("FT8CN ADIF Export<eoh>\n");
+        cursor.moveToPosition(-1);
+        while (cursor.moveToNext()) {
+            logStr.append(String.format("<call:%d>%s "
+                    , cursor.getString(cursor.getColumnIndex("call")).length()
+                    , cursor.getString(cursor.getColumnIndex("call"))));
+            if (!isSWL) {
+                if (cursor.getInt(cursor.getColumnIndex("isLotW_QSL")) == 1) {
+                    logStr.append("<QSL_RCVD:1>Y ");
+                } else {
+                    logStr.append("<QSL_RCVD:1>N ");
+                }
+                if (cursor.getInt(cursor.getColumnIndex("isQSL")) == 1) {
+                    logStr.append("<QSL_MANUAL:1>Y ");
+                } else {
+                    logStr.append("<QSL_MANUAL:1>N ");
+                }
+            } else {
+                logStr.append("<swl:1>Y ");
+            }
+
+            if (cursor.getString(cursor.getColumnIndex("gridsquare")) != null) {
+                logStr.append(String.format("<gridsquare:%d>%s "
+                        , cursor.getString(cursor.getColumnIndex("gridsquare")).length()
+                        , cursor.getString(cursor.getColumnIndex("gridsquare"))));
+            }
+
+            if (cursor.getString(cursor.getColumnIndex("mode")) != null) {
+                logStr.append(String.format("<mode:%d>%s "
+                        , cursor.getString(cursor.getColumnIndex("mode")).length()
+                        , cursor.getString(cursor.getColumnIndex("mode"))));
+            }
+
+            if (cursor.getString(cursor.getColumnIndex("rst_sent")) != null) {
+                logStr.append(String.format("<rst_sent:%d>%s "
+                        , cursor.getString(cursor.getColumnIndex("rst_sent")).length()
+                        , cursor.getString(cursor.getColumnIndex("rst_sent"))));
+            }
+
+            if (cursor.getString(cursor.getColumnIndex("rst_rcvd")) != null) {
+                logStr.append(String.format("<rst_rcvd:%d>%s "
+                        , cursor.getString(cursor.getColumnIndex("rst_rcvd")).length()
+                        , cursor.getString(cursor.getColumnIndex("rst_rcvd"))));
+            }
+
+            if (cursor.getString(cursor.getColumnIndex("qso_date")) != null) {
+                logStr.append(String.format("<qso_date:%d>%s "
+                        , cursor.getString(cursor.getColumnIndex("qso_date")).length()
+                        , cursor.getString(cursor.getColumnIndex("qso_date"))));
+            }
+
+            if (cursor.getString(cursor.getColumnIndex("time_on")) != null) {
+                logStr.append(String.format("<time_on:%d>%s "
+                        , cursor.getString(cursor.getColumnIndex("time_on")).length()
+                        , cursor.getString(cursor.getColumnIndex("time_on"))));
+            }
+
+            if (cursor.getString(cursor.getColumnIndex("qso_date_off")) != null) {
+                logStr.append(String.format("<qso_date_off:%d>%s "
+                        , cursor.getString(cursor.getColumnIndex("qso_date_off")).length()
+                        , cursor.getString(cursor.getColumnIndex("qso_date_off"))));
+            }
+
+            if (cursor.getString(cursor.getColumnIndex("time_off")) != null) {
+                logStr.append(String.format("<time_off:%d>%s "
+                        , cursor.getString(cursor.getColumnIndex("time_off")).length()
+                        , cursor.getString(cursor.getColumnIndex("time_off"))));
+            }
+
+            if (cursor.getString(cursor.getColumnIndex("band")) != null) {
+                logStr.append(String.format("<band:%d>%s "
+                        , cursor.getString(cursor.getColumnIndex("band")).length()
+                        , cursor.getString(cursor.getColumnIndex("band"))));
+            }
+
+            if (cursor.getString(cursor.getColumnIndex("freq")) != null) {
+                logStr.append(String.format("<freq:%d>%s "
+                        , cursor.getString(cursor.getColumnIndex("freq")).length()
+                        , cursor.getString(cursor.getColumnIndex("freq"))));
+            }
+
+            if (cursor.getString(cursor.getColumnIndex("station_callsign")) != null) {
+                logStr.append(String.format("<station_callsign:%d>%s "
+                        , cursor.getString(cursor.getColumnIndex("station_callsign")).length()
+                        , cursor.getString(cursor.getColumnIndex("station_callsign"))));
+            }
+
+            if (cursor.getString(cursor.getColumnIndex("my_gridsquare")) != null) {
+                logStr.append(String.format("<my_gridsquare:%d>%s "
+                        , cursor.getString(cursor.getColumnIndex("my_gridsquare")).length()
+                        , cursor.getString(cursor.getColumnIndex("my_gridsquare"))));
+            }
+
+            if (cursor.getColumnIndex("operator") != -1) {
+                if (cursor.getString(cursor.getColumnIndex("operator")) != null) {
+                    logStr.append(String.format("<operator:%d>%s "
+                            , cursor.getString(cursor.getColumnIndex("operator")).length()
+                            , cursor.getString(cursor.getColumnIndex("operator"))));
+                }
+            }
+
+            String comment = cursor.getString(cursor.getColumnIndex("comment"));
+
+            //<comment:15>Distance: 99 km <eor>
+            //在写库的时候，一定要加" km"
+            logStr.append(String.format("<comment:%d>%s <eor>\n"
+                    , comment.length()
+                    , comment));
+        }
+
+        cursor.close();
+        return logStr.toString();
     }
 
     /**
@@ -1922,6 +2195,38 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.serialParity =Integer.parseInt(result);
                 }
 
+<<<<<<< Updated upstream
+=======
+                // cloudlogs
+                if (name.equalsIgnoreCase("enableCloudlog")) {
+                    GeneralVariables.enableCloudlog = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("cloudlogServerAddress")) {
+                    GeneralVariables.cloudlogServerAddress = result;
+                }
+                if (name.equalsIgnoreCase("cloudlogApiKey")) {
+                    GeneralVariables.cloudlogApiKey = result;
+                }
+                if (name.equalsIgnoreCase("cloudlogStationID")) {
+                    GeneralVariables.cloudlogStationID = result;
+                }
+
+                //QRZ
+                if (name.equalsIgnoreCase("enableQRZ")) {
+                    GeneralVariables.enableQRZ = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("qrzApiKey")) {
+                    GeneralVariables.qrzApiKey = result;
+                }
+
+                if (name.equalsIgnoreCase("swrSwitch")) {
+                    GeneralVariables.swr_switch_on = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("alcSwitch")) {
+                    GeneralVariables.alc_switch_on = result.equals("1");
+                }
+
+>>>>>>> Stashed changes
             }
 
             cursor.close();

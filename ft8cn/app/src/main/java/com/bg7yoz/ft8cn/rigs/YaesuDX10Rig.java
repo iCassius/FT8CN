@@ -48,6 +48,7 @@ public class YaesuDX10Rig extends BaseRig {
             }
         };
     }
+
     /**
      * 读取Meter RM;
      */
@@ -60,7 +61,8 @@ public class YaesuDX10Rig extends BaseRig {
     }
 
     private void showAlert() {
-        if (swr >= Yaesu3RigConstant.swr_39_alert_max) {
+        if ((swr >= Yaesu3RigConstant.swr_39_alert_max)
+                && GeneralVariables.swr_switch_on) {
             if (!swrAlert) {
                 swrAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.swr_high_alert));
@@ -68,7 +70,8 @@ public class YaesuDX10Rig extends BaseRig {
         } else {
             swrAlert = false;
         }
-        if (alc > Yaesu3RigConstant.alc_39_alert_max) {//网络模式下不警告ALC
+        if ((alc > Yaesu3RigConstant.alc_39_alert_max)
+                && GeneralVariables.alc_switch_on) {//网络模式下不警告ALC
             if (!alcMaxAlert) {
                 alcMaxAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.alc_high_alert));
@@ -78,6 +81,7 @@ public class YaesuDX10Rig extends BaseRig {
         }
 
     }
+
     /**
      * 清空缓存数据
      */
@@ -126,20 +130,19 @@ public class YaesuDX10Rig extends BaseRig {
     @Override
     public void onReceiveData(byte[] data) {
         String s = new String(data);
-        if (!s.contains(";"))
-        {
+        if (!s.contains(";")) {
             buffer.append(s);
-            if (buffer.length()>1000) clearBufferData();
+            if (buffer.length() > 1000) clearBufferData();
             return;//说明数据还没接收完。
-        }else {
-            if (s.indexOf(";")>0){//说明接到结束的数据了，并且不是第一个字符是;
-              buffer.append(s.substring(0,s.indexOf(";")));
+        } else {
+            if (s.indexOf(";") > 0) {//说明接到结束的数据了，并且不是第一个字符是;
+                buffer.append(s.substring(0, s.indexOf(";")));
             }
             //开始分析数据
             Yaesu3Command yaesu3Command = Yaesu3Command.getCommand(buffer.toString());
             clearBufferData();//清一下缓存
             //要把剩下的数据放到缓存里
-            buffer.append(s.substring(s.indexOf(";")+1));
+            buffer.append(s.substring(s.indexOf(";") + 1));
 
             if (yaesu3Command == null) {
                 return;
@@ -149,7 +152,7 @@ public class YaesuDX10Rig extends BaseRig {
             //    long tempFreq=Yaesu3Command.getFrequency(yaesu3Command);
             //    if (tempFreq!=0) {//如果tempFreq==0，说明频率不正常
             //        setFreq(Yaesu3Command.getFrequency(yaesu3Command));
-             //   }
+            //   }
             //}
             if (yaesu3Command.getCommandID().equalsIgnoreCase("FA")
                     || yaesu3Command.getCommandID().equalsIgnoreCase("FB")) {
@@ -186,6 +189,6 @@ public class YaesuDX10Rig extends BaseRig {
     }
 
     public YaesuDX10Rig() {
-        readFreqTimer.schedule(readTask(), START_QUERY_FREQ_DELAY,QUERY_FREQ_TIMEOUT);
+        readFreqTimer.schedule(readTask(), START_QUERY_FREQ_DELAY, QUERY_FREQ_TIMEOUT);
     }
 }
