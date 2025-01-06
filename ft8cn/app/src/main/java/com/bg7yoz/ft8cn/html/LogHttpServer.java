@@ -43,7 +43,7 @@ public class LogHttpServer extends NanoHTTPD {
     public static int DEFAULT_PORT = 7050;
     private static final String TAG = "LOG HTTP";
 
-    private ImportTaskList importTaskList = new ImportTaskList();//导如日志的任务列表
+    private final ImportTaskList importTaskList = new ImportTaskList();//导如日志的任务列表
 
 
     public LogHttpServer(MainViewModel viewModel, int port) {
@@ -1155,7 +1155,7 @@ public class LogHttpServer extends NanoHTTPD {
 
 
         response = newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "text/plain"
-                , downQSLTable(cursor, true));
+                , mainViewModel.databaseOpr.downQSLTable(cursor, true));
         response.addHeader("Content-Disposition"
                 , String.format("attachment;filename=%s", fileName));
 
@@ -1399,7 +1399,7 @@ public class LogHttpServer extends NanoHTTPD {
 
 
         response = newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "text/plain"
-                , downQSLTable(cursor, false));
+                , mainViewModel.databaseOpr.downQSLTable(cursor, false));
         response.addHeader("Content-Disposition"
                 , String.format("attachment;filename=%s", fileName));
 
@@ -1849,7 +1849,7 @@ public class LogHttpServer extends NanoHTTPD {
                     , new String[]{String.valueOf(month.length()), month});
 
         }
-        return downQSLTable(cursor, false);
+        return mainViewModel.databaseOpr.downQSLTable(cursor, false);
     }
 
     /**
@@ -1859,7 +1859,7 @@ public class LogHttpServer extends NanoHTTPD {
      */
     private String downAllQSl() {
         Cursor cursor = mainViewModel.databaseOpr.getDb().rawQuery("select * from QSLTable", null);
-        return downQSLTable(cursor, false);
+        return mainViewModel.databaseOpr.downQSLTable(cursor, false);
     }
 
     /**
@@ -1867,121 +1867,121 @@ public class LogHttpServer extends NanoHTTPD {
      *
      * @return 日志内容
      */
-    @SuppressLint({"Range", "DefaultLocale"})
-    private String downQSLTable(Cursor cursor, boolean isSWL) {
-        StringBuilder logStr = new StringBuilder();
-
-        logStr.append("FT8CN ADIF Export<eoh>\n");
-        while (cursor.moveToNext()) {
-            logStr.append(String.format("<call:%d>%s "
-                    , cursor.getString(cursor.getColumnIndex("call")).length()
-                    , cursor.getString(cursor.getColumnIndex("call"))));
-            if (!isSWL) {
-                if (cursor.getInt(cursor.getColumnIndex("isLotW_QSL")) == 1) {
-                    logStr.append("<QSL_RCVD:1>Y ");
-                } else {
-                    logStr.append("<QSL_RCVD:1>N ");
-                }
-                if (cursor.getInt(cursor.getColumnIndex("isQSL")) == 1) {
-                    logStr.append("<QSL_MANUAL:1>Y ");
-                } else {
-                    logStr.append("<QSL_MANUAL:1>N ");
-                }
-            } else {
-                logStr.append("<swl:1>Y ");
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("gridsquare")) != null) {
-                logStr.append(String.format("<gridsquare:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("gridsquare")).length()
-                        , cursor.getString(cursor.getColumnIndex("gridsquare"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("mode")) != null) {
-                logStr.append(String.format("<mode:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("mode")).length()
-                        , cursor.getString(cursor.getColumnIndex("mode"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("rst_sent")) != null) {
-                logStr.append(String.format("<rst_sent:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("rst_sent")).length()
-                        , cursor.getString(cursor.getColumnIndex("rst_sent"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("rst_rcvd")) != null) {
-                logStr.append(String.format("<rst_rcvd:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("rst_rcvd")).length()
-                        , cursor.getString(cursor.getColumnIndex("rst_rcvd"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("qso_date")) != null) {
-                logStr.append(String.format("<qso_date:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("qso_date")).length()
-                        , cursor.getString(cursor.getColumnIndex("qso_date"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("time_on")) != null) {
-                logStr.append(String.format("<time_on:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("time_on")).length()
-                        , cursor.getString(cursor.getColumnIndex("time_on"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("qso_date_off")) != null) {
-                logStr.append(String.format("<qso_date_off:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("qso_date_off")).length()
-                        , cursor.getString(cursor.getColumnIndex("qso_date_off"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("time_off")) != null) {
-                logStr.append(String.format("<time_off:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("time_off")).length()
-                        , cursor.getString(cursor.getColumnIndex("time_off"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("band")) != null) {
-                logStr.append(String.format("<band:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("band")).length()
-                        , cursor.getString(cursor.getColumnIndex("band"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("freq")) != null) {
-                logStr.append(String.format("<freq:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("freq")).length()
-                        , cursor.getString(cursor.getColumnIndex("freq"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("station_callsign")) != null) {
-                logStr.append(String.format("<station_callsign:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("station_callsign")).length()
-                        , cursor.getString(cursor.getColumnIndex("station_callsign"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("my_gridsquare")) != null) {
-                logStr.append(String.format("<my_gridsquare:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("my_gridsquare")).length()
-                        , cursor.getString(cursor.getColumnIndex("my_gridsquare"))));
-            }
-
-            if (cursor.getColumnIndex("operator") != -1) {
-                if (cursor.getString(cursor.getColumnIndex("operator")) != null) {
-                    logStr.append(String.format("<operator:%d>%s "
-                            , cursor.getString(cursor.getColumnIndex("operator")).length()
-                            , cursor.getString(cursor.getColumnIndex("operator"))));
-                }
-            }
-
-            String comment = cursor.getString(cursor.getColumnIndex("comment"));
-
-            //<comment:15>Distance: 99 km <eor>
-            //在写库的时候，一定要加" km"
-            logStr.append(String.format("<comment:%d>%s <eor>\n"
-                    , comment.length()
-                    , comment));
-        }
-
-        cursor.close();
-        return logStr.toString();
-    }
+//    @SuppressLint({"Range", "DefaultLocale"})
+//    private String downQSLTable(Cursor cursor, boolean isSWL) {
+//        StringBuilder logStr = new StringBuilder();
+//
+//        logStr.append("FT8CN ADIF Export<eoh>\n");
+//        while (cursor.moveToNext()) {
+//            logStr.append(String.format("<call:%d>%s "
+//                    , cursor.getString(cursor.getColumnIndex("call")).length()
+//                    , cursor.getString(cursor.getColumnIndex("call"))));
+//            if (!isSWL) {
+//                if (cursor.getInt(cursor.getColumnIndex("isLotW_QSL")) == 1) {
+//                    logStr.append("<QSL_RCVD:1>Y ");
+//                } else {
+//                    logStr.append("<QSL_RCVD:1>N ");
+//                }
+//                if (cursor.getInt(cursor.getColumnIndex("isQSL")) == 1) {
+//                    logStr.append("<QSL_MANUAL:1>Y ");
+//                } else {
+//                    logStr.append("<QSL_MANUAL:1>N ");
+//                }
+//            } else {
+//                logStr.append("<swl:1>Y ");
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("gridsquare")) != null) {
+//                logStr.append(String.format("<gridsquare:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("gridsquare")).length()
+//                        , cursor.getString(cursor.getColumnIndex("gridsquare"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("mode")) != null) {
+//                logStr.append(String.format("<mode:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("mode")).length()
+//                        , cursor.getString(cursor.getColumnIndex("mode"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("rst_sent")) != null) {
+//                logStr.append(String.format("<rst_sent:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("rst_sent")).length()
+//                        , cursor.getString(cursor.getColumnIndex("rst_sent"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("rst_rcvd")) != null) {
+//                logStr.append(String.format("<rst_rcvd:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("rst_rcvd")).length()
+//                        , cursor.getString(cursor.getColumnIndex("rst_rcvd"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("qso_date")) != null) {
+//                logStr.append(String.format("<qso_date:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("qso_date")).length()
+//                        , cursor.getString(cursor.getColumnIndex("qso_date"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("time_on")) != null) {
+//                logStr.append(String.format("<time_on:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("time_on")).length()
+//                        , cursor.getString(cursor.getColumnIndex("time_on"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("qso_date_off")) != null) {
+//                logStr.append(String.format("<qso_date_off:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("qso_date_off")).length()
+//                        , cursor.getString(cursor.getColumnIndex("qso_date_off"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("time_off")) != null) {
+//                logStr.append(String.format("<time_off:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("time_off")).length()
+//                        , cursor.getString(cursor.getColumnIndex("time_off"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("band")) != null) {
+//                logStr.append(String.format("<band:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("band")).length()
+//                        , cursor.getString(cursor.getColumnIndex("band"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("freq")) != null) {
+//                logStr.append(String.format("<freq:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("freq")).length()
+//                        , cursor.getString(cursor.getColumnIndex("freq"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("station_callsign")) != null) {
+//                logStr.append(String.format("<station_callsign:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("station_callsign")).length()
+//                        , cursor.getString(cursor.getColumnIndex("station_callsign"))));
+//            }
+//
+//            if (cursor.getString(cursor.getColumnIndex("my_gridsquare")) != null) {
+//                logStr.append(String.format("<my_gridsquare:%d>%s "
+//                        , cursor.getString(cursor.getColumnIndex("my_gridsquare")).length()
+//                        , cursor.getString(cursor.getColumnIndex("my_gridsquare"))));
+//            }
+//
+//            if (cursor.getColumnIndex("operator") != -1) {
+//                if (cursor.getString(cursor.getColumnIndex("operator")) != null) {
+//                    logStr.append(String.format("<operator:%d>%s "
+//                            , cursor.getString(cursor.getColumnIndex("operator")).length()
+//                            , cursor.getString(cursor.getColumnIndex("operator"))));
+//                }
+//            }
+//
+//            String comment = cursor.getString(cursor.getColumnIndex("comment"));
+//
+//            //<comment:15>Distance: 99 km <eor>
+//            //在写库的时候，一定要加" km"
+//            logStr.append(String.format("<comment:%d>%s <eor>\n"
+//                    , comment.length()
+//                    , comment));
+//        }
+//
+//        cursor.close();
+//        return logStr.toString();
+//    }
 
 }

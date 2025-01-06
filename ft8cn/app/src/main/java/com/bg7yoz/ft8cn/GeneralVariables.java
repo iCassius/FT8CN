@@ -16,12 +16,12 @@ import com.bg7yoz.ft8cn.database.ControlMode;
 import com.bg7yoz.ft8cn.database.DatabaseOpr;
 import com.bg7yoz.ft8cn.ft8transmit.QslRecordList;
 import com.bg7yoz.ft8cn.html.HtmlContext;
-import com.bg7yoz.ft8cn.icom.IcomAudioUdp;
-import com.bg7yoz.ft8cn.log.QSLRecord;
 import com.bg7yoz.ft8cn.rigs.BaseRigOperation;
-import com.bg7yoz.ft8cn.serialport.UsbSerialPort;
 import com.bg7yoz.ft8cn.timer.UtcTimer;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -34,22 +34,21 @@ public class GeneralVariables {
     public static String VERSION = BuildConfig.VERSION_NAME;//版本号"0.62（Beta 4）";
     public static String BUILD_DATE = BuildConfig.apkBuildTime;//编译的时间
     public static int MESSAGE_COUNT = 3000;//消息的最大缓存数量
-    public static boolean saveSWLMessage=false;//保存解码消息开关
-    public static boolean saveSWL_QSO=false;//保存解码消息消息中的QSO开关
-    public static boolean enableCloudlog=false;//是否启用Cloudlog自动同步
+    public static boolean saveSWLMessage = false;//保存解码消息开关
+    public static boolean saveSWL_QSO = false;//保存解码消息消息中的QSO开关
+    public static boolean enableCloudlog = false;//是否启用Cloudlog自动同步
+    public static boolean enableQRZ = false;//是否启用qrz自动同步
 
-    public static boolean enableQRZ=false;//是否启用qrz自动同步
+    public static boolean deepDecodeMode = false;//是否开启深度解码
 
-    public static boolean deepDecodeMode=false;//是否开启深度解码
-
-    public static boolean audioOutput32Bit =true;//音频输出类型true=float,false=int16
-    public static int audioSampleRate=12000;//发射音频的采样率
+    public static boolean audioOutput32Bit = true;//音频输出类型true=float,false=int16
+    public static int audioSampleRate = 12000;//发射音频的采样率
 
     public static MutableLiveData<Float> mutableVolumePercent = new MutableLiveData<>();
     public static float volumePercent = 0.5f;//播放音频的音量,是百分比
 
-    public static int flexMaxRfPower=10;//flex电台的最大发射功率
-    public static int flexMaxTunePower=10;//flex电台的最大调谐功率
+    public static int flexMaxRfPower = 10;//flex电台的最大发射功率
+    public static int flexMaxTunePower = 10;//flex电台的最大调谐功率
 
     private Context mainContext;
     public static CallsignDatabase callsignDatabase = null;
@@ -166,25 +165,25 @@ public class GeneralVariables {
     public static String toModifier = "";//呼叫的修饰符
     private static float baseFrequency = 1000;//声音频率
 
-    public static boolean simpleCallItemMode=false;//紧凑型消息
+    public static boolean simpleCallItemMode = false;//紧凑型消息
+
+    public static boolean swr_switch_on = true;//swr告警开关
+    public static boolean alc_switch_on = true;//alc告警开关
 
     public static MutableLiveData<Float> mutableBaseFrequency = new MutableLiveData<>();
-
     public static String cloudlogServerAddress = "";//cloudlog的服务器地址
     public static String cloudlogApiKey = "";//cloudlog的APIKEY
     public static String cloudlogStationID = "";//cloudlog的站点ID
-
     public static String qrzApiKey = ""; //qrz的key
-
     public static boolean synFrequency = false;//同频发射
     public static int transmitDelay = 500;//发射延迟时间，这个时间也是给上一个周期的解码时间
     public static int pttDelay = 100;//PTT的响应时间，在给电台PTT指令后，一般电台会有一个响应时间，此处默认是100毫秒
     public static int civAddress = 0xa4;//civ地址
     public static int baudRate = 19200;//波特率
     public static long band = 14074000;//载波频段
-    public static int serialDataBits=8;//默认是8
+    public static int serialDataBits = 8;//默认是8
     public static int serialParity = 0;//UsbSerialPort.PARITY_NONE默认是0，即：无
-    public static int serialStopBits=1;//停止位的对应关系：1=1,2=3,3=1.5
+    public static int serialStopBits = 1;//停止位的对应关系：1=1,2=3,3=1.5
     public static int instructionSet = 0;//指令集，0:icom，1:yaesu 2 代，2:yaesu 3代。
     public static int bandListIndex = -1;//电台波段的索引值
     public static MutableLiveData<Integer> mutableBandChange = new MutableLiveData<>();//波段索引值变化
@@ -234,6 +233,7 @@ public class GeneralVariables {
     public static String getCloudlogServerAddress() {
         return cloudlogServerAddress;
     }
+
     public static String getCloudlogStationID() {
         return cloudlogStationID;
     }
@@ -245,6 +245,7 @@ public class GeneralVariables {
     public static String getQrzApiKey() {
         return qrzApiKey;
     }
+
 
     @SuppressLint("DefaultLocale")
     public static String getBaseFrequencyStr() {
@@ -285,10 +286,11 @@ public class GeneralVariables {
 
     /**
      * 检查呼号中是不是含有我的呼号
+     *
      * @param callsign 呼号
      * @return boolean
      */
-    static public boolean checkIsMyCallsign(String callsign){
+    static public boolean checkIsMyCallsign(String callsign) {
         if (GeneralVariables.myCallsign.length() == 0) return false;
         String temp = getShortCallsign(GeneralVariables.myCallsign);
         return callsign.contains(temp);
@@ -296,21 +298,22 @@ public class GeneralVariables {
 
     /**
      * 对于复合呼号，获取去掉前缀或后缀的呼号
+     *
      * @return 呼号
      */
-    static public String getShortCallsign(String callsign){
-        if (callsign.contains("/")){
+    static public String getShortCallsign(String callsign) {
+        if (callsign.contains("/")) {
             String[] temp = callsign.split("/");
-            int max =0;
-            int max_index =0;
+            int max = 0;
+            int max_index = 0;
             for (int i = 0; i < temp.length; i++) {
-                if (temp[i].length()>max){
+                if (temp[i].length() > max) {
                     max = temp[i].length();
-                    max_index=i;
+                    max_index = i;
                 }
             }
             return temp[max_index];
-        }else{
+        } else {
             return callsign;
         }
     }
@@ -444,14 +447,15 @@ public class GeneralVariables {
 
     /**
      * 判断是不是信号报告，如果是，把值赋给 report
+     *
      * @param extraInfo 消息扩展
-     * @return 信号报告值,没找到是-100
+     * @return 信号报告值, 没找到是-100
      */
-    public static int checkFun2_3(String extraInfo){
+    public static int checkFun2_3(String extraInfo) {
         if (extraInfo.equals("73")) return -100;
-        if (extraInfo.matches("[R]?[+-]?[0-9]{1,2}")){
+        if (extraInfo.matches("[R]?[+-]?[0-9]{1,2}")) {
             try {
-                return Integer.parseInt(extraInfo.replace("R",""));
+                return Integer.parseInt(extraInfo.replace("R", ""));
             } catch (Exception e) {
                 return -100;
             }
@@ -461,22 +465,25 @@ public class GeneralVariables {
 
     /**
      * 判断是不是网格报告，如果是，把值赋给 report
+     *
      * @param extraInfo 消息扩展
      * @return 信号报告
      */
-    public static boolean checkFun1_6(String extraInfo){
-        return  extraInfo.trim().matches("[A-Z][A-Z][0-9][0-9]")
+    public static boolean checkFun1_6(String extraInfo) {
+        return extraInfo.trim().matches("[A-Z][A-Z][0-9][0-9]")
                 && !extraInfo.trim().equals("RR73");
     }
+
     /**
      * 检查是否是通联结束：RRR、RR73、73
+     *
      * @param extraInfo 消息后缀
      * @return 是否
      */
-    public static boolean checkFun4_5(String extraInfo){
+    public static boolean checkFun4_5(String extraInfo) {
         return extraInfo.trim().equals("RR73")
                 || extraInfo.trim().equals("RRR")
-                ||extraInfo.trim().equals("73");
+                || extraInfo.trim().equals("73");
     }
 
     /**
@@ -613,7 +620,7 @@ public class GeneralVariables {
         int order = 0;
         for (String key : callsignAndGrids.keySet()) {
             order++;
-            HtmlContext.tableKeyRow(result,order % 2 != 0,key,callsignAndGrids.get(key));
+            HtmlContext.tableKeyRow(result, order % 2 != 0, key, callsignAndGrids.get(key));
         }
         return result.toString();
     }
@@ -643,8 +650,128 @@ public class GeneralVariables {
     /**
      * 输出音频的数据类型，网络模式不可用
      */
-    public  enum AudioOutputBitMode{
+    public enum AudioOutputBitMode {
         Float32,
         Int16
     }
+
+    /**
+     * 创建一个临时文件。
+     *
+     * @param context Context
+     * @param prefix  前缀
+     * @param suffix  扩展名
+     * @return File结构的文件
+     */
+    public static File getTempFile(Context context, String prefix, String suffix) {
+        File tempDir = context.getExternalCacheDir();
+        if (tempDir == null) {
+            // 处理错误情况，无法获取临时目录
+            Log.e(TAG, "创建临时文件出错！无法获取临时目录");
+            return null;
+        }
+
+        try {
+            //tempFile.deleteOnExit(); // 文件会在虚拟机退出时删除
+            return File.createTempFile(prefix, suffix, tempDir);
+        } catch (IOException e) {
+            Log.e(TAG, "创建临时文件出错！" + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 把文本数据写入到文件
+     *
+     * @param file File
+     * @param data 文本数据
+     */
+    public static void writeToFile(File file, String data) {
+        FileOutputStream fileOutputStream = null;
+        try {
+            fileOutputStream = new FileOutputStream(file, true);
+            fileOutputStream.write(data.getBytes());
+            Log.e(TAG, "文件数据写入完成！");
+        } catch (IOException e) {
+            Log.e(TAG, String.format("写文件出错：%s", e.getMessage()));
+        } finally {
+            try {
+                if (fileOutputStream != null) {
+                    fileOutputStream.close();
+                }
+            } catch (IOException e) {
+                Log.e(TAG, String.format("关闭写文件出错：%s", e.getMessage()));
+            }
+        }
+    }
+
+
+    /**
+     * 保存数据包缓存文件
+     *
+     * @param context 上下文
+     * @param prefix  前缀
+     * @param suffix  扩展名
+     * @param data    数据
+     * @return 文件对象
+     */
+    public static File writeToTempFile(Context context, String prefix, String suffix, String data) {
+        File file = getTempFile(context, prefix, suffix);
+        writeToFile(file, data);
+        if (file != null) {
+            file.deleteOnExit(); // 文件会在虚拟机退出时删除
+        }
+        return file;
+    }
+
+//    /**
+//     * 分享文件
+//     *
+//     * @param context Context
+//     * @param file    文件对象
+//     * @param title   标题
+//     */
+//    public static void shareFile(Context context, File file, String title) {
+//        Intent sharingIntent = new Intent(Intent.ACTION_SEND);
+//        Uri fileUri = FileProvider.getUriForFile(context.getApplicationContext()
+//                , "com.bg7yoz.ft8cn.fileprovider", file);
+//        //sharingIntent.setType("application/octet-stream");
+//        sharingIntent.setType("text/plain");
+//        sharingIntent.putExtra(Intent.EXTRA_STREAM, fileUri);
+//        sharingIntent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+//        context.startActivity(Intent.createChooser(sharingIntent, title));
+//
+//    }
+
+    /**
+     * 删除文件夹
+     *
+     * @param dir 文件夹
+     * @return 是否成功删除
+     */
+    public static boolean deleteDir(File dir) {
+        if (dir == null) return false;
+        if (dir.isDirectory()) {
+            String[] children = dir.list();
+            if (children != null) {
+                for (String child : children) {
+                    boolean success = deleteDir(new File(dir, child));
+                    if (!success) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return dir.delete();
+    }
+
+    public static void clearCache(Context context) {
+        try {
+            File dir = context.getExternalCacheDir();
+            deleteDir(dir);
+        } catch (Exception e) {
+            // Handle exception
+        }
+    }
+
 }

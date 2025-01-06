@@ -102,7 +102,7 @@ public class FT8SignalListener {
                     , new OnGetVoiceDataDone() {
                         @Override
                         public void onGetDone(float[] data) {
-                            Log.d(TAG, "开始解码...###");
+                            Log.d(TAG, String.format("开始解码...###,数据长度：%d",data.length));
                             decodeFt8(utc, data);
                         }
                     });

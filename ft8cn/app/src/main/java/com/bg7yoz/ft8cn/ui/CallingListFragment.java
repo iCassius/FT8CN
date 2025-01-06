@@ -67,7 +67,7 @@ public class CallingListFragment extends Fragment {
         callListRecyclerView.scrollToPosition(callingListAdapter.getItemCount() - 1);
 
 
-        requireActivity().registerForContextMenu(callListRecyclerView);
+        requireActivity().registerForContextMenu(callListRecyclerView);//注册菜单
 
         //当横屏时显示频谱图
         if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {

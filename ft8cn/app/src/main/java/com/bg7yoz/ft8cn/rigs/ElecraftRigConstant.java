@@ -21,6 +21,7 @@ public class ElecraftRigConstant {
     private static final String PTT_ON = "TX;";
     private static final String PTT_OFF = "RX;";
     private static final String USB_MODE = "MD2;";
+    private static final String DATA_R_MODE = "MD6;";//TODO---此处要新增DATA_R模式指令
     private static final String READ_FREQ = "FA;";
     private static final String READ_SWR = "SWR;";
 

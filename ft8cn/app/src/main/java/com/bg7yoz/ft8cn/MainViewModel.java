@@ -140,6 +140,15 @@ public class MainViewModel extends ViewModel {
     private final SendWaveDataRunnable sendWaveDataRunnable = new SendWaveDataRunnable();
 
 
+    //用于显示生成共享日志过程的变量
+    public MutableLiveData<String> mutableShareInfo=new MutableLiveData<>("");//分享数据的状态
+    public MutableLiveData<Integer> mutableSharePosition=new MutableLiveData<>(0);//分享数据当前的位置
+    public MutableLiveData<Boolean> mutableShareRunning=new MutableLiveData<>(false);//是否正在生成分享数据
+    public MutableLiveData<Integer> mutableShareCount=new MutableLiveData<>(0);//共享的总数
+    public MutableLiveData<Boolean> mutableImportShareRunning=new MutableLiveData<>(false);//是否正在导入分享数据
+
+
+
     public HamRecorder hamRecorder;//用于录音的对象
     public FT8SignalListener ft8SignalListener;//用于监听FT8信号并解码的对象
     public FT8TransmitSignal ft8TransmitSignal;//用于发射信号用的对象
@@ -451,6 +460,7 @@ public class MainViewModel extends ViewModel {
             @Override
             public void doAfterTransmit(QSLRecord qslRecord) {
                 databaseOpr.addQSL_Callsign(qslRecord);//两个操作，把呼号和QSL记录下来
+
                 // 记录到第三方服务，耗时可能较长
                 new Thread(new Runnable() {
                     @Override
@@ -463,6 +473,7 @@ public class MainViewModel extends ViewModel {
                         }
                     }
                 }).start();
+
                 if (qslRecord.getToCallsign() != null) {//把通联成功的分区加入到分区列表
                     GeneralVariables.callsignDatabase.getCallsignInformation(qslRecord.getToCallsign()
                             , new OnAfterQueryCallsignLocation() {

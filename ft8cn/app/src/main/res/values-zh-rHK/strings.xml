@@ -517,6 +517,16 @@
     <string name="serial_setting_help">serial_help.txt</string>
     <string name="tcp_connect_closed">網路連接已經斷開！</string>
     <string name="rtty_ru_msg">RTTY RU</string>
+    <string name="share_logs">分享日誌</string>
+    <string name="config_clear_share_data">刪除緩存文件</string>
+    <string name="preparing_log_data">正在準備日誌數據…</string>
+    <string name="total_logs">共有%d條日誌。</string>
+    <string name="get_log_no">已經下載%d條日誌。</string>
+    <string name="write_file_error">寫文件出現錯誤：%s</string>
+    <string name="import_share_failed">導入日志數據失敗！%s</string>
+    <string name="preparing_import_logs">正在准備導入日志…</string>
+    <string name="share_logs_been_read">已經讀入%d條日誌。</string>
+    <string name="share_import_log_data">正在導入日誌數據…</string>
     <string name="cloudlog_settings">Cloudlog设置</string>
     <string name="config_enable_cloudlog">自动上传至Cloudlog</string>
     <string name="cloudlog_addr">服务器地址</string>
@@ -526,12 +536,12 @@
     <string name="cloudlog_help">cloudlog.txt</string>
     <string name="pass">成功！</string>
     <string name="fail">失败！</string>
-    <string name="testing">测试中...</string>
+    <string name="testing">测试中…</string>
     <string name="test">测试</string>
     <string name="qrz_settings">QRZ.com设置</string>
     <string name="qrz_api_key">API密钥</string>
     <string name="config_enable_qrz">自动上传至QRZ.com</string>
     <string name="qrz_help">qrz.txt</string>
-
+    <string name="alram_switch">告警開關</string>
 
 </resources>

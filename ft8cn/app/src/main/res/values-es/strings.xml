@@ -518,6 +518,17 @@
     <string name="serial_setting_help">serial_help_en.txt</string>
     <string name="tcp_connect_closed">The network connection has been disconnected.</string>
     <string name="rtty_ru_msg">RTTY RU</string>
+    <string name="share_logs">Compartir registros</string>
+    <string name="config_clear_share_data">Eliminar archivos de caché</string>
+    <string name="preparing_log_data">Preparando datos de registro…</string>
+    <string name="total_logs">En total hay %d diarios.</string>
+    <string name="get_log_no">Se han descargado %d registros.</string>
+    <string name="write_file_error">Se produjo un error al escribir el archivo:%s</string>
+    <string name="import_share_failed">Falló la importación de datos de registro! %s</string>
+    <string name="preparing_import_logs">Preparando la importación de registros…</string>
+    <string name="share_logs_been_read">Se han leído %d registros.</string>
+    <string name="share_import_log_data">Importando datos de registro…</string>
+
     <string name="cloudlog_settings">Cloudlog Settings</string>
     <string name="config_enable_cloudlog">Enable Cloudlog sync</string>
     <string name="cloudlog_addr">Server address</string>
@@ -533,6 +544,7 @@
     <string name="qrz_api_key">API KEY</string>
     <string name="config_enable_qrz">Enable QRZ sync</string>
     <string name="qrz_help">qrz_en.txt</string>
+    <string name="alram_switch">Interruptor de alarma</string>
     <!--    <string name="hello_blank_fragment">Hello blank fragment</string>-->
 
 </resources>

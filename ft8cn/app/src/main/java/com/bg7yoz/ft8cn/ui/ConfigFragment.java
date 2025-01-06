@@ -162,6 +162,7 @@ public class ConfigFragment extends Fragment {
         }
     };
 
+
     // Cloudlog地址
     private final TextWatcher onCloudlogAddressChanged=new TextWatcher() {
         @Override
@@ -199,6 +200,7 @@ public class ConfigFragment extends Fragment {
             writeConfig("cloudlogApiKey", GeneralVariables.getCloudlogServerApiKey());
         }
     };
+
     // Cloudlog地址
     private final TextWatcher onCloudlogStationIDChanged=new TextWatcher() {
         @Override
@@ -236,6 +238,7 @@ public class ConfigFragment extends Fragment {
             writeConfig("qrzApiKey", GeneralVariables.getQrzApiKey());
         }
     };
+
 
     //排除的呼号前缀
     private final TextWatcher onExcludedCallsigns=new TextWatcher() {
@@ -527,6 +530,40 @@ public class ConfigFragment extends Fragment {
             }
         });
 
+        //设置swr告警开关
+        binding.swrAlarmSwitch.setOnCheckedChangeListener(null);
+        binding.swrAlarmSwitch.setChecked(GeneralVariables.swr_switch_on);
+        setSwrAlarmSwitchText();
+        binding.swrAlarmSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
+                GeneralVariables.swr_switch_on = binding.swrAlarmSwitch.isChecked();
+                if (binding.swrAlarmSwitch.isChecked()) {
+                    mainViewModel.databaseOpr.writeConfig("swrSwitch", "1", null);
+                } else {
+                    mainViewModel.databaseOpr.writeConfig("swrSwitch", "0", null);
+                }
+                setSwrAlarmSwitchText();
+            }
+        });
+
+        //设置alc告警开关
+        binding.alcAlarmSwitch.setOnCheckedChangeListener(null);
+        binding.alcAlarmSwitch.setChecked(GeneralVariables.alc_switch_on);
+        setAlcAlarmSwitchText();
+        binding.alcAlarmSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
+                GeneralVariables.alc_switch_on = binding.alcAlarmSwitch.isChecked();
+                if (binding.alcAlarmSwitch.isChecked()) {
+                    mainViewModel.databaseOpr.writeConfig("alcSwitch", "1", null);
+                } else {
+                    mainViewModel.databaseOpr.writeConfig("alcSwitch", "0", null);
+                }
+                setAlcAlarmSwitchText();
+            }
+        });
+
 
 
         //设置自动呼叫关注的呼号
@@ -583,6 +620,9 @@ public class ConfigFragment extends Fragment {
         //设置保存Cloudlog选项
         binding.enableCloudlogSwitch.setOnCheckedChangeListener(null);
         binding.enableCloudlogSwitch.setChecked(GeneralVariables.enableCloudlog);
+        binding.enableCloudlogSwitch.setText(GeneralVariables.getStringFromResource(
+                R.string.config_enable_cloudlog)
+                +(GeneralVariables.enableCloudlog?"(On)":"(Off)"));
         binding.enableCloudlogSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
@@ -592,12 +632,18 @@ public class ConfigFragment extends Fragment {
                 } else {
                     mainViewModel.databaseOpr.writeConfig("enableCloudlog", "0", null);
                 }
+                binding.enableCloudlogSwitch.setText(GeneralVariables.getStringFromResource(
+                        R.string.config_enable_cloudlog)
+                        +(GeneralVariables.enableCloudlog?"(On)":"(Off)"));
             }
         });
 
         //设置保存QRZ选项
         binding.enableQrzSwitch.setOnCheckedChangeListener(null);
         binding.enableQrzSwitch.setChecked(GeneralVariables.enableQRZ);
+        binding.enableQrzSwitch.setText(
+                GeneralVariables.getStringFromResource(R.string.config_enable_qrz)
+                        +(GeneralVariables.enableQRZ?"(On)":"(Off)"));
         binding.enableQrzSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
@@ -607,6 +653,9 @@ public class ConfigFragment extends Fragment {
                 } else {
                     mainViewModel.databaseOpr.writeConfig("enableQRZ", "0", null);
                 }
+                binding.enableQrzSwitch.setText(
+                        GeneralVariables.getStringFromResource(R.string.config_enable_qrz)
+                                +(GeneralVariables.enableQRZ?"(On)":"(Off)"));
             }
         });
 
@@ -827,6 +876,28 @@ public class ConfigFragment extends Fragment {
             binding.followCQSwitch.setText(getString(R.string.auto_follow_cq));
         } else {
             binding.followCQSwitch.setText(getString(R.string.not_concerned_about_CQ));
+        }
+    }
+
+    /**
+     * 设置swr告警开关文本
+     */
+    private void setSwrAlarmSwitchText(){
+        if (binding.swrAlarmSwitch.isChecked()){
+            binding.swrAlarmSwitch.setText(R.string.swr_switch_on);
+        }else {
+            binding.swrAlarmSwitch.setText(R.string.swr_switch_off);
+        }
+    }
+
+    /**
+     * 设置alc告警开关文本
+     */
+    private void setAlcAlarmSwitchText(){
+        if (binding.alcAlarmSwitch.isChecked()){
+            binding.alcAlarmSwitch.setText(R.string.alc_switch_on);
+        }else {
+            binding.alcAlarmSwitch.setText(R.string.alc_switch_off);
         }
     }
 
@@ -1273,7 +1344,8 @@ public class ConfigFragment extends Fragment {
                             , true).show();
             }
         });
-        //cloublog帮助
+
+        //cloudlog帮助
         binding.cloudlogSettingsImageButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -1291,6 +1363,7 @@ public class ConfigFragment extends Fragment {
                         , true).show();
             }
         });
+
         //梅登海德网格的帮助
         binding.maidenGridImageButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -1546,6 +1619,7 @@ public class ConfigFragment extends Fragment {
                     }
                 }).start();}
         });
+
         binding.clearFollowButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -1568,6 +1642,18 @@ public class ConfigFragment extends Fragment {
                 new ClearCacheDataDialog(requireContext(), requireActivity()
                         ,mainViewModel.databaseOpr
                         ,ClearCacheDataDialog.CACHE_MODE.SWL_QSO).show();
+            }
+        });
+        //删除共享的临时文件
+        binding.clearShareDataButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        GeneralVariables.clearCache(binding.getRoot().getContext());
+                    }
+                }).start();
             }
         });
 

@@ -801,6 +801,17 @@
     <string name="serial_setting_help">serial_help_en.txt</string>
     <string name="tcp_connect_closed">The network connection has been disconnected.</string>
     <string name="rtty_ru_msg">RTTY RU</string>
+    <string name="share_logs">共有ログ</string>
+    <string name="config_clear_share_data">キャッシュファイルの削除</string>
+    <string name="preparing_log_data">ログデータを準備しています</string>
+    <string name="total_logs">合計%dのログ</string>
+    <string name="get_log_no">%d件のログがダウンロードされました。</string>
+    <string name="write_file_error">ファイルの書き込み中にエラーが発生しました：%s</string>
+    <string name="import_share_failed">ログデータのインポートに失敗しました！ %s</string>
+    <string name="preparing_import_logs">インポートログの準備中…</string>
+    <string name="share_logs_been_read">%dのログを読み込みました。</string>
+    <string name="share_import_log_data">ログデータをインポートしています…</string>
+
     <string name="cloudlog_settings">Cloudlog Settings</string>
     <string name="config_enable_cloudlog">Enable Cloudlog sync</string>
     <string name="cloudlog_addr">Server address</string>
@@ -816,5 +827,6 @@
     <string name="qrz_api_key">API KEY</string>
     <string name="config_enable_qrz">Enable QRZ sync</string>
     <string name="qrz_help">qrz_en.txt</string>
+    <string name="alram_switch">アラームスイッチ</string>
 
 </resources>

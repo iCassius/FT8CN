@@ -20,7 +20,8 @@
             android:background="@color/purple_500"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent">
+            app:layout_constraintTop_toTopOf="parent"
+            tools:ignore="TextSizeCheck">
 
 
             <TextView
@@ -505,8 +506,6 @@
                             app:layout_constraintTop_toTopOf="parent" />
 
                     </androidx.constraintlayout.widget.ConstraintLayout>
-
-
                     <androidx.constraintlayout.widget.ConstraintLayout
                         android:id="@+id/cloudlogLayout"
                         android:layout_width="0dp"
@@ -526,16 +525,18 @@
                             android:textAlignment="textEnd"
                             android:textColor="@color/text_view_color"
                             android:textSize="14sp"
+                            app:layout_constraintBottom_toTopOf="@+id/testCloudlogButton"
                             app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintTop_toTopOf="@id/cloudlogServerApiKeyTextView"/>
+                            app:layout_constraintTop_toTopOf="parent" />
 
                         <Switch
                             android:id="@+id/enableCloudlogSwitch"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="12dp"
-                            android:layout_marginTop="5dp"
 
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="4dp"
                             android:checked="false"
                             android:text="@string/config_enable_cloudlog"
                             android:textColor="@color/text_view_color"
@@ -543,9 +544,9 @@
                             android:thumbTint="?attr/colorPrimary"
                             android:thumbTintMode="multiply"
                             android:trackTint="@color/button_start_color"
-                            app:layout_constraintTop_toBottomOf="@+id/cloudlogStationIdTextView"
-                            app:layout_constraintHorizontal_bias="0.5"
+                            app:layout_constraintBottom_toBottomOf="parent"
                             app:layout_constraintStart_toEndOf="@+id/cloudlogSettingsTextView"
+                            app:layout_constraintTop_toBottomOf="@+id/cloudlogStationIdEdit"
                             tools:ignore="TouchTargetSizeCheck,UseSwitchCompatOrMaterialXml" />
 
                         <TextView
@@ -557,53 +558,60 @@
                             android:textAlignment="textEnd"
                             android:textColor="@color/text_view_color"
                             android:textSize="14sp"
-                            app:layout_constraintStart_toEndOf="@+id/cloudlogSettingsTextView" />
+                            app:layout_constraintBottom_toBottomOf="@+id/cloudlogServerAddressEdit"
+                            app:layout_constraintStart_toEndOf="@+id/cloudlogSettingsTextView"
+                            app:layout_constraintTop_toTopOf="@+id/cloudlogServerAddressEdit" />
 
                         <EditText
                             android:id="@+id/cloudlogServerAddressEdit"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginEnd="8dp"
                             android:background="@drawable/editor_style"
                             android:ems="10"
+
                             android:inputType="text|textUri"
                             android:minHeight="14dp"
-
                             android:textColor="@color/text_view_color"
                             android:textSize="18sp"
                             app:layout_constraintEnd_toStartOf="@+id/cloudlogSettingsImageButton"
                             app:layout_constraintStart_toEndOf="@+id/cloudlogServerAddressTextView"
                             app:layout_constraintTop_toTopOf="parent"
-                            tools:ignore="TextContrastCheck,TooManyViews,TouchTargetSizeCheck" />
+                            tools:ignore="TextContrastCheck,TooManyViews,TouchTargetSizeCheck,SpeakableTextPresentCheck"
+                            android:importantForAutofill="no" />
 
                         <TextView
                             android:id="@+id/cloudlogServerApiKeyTextView"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="12dp"
-                            android:layout_marginTop="8dp"
                             android:text="@string/cloudlog_api_key"
                             android:textAlignment="textEnd"
                             android:textColor="@color/text_view_color"
                             android:textSize="14sp"
+                            app:layout_constraintBottom_toTopOf="@+id/cloudlogStationIdEdit"
                             app:layout_constraintStart_toEndOf="@+id/cloudlogSettingsTextView"
-                            app:layout_constraintTop_toBottomOf="@+id/cloudlogServerAddressTextView" />
+                            app:layout_constraintTop_toBottomOf="@+id/cloudlogServerAddressEdit" />
 
                         <EditText
                             android:id="@+id/cloudlogServerApiKeyEdit"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
                             android:background="@drawable/editor_style"
                             android:ems="10"
                             android:inputType="text"
                             android:minHeight="15dp"
                             android:textColor="@color/text_view_color"
-                            android:textSize="18sp"
 
-                            app:layout_constraintEnd_toStartOf="@+id/cloudlogSettingsImageButton"
+                            android:textSize="18sp"
+                            app:layout_constraintEnd_toEndOf="@+id/cloudlogServerAddressEdit"
                             app:layout_constraintStart_toStartOf="@+id/cloudlogServerAddressEdit"
-                            app:layout_constraintTop_toTopOf="@+id/cloudlogServerApiKeyTextView"
-                            tools:ignore="TextContrastCheck,TooManyViews,TouchTargetSizeCheck" />
+                            app:layout_constraintTop_toBottomOf="@+id/cloudlogServerAddressEdit"
+                            tools:ignore="TextContrastCheck,TooManyViews,TouchTargetSizeCheck,SpeakableTextPresentCheck"
+                            android:importantForAutofill="no" />
 
                         <TextView
                             android:id="@+id/cloudlogStationIdTextView"
@@ -614,25 +622,27 @@
                             android:textAlignment="textEnd"
                             android:textColor="@color/text_view_color"
                             android:textSize="14sp"
-                            android:layout_marginTop="8dp"
+                            app:layout_constraintBottom_toBottomOf="@+id/cloudlogStationIdEdit"
                             app:layout_constraintStart_toEndOf="@+id/cloudlogSettingsTextView"
-                            app:layout_constraintTop_toBottomOf="@+id/cloudlogServerApiKeyTextView" />
+                            app:layout_constraintTop_toBottomOf="@+id/cloudlogServerApiKeyEdit" />
 
                         <EditText
                             android:id="@+id/cloudlogStationIdEdit"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
                             android:background="@drawable/editor_style"
                             android:ems="10"
                             android:inputType="text|textUri"
-                            android:minHeight="15dp"
 
+                            android:minHeight="15dp"
                             android:textColor="@color/text_view_color"
                             android:textSize="18sp"
-                            app:layout_constraintEnd_toStartOf="@+id/cloudlogSettingsImageButton"
+                            app:layout_constraintEnd_toEndOf="@+id/cloudlogServerApiKeyEdit"
                             app:layout_constraintStart_toStartOf="@+id/cloudlogServerApiKeyEdit"
-                            app:layout_constraintTop_toTopOf="@id/cloudlogStationIdTextView"
-                            tools:ignore="TextContrastCheck,TooManyViews,TouchTargetSizeCheck" />
+                            app:layout_constraintTop_toBottomOf="@+id/cloudlogServerApiKeyEdit"
+                            tools:ignore="TextContrastCheck,TooManyViews,TouchTargetSizeCheck,SpeakableTextPresentCheck"
+                            android:importantForAutofill="no" />
 
 
                         <Button
@@ -641,9 +651,9 @@
                             android:layout_height="wrap_content"
                             android:text="@string/test_cloudlog_config"
                             android:textSize="12sp"
-                            app:layout_constraintHorizontal_bias="0.5"
+                            app:layout_constraintBottom_toBottomOf="@id/enableCloudlogSwitch"
                             app:layout_constraintLeft_toLeftOf="@id/cloudlogSettingsTextView"
-                            app:layout_constraintBottom_toBottomOf="@id/enableCloudlogSwitch"/>
+                            tools:ignore="DuplicateSpeakableTextCheck" />
 
                         <ImageButton
                             android:id="@+id/cloudlogSettingsImageButton"
@@ -675,12 +685,13 @@
                             android:id="@+id/qrzSettingsTextView"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
                             android:text="@string/qrz_settings"
                             android:textAlignment="textEnd"
                             android:textColor="@color/text_view_color"
                             android:textSize="14sp"
-                            />
+                            app:layout_constraintBottom_toTopOf="@+id/testQrzButton"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintTop_toTopOf="parent" />
 
                         <Switch
                             android:id="@+id/enableQrzSwitch"
@@ -706,28 +717,33 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="12dp"
+                            android:layout_marginTop="4dp"
                             android:text="@string/qrz_api_key"
                             android:textAlignment="textEnd"
                             android:textColor="@color/text_view_color"
                             android:textSize="14sp"
-                            app:layout_constraintStart_toEndOf="@+id/qrzSettingsTextView" />
+                            app:layout_constraintStart_toEndOf="@+id/qrzSettingsTextView"
+                            app:layout_constraintTop_toTopOf="parent" />
 
                         <EditText
                             android:id="@+id/qrzApiKeyTextEdit"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginEnd="8dp"
                             android:background="@drawable/editor_style"
                             android:ems="10"
+
+                            android:importantForAutofill="no"
                             android:inputType="text|textUri"
                             android:minHeight="14dp"
-
                             android:textColor="@color/text_view_color"
                             android:textSize="18sp"
                             app:layout_constraintEnd_toStartOf="@+id/qrzSettingsImageButton"
                             app:layout_constraintStart_toEndOf="@+id/qrzApiKeyTextView"
                             app:layout_constraintTop_toTopOf="parent"
-                            tools:ignore="TextContrastCheck,TooManyViews,TouchTargetSizeCheck" />
+                            tools:ignore="TextContrastCheck,TooManyViews,TouchTargetSizeCheck,SpeakableTextPresentCheck" />
 
                         <Button
                             android:id="@+id/testQrzButton"
@@ -753,6 +769,7 @@
                             tools:ignore="TouchTargetSizeCheck" />
 
                     </androidx.constraintlayout.widget.ConstraintLayout>
+
 
                     <androidx.constraintlayout.widget.ConstraintLayout
                         android:id="@+id/operatonBandLayout"
@@ -1071,7 +1088,8 @@
                             android:textSize="14sp"
                             app:layout_constraintBottom_toBottomOf="parent"
                             app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintTop_toTopOf="parent" />
+                            app:layout_constraintTop_toTopOf="parent"
+                            tools:ignore="TooManyViews" />
 
 
                         <ImageButton
@@ -1430,7 +1448,7 @@
                             app:layout_constraintEnd_toEndOf="parent"
                             app:layout_constraintTop_toTopOf="parent"
                             app:srcCompat="@drawable/ic_baseline_info_32"
-                            tools:ignore="TouchTargetSizeCheck" />
+                            tools:ignore="TouchTargetSizeCheck,DuplicateSpeakableTextCheck" />
 
 
                     </androidx.constraintlayout.widget.ConstraintLayout>
@@ -1552,7 +1570,6 @@
                     </com.bg7yoz.ft8cn.ui.RadioGroupFt8cn>
 
 
-
                         <ImageButton
                             android:id="@+id/decodeModeHelpButton"
                             android:layout_width="wrap_content"
@@ -1564,9 +1581,95 @@
                             app:layout_constraintEnd_toEndOf="parent"
                             app:layout_constraintTop_toTopOf="parent"
                             app:srcCompat="@drawable/ic_baseline_info_32"
-                            tools:ignore="TouchTargetSizeCheck" />
+                            tools:ignore="TouchTargetSizeCheck,DuplicateSpeakableTextCheck" />
 
                     </androidx.constraintlayout.widget.ConstraintLayout>
+
+
+                    <androidx.constraintlayout.widget.ConstraintLayout
+                        android:id="@+id/alarmSwitchLayout"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:background="@drawable/editor_layout_style"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toBottomOf="@+id/decodeModeLayout">
+
+                        <TextView
+                            android:id="@+id/alarmSwitchText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:text="@string/alram_switch"
+                            android:textColor="@color/text_view_color"
+                            android:textSize="14sp"
+                            app:layout_constraintBottom_toBottomOf="parent"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintTop_toTopOf="parent" />
+
+
+                        <Switch
+                            android:id="@+id/swrAlarmSwitch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+
+                            android:layout_marginStart="8dp"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="4dp"
+                            android:checked="true"
+                            android:text="@string/swr_switch_on"
+                            android:textColor="@color/text_view_color"
+                            android:textSize="14sp"
+                            android:thumbTint="?attr/colorPrimary"
+                            android:thumbTintMode="multiply"
+                            android:trackTint="@color/button_start_color"
+                            app:layout_constraintBottom_toBottomOf="parent"
+                            app:layout_constraintEnd_toStartOf="@+id/alcAlarmSwitch"
+                            app:layout_constraintHorizontal_bias="0.5"
+                            app:layout_constraintStart_toEndOf="@+id/alarmSwitchText"
+                            app:layout_constraintTop_toTopOf="parent"
+                            tools:ignore="TouchTargetSizeCheck,UseSwitchCompatOrMaterialXml" />
+
+                        <Switch
+                            android:id="@+id/alcAlarmSwitch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+
+                            android:layout_marginStart="32dp"
+                            android:checked="true"
+                            android:text="@string/alc_switch_on"
+                            android:textColor="@color/text_view_color"
+                            android:textSize="14sp"
+                            android:thumbTint="?attr/colorPrimary"
+                            android:thumbTintMode="multiply"
+
+                            android:trackTint="@color/button_start_color"
+                            app:layout_constraintBottom_toBottomOf="@+id/swrAlarmSwitch"
+                            app:layout_constraintEnd_toStartOf="@+id/alarmSwitchHelpButton"
+                            app:layout_constraintHorizontal_bias="0.5"
+                            app:layout_constraintStart_toEndOf="@+id/swrAlarmSwitch"
+                            app:layout_constraintTop_toTopOf="@+id/swrAlarmSwitch"
+                            tools:ignore="TouchTargetSizeCheck,UseSwitchCompatOrMaterialXml" />
+
+
+                        <ImageButton
+                            android:id="@+id/alarmSwitchHelpButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="8dp"
+                            android:background="@drawable/imagebutton_transparent_style"
+                            android:contentDescription="@string/help"
+                            app:layout_constraintBottom_toBottomOf="parent"
+                            app:layout_constraintEnd_toEndOf="parent"
+                            app:layout_constraintTop_toTopOf="parent"
+                            app:srcCompat="@drawable/ic_baseline_info_32"
+                            tools:ignore="TouchTargetSizeCheck,DuplicateSpeakableTextCheck" />
+
+                    </androidx.constraintlayout.widget.ConstraintLayout>
+
+
+
 
                     <androidx.constraintlayout.widget.ConstraintLayout
                         android:id="@+id/launchSupervisionLayout"
@@ -1576,7 +1679,7 @@
                         android:background="@drawable/editor_layout_style"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/decodeModeLayout">
+                        app:layout_constraintTop_toBottomOf="@+id/alarmSwitchLayout">
 
                         <TextView
                             android:id="@+id/launchSupervisionText"
@@ -1605,7 +1708,7 @@
                             app:layout_constraintBottom_toBottomOf="parent"
                             app:layout_constraintStart_toEndOf="@+id/launchSupervisionText"
                             app:layout_constraintTop_toTopOf="parent"
-                            tools:ignore="TouchTargetSizeCheck,SpeakableTextPresentCheck,DuplicateSpeakableTextCheck"
+                            tools:ignore="TouchTargetSizeCheck,SpeakableTextPresentCheck,DuplicateSpeakableTextCheck,TextSizeCheck"
                             tools:listitem="@layout/launch_supervision_spinner_item" />
 
 
@@ -1661,7 +1764,7 @@
                             app:layout_constraintBottom_toBottomOf="parent"
                             app:layout_constraintStart_toEndOf="@+id/noResponseCountText"
                             app:layout_constraintTop_toTopOf="parent"
-                            tools:ignore="TouchTargetSizeCheck,SpeakableTextPresentCheck,DuplicateSpeakableTextCheck"
+                            tools:ignore="TouchTargetSizeCheck,SpeakableTextPresentCheck,DuplicateSpeakableTextCheck,TextSizeCheck"
                             tools:listitem="@layout/no_reply_limit_spinner_item" />
 
                         <TextView
@@ -1783,14 +1886,15 @@
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
                             android:layout_marginTop="6dp"
+                            android:layout_marginEnd="8dp"
                             android:layout_marginBottom="6dp"
                             android:autofillHints=""
                             android:background="@drawable/editor_style"
                             android:ems="10"
                             android:hint="@string/pl_callsing_prefix"
                             android:inputType="textEmailAddress|textCapCharacters"
-                            android:minHeight="32dp"
 
+                            android:minHeight="32dp"
                             android:textColor="@color/text_view_color"
                             android:textSize="14sp"
                             app:layout_constraintBottom_toBottomOf="parent"
@@ -1921,10 +2025,9 @@
                             android:id="@+id/clearFollowButton"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginBottom="8dp"
+                            android:layout_marginTop="8dp"
                             android:text="@string/follow_callsign_data"
                             android:textSize="12sp"
-                            app:layout_constraintBottom_toTopOf="@+id/clearLogCacheButton"
                             app:layout_constraintEnd_toStartOf="@+id/clearCacheHelpButton"
                             app:layout_constraintHorizontal_bias="0.5"
                             app:layout_constraintStart_toEndOf="@+id/clearCacheText"
@@ -1934,24 +2037,35 @@
                             android:id="@+id/clearLogCacheButton"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginBottom="8dp"
+                            android:layout_marginTop="8dp"
                             android:text="@string/logs_cache"
                             android:textSize="12sp"
-                            app:layout_constraintBottom_toTopOf="@+id/clearSWlQsoButton"
                             app:layout_constraintEnd_toStartOf="@+id/clearCacheHelpButton"
                             app:layout_constraintHorizontal_bias="0.5"
                             app:layout_constraintStart_toEndOf="@+id/clearCacheText"
-                            app:layout_constraintTop_toBottomOf="@+id/clearFollowButton" />
+                            app:layout_constraintTop_toBottomOf="@+id/clearSWlQsoButton" />
 
                         <Button
                             android:id="@+id/clearSWlQsoButton"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginBottom="8dp"
+                            android:layout_marginTop="8dp"
                             android:text="@string/config_clear_swl_qso"
+                            app:layout_constraintEnd_toStartOf="@+id/clearCacheHelpButton"
+                            app:layout_constraintStart_toEndOf="@+id/clearCacheText"
+                            app:layout_constraintTop_toBottomOf="@+id/clearFollowButton" />
+
+                        <Button
+                            android:id="@+id/clearShareDataButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:layout_marginBottom="8dp"
+                            android:text="@string/config_clear_share_data"
                             app:layout_constraintBottom_toBottomOf="parent"
                             app:layout_constraintEnd_toStartOf="@+id/clearCacheHelpButton"
-                            app:layout_constraintStart_toEndOf="@+id/clearCacheText" />
+                            app:layout_constraintStart_toEndOf="@+id/clearCacheText"
+                            app:layout_constraintTop_toBottomOf="@+id/clearLogCacheButton" />
 
                     </androidx.constraintlayout.widget.ConstraintLayout>
                 </androidx.constraintlayout.widget.ConstraintLayout>

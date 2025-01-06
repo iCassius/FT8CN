@@ -27,7 +27,7 @@ public class Wolf_sdr_450Rig extends BaseRig {
     private boolean swrAlert = false;
 
     private Timer readFreqTimer = new Timer();
-    private boolean isUsbMode=true;
+    private boolean isUsbMode = true;
 
     private TimerTask readTask() {
         return new TimerTask() {
@@ -51,6 +51,7 @@ public class Wolf_sdr_450Rig extends BaseRig {
             }
         };
     }
+
     /**
      * 读取Meter RM;
      */
@@ -63,7 +64,8 @@ public class Wolf_sdr_450Rig extends BaseRig {
     }
 
     private void showAlert() {
-        if (swr >= Yaesu3RigConstant.swr_39_alert_max) {
+        if ((swr >= Yaesu3RigConstant.swr_39_alert_max)
+                && GeneralVariables.swr_switch_on) {
             if (!swrAlert) {
                 swrAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.swr_high_alert));
@@ -71,7 +73,8 @@ public class Wolf_sdr_450Rig extends BaseRig {
         } else {
             swrAlert = false;
         }
-        if (alc > Yaesu3RigConstant.alc_39_alert_max) {//网络模式下不警告ALC
+        if ((alc > Yaesu3RigConstant.alc_39_alert_max)
+                && GeneralVariables.alc_switch_on) {//网络模式下不警告ALC
             if (!alcMaxAlert) {
                 alcMaxAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.alc_high_alert));
@@ -120,7 +123,7 @@ public class Wolf_sdr_450Rig extends BaseRig {
             //getConnector().sendData(Yaesu3RigConstant.setOperationUSB_Data_Mode());
             if (isUsbMode) {//usb模式
                 getConnector().sendData(Yaesu3RigConstant.setOperationUSBMode());
-            }else {//dig-u模式
+            } else {//dig-u模式
                 getConnector().sendData(Yaesu3RigConstant.setOperationDATA_U_Mode());
             }
         }
@@ -140,7 +143,7 @@ public class Wolf_sdr_450Rig extends BaseRig {
 
         if (!s.contains(";")) {
             buffer.append(s);
-            if (buffer.length()>1000) clearBufferData();
+            if (buffer.length() > 1000) clearBufferData();
             //return;//说明数据还没接收完。
         } else {
             if (s.indexOf(";") > 0) {//说明接到结束的数据了，并且不是第一个字符是;
@@ -195,7 +198,7 @@ public class Wolf_sdr_450Rig extends BaseRig {
     }
 
     public Wolf_sdr_450Rig(boolean usbMode) {
-        isUsbMode=usbMode;
-        readFreqTimer.schedule(readTask(), START_QUERY_FREQ_DELAY,QUERY_FREQ_TIMEOUT);
+        isUsbMode = usbMode;
+        readFreqTimer.schedule(readTask(), START_QUERY_FREQ_DELAY, QUERY_FREQ_TIMEOUT);
     }
 }

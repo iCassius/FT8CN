@@ -9,7 +9,6 @@ import com.bg7yoz.ft8cn.Ft8Message;
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.R;
 import com.bg7yoz.ft8cn.connector.ConnectMode;
-import com.bg7yoz.ft8cn.connector.X6100Connector;
 import com.bg7yoz.ft8cn.database.ControlMode;
 import com.bg7yoz.ft8cn.ft8transmit.GenerateFT8;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
@@ -23,6 +22,9 @@ public class XieGu6100Rig extends BaseRig {
     private final int ctrAddress = 0xE0;//接收地址，默认0xE0;电台回复命令有时也可以是0x00
     private byte[] dataBuffer = new byte[0];//数据缓冲区
     private int swr = 0;
+    private int alc = 0;
+    private boolean alcMaxAlert = false;
+    private boolean alcMinAlert = false;
     private boolean swrAlert = false;
     private Timer readFreqTimer = new Timer();
 
@@ -37,9 +39,9 @@ public class XieGu6100Rig extends BaseRig {
                         readFreqTimer = null;
                         return;
                     }
-                    if (isPttOn()){
+                    if (isPttOn()) {
                         readSWRMeter();
-                    }else {
+                    } else {
                         readFreqFromRig();
                     }
 
@@ -165,9 +167,17 @@ public class XieGu6100Rig extends BaseRig {
             case IcomRigConstant.CMD_READ_METER://读meter//此处的指令，只在网络模式实现，以后可能会在串口方面实现
                 if (xieGu6100Command.getSubCommand() == IcomRigConstant.CMD_READ_METER_SWR) {
                     //协谷的小端模式
-                    int temp=IcomRigConstant.twoByteBcdToIntBigEnd(xieGu6100Command.getData(true));
-                    if (temp!=255) {
+                    int temp = IcomRigConstant.twoByteBcdToIntBigEnd(xieGu6100Command.getData(true));
+                    if (temp != 255) {
                         swr = temp;//
+                    }
+                }
+
+                if (xieGu6100Command.getSubCommand() == IcomRigConstant.CMD_READ_METER_ALC) {
+                    //协谷的小端模式
+                    int temp = IcomRigConstant.twoByteBcdToIntBigEnd(xieGu6100Command.getData(true));
+                    if (temp != 255) {
+                        alc = temp;//
                     }
                 }
                 showAlert();//检查meter值是否在告警范围
@@ -178,7 +188,8 @@ public class XieGu6100Rig extends BaseRig {
 
 
     private void showAlert() {
-        if (swr >= IcomRigConstant.swr_alert_max) {
+        if ((swr >= IcomRigConstant.swr_alert_max)
+                && GeneralVariables.swr_switch_on) {
             if (!swrAlert) {
                 swrAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.swr_high_alert));
@@ -186,8 +197,30 @@ public class XieGu6100Rig extends BaseRig {
         } else {
             swrAlert = false;
         }
-    }
 
+        //协谷的alc值，是在指定范围之内
+        //alc太高
+        if ((alc > IcomRigConstant.xiegu_alc_alert_max)
+                && GeneralVariables.alc_switch_on) {//网络模式下不警告ALC
+            if (!alcMaxAlert) {
+                alcMaxAlert = true;
+                ToastMessage.show(GeneralVariables.getStringFromResource(R.string.alc_high_alert));
+            }
+        } else {
+            alcMaxAlert = false;
+        }
+        //alc太低
+        if ((alc < IcomRigConstant.xiegu_alc_alert_min)
+                && GeneralVariables.alc_switch_on) {//网络模式下不警告ALC
+            if (!alcMinAlert) {
+                alcMinAlert = true;
+                ToastMessage.show(GeneralVariables.getStringFromResource(R.string.alc_low_alert));
+            }
+        } else {
+            alcMinAlert = false;
+        }
+
+    }
 
 
     @Override
@@ -223,11 +256,11 @@ public class XieGu6100Rig extends BaseRig {
     public void sendWaveData(Ft8Message message) {//发送音频数据到电台，用于网络方式
         if (getConnector() != null) {//把生成的具体音频数据传递到Connector，
             //判断如果是ft8cns，就传输a19数据包
-            if (GeneralVariables.instructionSet == InstructionSet.XIEGU_6100_FT8CNS){
+            if (GeneralVariables.instructionSet == InstructionSet.XIEGU_6100_FT8CNS) {
                 //Log.e(TAG,"generate A91");
-                getConnector().sendFt8A91(GenerateFT8.generateA91(message,true)
-                        ,GeneralVariables.getBaseFrequency());
-            }else {//否则正常传输音频数据
+                getConnector().sendFt8A91(GenerateFT8.generateA91(message, true)
+                        , GeneralVariables.getBaseFrequency());
+            } else {//否则正常传输音频数据
                 float[] data = GenerateFT8.generateFt8(message, GeneralVariables.getBaseFrequency()
                         , 12000);//此处icom电台发射音频的采样率是12000
                 if (data == null) {
@@ -247,9 +280,13 @@ public class XieGu6100Rig extends BaseRig {
         }
     }
 
+    /**
+     * 读swr和alc数据
+     */
     private void readSWRMeter() {
         if (getConnector() != null) {
             getConnector().sendData(IcomRigConstant.getSWRState(ctrAddress, getCivAddress()));
+            getConnector().sendData(IcomRigConstant.getALCState(ctrAddress, getCivAddress()));
         }
     }
 

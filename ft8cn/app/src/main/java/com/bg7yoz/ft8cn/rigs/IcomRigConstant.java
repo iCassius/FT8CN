@@ -21,6 +21,10 @@ public class IcomRigConstant {
     public static final int swr_alert_max=120;//相当于3.0
     public static final int alc_alert_max=120;//超过，在表上显示红色
 
+    //协谷6100的ALC值的原始值（0～255）在127±50都是最佳线性度范围，转换到0～120的线性范围就是36.17到83.19
+    public static final int xiegu_alc_alert_max=84;//超过，在表上显示红色
+    public static final int xiegu_alc_alert_min=36;//超过，在表上显示红色
+
 
 
     //PTT状态

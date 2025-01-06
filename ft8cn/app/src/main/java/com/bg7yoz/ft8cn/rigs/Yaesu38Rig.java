@@ -59,7 +59,8 @@ public class Yaesu38Rig extends BaseRig {
     }
 
     private void showAlert() {
-        if (swr >= Yaesu3RigConstant.swr_39_alert_max) {
+        if ((swr >= Yaesu3RigConstant.swr_39_alert_max)
+                && GeneralVariables.swr_switch_on) {
             if (!swrAlert) {
                 swrAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.swr_high_alert));
@@ -67,7 +68,8 @@ public class Yaesu38Rig extends BaseRig {
         } else {
             swrAlert = false;
         }
-        if (alc > Yaesu3RigConstant.alc_39_alert_max) {//网络模式下不警告ALC
+        if ((alc > Yaesu3RigConstant.alc_39_alert_max)
+                && GeneralVariables.alc_switch_on) {//网络模式下不警告ALC
             if (!alcMaxAlert) {
                 alcMaxAlert = true;
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.alc_high_alert));
