@@ -59,7 +59,7 @@ BG7YOZ
    BG7BSM，协助对一些BUG进行调试
    BH4FTI，发现并协助对一些BUG进行调试
    BG8BXM（M哥），为FT8CN的使用做推广，抖音和B站上有很多他的教学视频
-   BG7MFQ，为FT8CN的使用做推广，帮助测试
+   BA7MFQ，为FT8CN的使用做推广，帮助测试
    BG2EFX，提供大数据量的日志用于测试
    DS1UFX，贡献(tr)uSDX audio over CAT代码
    BG8HT，提供某型号电台进行测试

@@ -522,8 +522,6 @@
     <string name="serial_default">Default</string>
     <string name="serial_setting_help">serial_help_en.txt</string>
     <string name="tcp_connect_closed">The network connection has been disconnected.</string>
-<<<<<<< Updated upstream
-=======
     <string name="share_logs">Share logs</string>
     <string name="config_clear_share_data">Delete cache files</string>
     <string name="preparing_log_data">Preparing log data…</string>
@@ -554,6 +552,5 @@
     <string name="swr_switch_off" translatable="false">SWR Off</string>
     <string name="alc_switch_on" translatable="false">ALC On</string>
     <string name="alc_switch_off" translatable="false">ALC Off</string>
->>>>>>> Stashed changes
 
 </resources>

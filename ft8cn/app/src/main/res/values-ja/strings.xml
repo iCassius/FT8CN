@@ -801,8 +801,6 @@
     <string name="serial_setting_help">serial_help_en.txt</string>
     <string name="tcp_connect_closed">The network connection has been disconnected.</string>
     <string name="rtty_ru_msg">RTTY RU</string>
-<<<<<<< Updated upstream
-=======
     <string name="share_logs">共有ログ</string>
     <string name="config_clear_share_data">キャッシュファイルの削除</string>
     <string name="preparing_log_data">ログデータを準備しています</string>
@@ -830,6 +828,5 @@
     <string name="config_enable_qrz">Enable QRZ sync</string>
     <string name="qrz_help">qrz_en.txt</string>
     <string name="alram_switch">アラームスイッチ</string>
->>>>>>> Stashed changes
 
 </resources>

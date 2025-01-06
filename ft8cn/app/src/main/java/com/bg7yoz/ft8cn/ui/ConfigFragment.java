@@ -9,6 +9,7 @@ import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
@@ -32,6 +33,7 @@ import com.bg7yoz.ft8cn.database.OperationBand;
 import com.bg7yoz.ft8cn.database.RigNameList;
 import com.bg7yoz.ft8cn.databinding.FragmentConfigBinding;
 import com.bg7yoz.ft8cn.ft8signal.FT8Package;
+import com.bg7yoz.ft8cn.log.ThirdPartyService;
 import com.bg7yoz.ft8cn.maidenhead.MaidenheadGrid;
 import com.bg7yoz.ft8cn.rigs.InstructionSet;
 import com.bg7yoz.ft8cn.timer.UtcTimer;
@@ -160,8 +162,6 @@ public class ConfigFragment extends Fragment {
         }
     };
 
-<<<<<<< Updated upstream
-=======
 
     // Cloudlog地址
     private final TextWatcher onCloudlogAddressChanged=new TextWatcher() {
@@ -240,7 +240,6 @@ public class ConfigFragment extends Fragment {
     };
 
 
->>>>>>> Stashed changes
     //排除的呼号前缀
     private final TextWatcher onExcludedCallsigns=new TextWatcher() {
         @Override
@@ -455,6 +454,24 @@ public class ConfigFragment extends Fragment {
         binding.excludedCallsignEdit.setText(GeneralVariables.getExcludeCallsigns());
         binding.excludedCallsignEdit.addTextChangedListener(onExcludedCallsigns);
 
+        // cloudlog相关配置
+        binding.cloudlogServerAddressEdit.removeTextChangedListener(onCloudlogAddressChanged);
+        binding.cloudlogServerAddressEdit.setText(GeneralVariables.getCloudlogServerAddress());
+        binding.cloudlogServerAddressEdit.addTextChangedListener(onCloudlogAddressChanged);
+
+        binding.cloudlogServerApiKeyEdit.removeTextChangedListener(onCloudlogApiKeyChanged);
+        binding.cloudlogServerApiKeyEdit.setText(GeneralVariables.getCloudlogServerApiKey());
+        binding.cloudlogServerApiKeyEdit.addTextChangedListener(onCloudlogApiKeyChanged);
+
+        binding.cloudlogStationIdEdit.removeTextChangedListener(onCloudlogStationIDChanged);
+        binding.cloudlogStationIdEdit.setText(GeneralVariables.getCloudlogStationID());
+        binding.cloudlogStationIdEdit.addTextChangedListener(onCloudlogStationIDChanged);
+
+        // qrz相关配置
+        binding.qrzApiKeyTextEdit.removeTextChangedListener(onQrzApiKeyChanged);
+        binding.qrzApiKeyTextEdit.setText(GeneralVariables.getQrzApiKey());
+        binding.qrzApiKeyTextEdit.addTextChangedListener(onQrzApiKeyChanged);
+
 
         //设置同频发射开关
         binding.synFrequencySwitch.setOnCheckedChangeListener(null);
@@ -600,8 +617,6 @@ public class ConfigFragment extends Fragment {
             }
         });
 
-<<<<<<< Updated upstream
-=======
         //设置保存Cloudlog选项
         binding.enableCloudlogSwitch.setOnCheckedChangeListener(null);
         binding.enableCloudlogSwitch.setChecked(GeneralVariables.enableCloudlog);
@@ -644,7 +659,6 @@ public class ConfigFragment extends Fragment {
             }
         });
 
->>>>>>> Stashed changes
 
         //获取梅登海德网格
         binding.configGetGridImageButton.setOnClickListener(new View.OnClickListener() {
@@ -1330,8 +1344,6 @@ public class ConfigFragment extends Fragment {
                             , true).show();
             }
         });
-<<<<<<< Updated upstream
-=======
 
         //cloudlog帮助
         binding.cloudlogSettingsImageButton.setOnClickListener(new View.OnClickListener() {
@@ -1352,7 +1364,6 @@ public class ConfigFragment extends Fragment {
             }
         });
 
->>>>>>> Stashed changes
         //梅登海德网格的帮助
         binding.maidenGridImageButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -1545,8 +1556,6 @@ public class ConfigFragment extends Fragment {
                             , true).show();
             }
         });
-<<<<<<< Updated upstream
-=======
 
         //cloudlog测试...
         binding.testCloudlogButton.setOnClickListener(new View.OnClickListener() {
@@ -1611,7 +1620,6 @@ public class ConfigFragment extends Fragment {
                 }).start();}
         });
 
->>>>>>> Stashed changes
         binding.clearFollowButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {

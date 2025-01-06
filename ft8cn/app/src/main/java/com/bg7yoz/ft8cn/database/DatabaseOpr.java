@@ -2195,8 +2195,6 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.serialParity =Integer.parseInt(result);
                 }
 
-<<<<<<< Updated upstream
-=======
                 // cloudlogs
                 if (name.equalsIgnoreCase("enableCloudlog")) {
                     GeneralVariables.enableCloudlog = result.equals("1");
@@ -2226,7 +2224,6 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.alc_switch_on = result.equals("1");
                 }
 
->>>>>>> Stashed changes
             }
 
             cursor.close();

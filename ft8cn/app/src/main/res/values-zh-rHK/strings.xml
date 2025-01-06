@@ -517,9 +517,6 @@
     <string name="serial_setting_help">serial_help.txt</string>
     <string name="tcp_connect_closed">網路連接已經斷開！</string>
     <string name="rtty_ru_msg">RTTY RU</string>
-<<<<<<< Updated upstream
-
-=======
     <string name="share_logs">分享日誌</string>
     <string name="config_clear_share_data">刪除緩存文件</string>
     <string name="preparing_log_data">正在準備日誌數據…</string>
@@ -546,6 +543,5 @@
     <string name="config_enable_qrz">自动上传至QRZ.com</string>
     <string name="qrz_help">qrz.txt</string>
     <string name="alram_switch">告警開關</string>
->>>>>>> Stashed changes
 
 </resources>
