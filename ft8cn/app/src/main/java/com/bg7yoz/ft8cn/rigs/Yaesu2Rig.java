@@ -31,9 +31,6 @@ public class Yaesu2Rig extends BaseRig {
             public void run() {
                 try {
                     if (!isConnected()) {
-                        readFreqTimer.cancel();
-                        readFreqTimer.purge();
-                        readFreqTimer = null;
                         return;
                     }
                     if (isPttOn()) {

@@ -18,6 +18,7 @@ import androidx.lifecycle.Observer;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import androidx.lifecycle.ViewModelProvider;
 import com.bg7yoz.ft8cn.MainViewModel;
 import com.bg7yoz.ft8cn.databinding.FragmentCountBinding;
 
@@ -51,7 +52,7 @@ public class CountFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mainViewModel = MainViewModel.getInstance(this);
+        mainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
     }
 
     @SuppressLint("NotifyDataSetChanged")
@@ -59,7 +60,7 @@ public class CountFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         binding=FragmentCountBinding.inflate(getLayoutInflater());
-        mainViewModel = MainViewModel.getInstance(this);
+        mainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
         countInfoList.clear();
         countInfoListRecyclerView=binding.countRecyclerView;
         countInfoAdapter=new CountInfoAdapter(requireContext(),countInfoList);

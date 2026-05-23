@@ -38,6 +38,9 @@ public class GenerateFT8 {
 
 
     public static int checkI3ByCallsign(String callsign) {
+        if (callsign == null || callsign.length() < 3) {
+            return 1;// 默认为标准呼号
+        }
         String substring = callsign.substring(callsign.length() - 2);
         if (substring.equals("/P")) {
             if (callsign.length() <= 8) {
@@ -58,9 +61,6 @@ public class GenerateFT8 {
         }
         if (callsign.length() > 6) {//呼号大于6位，也是非标准呼号
             return 4;
-        }
-        if (callsign.length() == 0) {//没有呼号，就是自由文本
-            return 0;
         }
         return 1;
     }

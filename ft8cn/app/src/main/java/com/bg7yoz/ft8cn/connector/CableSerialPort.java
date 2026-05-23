@@ -225,6 +225,9 @@ public class CableSerialPort {
             } catch (IOException e) {
                 e.printStackTrace();
                 Log.e(TAG, "发送数据出错：" + e.getMessage());
+                if (onStateChanged != null) {
+                    onStateChanged.onRunError(e.getMessage());
+                }
                 return false;
             }
             return true;
@@ -256,7 +259,11 @@ public class CableSerialPort {
 
     public void registerRigSerialPort(Context context) {
         Log.d(TAG, "registerRigSerialPort: registered!");
-        context.registerReceiver(broadcastReceiver, new IntentFilter(INTENT_ACTION_GRANT_USB));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(broadcastReceiver, new IntentFilter(INTENT_ACTION_GRANT_USB), Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            context.registerReceiver(broadcastReceiver, new IntentFilter(INTENT_ACTION_GRANT_USB));
+        }
     }
 
     public void unregisterRigSerialPort(Activity activity) {

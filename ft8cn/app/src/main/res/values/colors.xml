@@ -39,7 +39,7 @@
 
     <color name="is_not_qsl_text_color">#FF3A3A</color>
     <color name="is_qsl_text_color">#106800</color>
-    <color name="progresss_bar_back_color">#000000</color>
+    <color name="progress_bar_back_color">#000000</color>
 
     <color name="text_view_color">#636363</color>
     <color name="text_view_error_color">#FB0000</color>

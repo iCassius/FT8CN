@@ -20,6 +20,7 @@ import android.animation.ObjectAnimator;
 import android.app.AlertDialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -28,6 +29,8 @@ import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
@@ -36,11 +39,14 @@ import android.view.WindowManager;
 import android.view.animation.AnimationUtils;
 import android.widget.TextView;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.lifecycle.Observer;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.navigation.NavController;
 import androidx.navigation.fragment.NavHostFragment;
 import androidx.navigation.ui.NavigationUI;
@@ -48,6 +54,7 @@ import androidx.navigation.ui.NavigationUI;
 import com.bg7yoz.ft8cn.bluetooth.BluetoothStateBroadcastReceive;
 import com.bg7yoz.ft8cn.callsign.CallsignDatabase;
 import com.bg7yoz.ft8cn.connector.CableSerialPort;
+import com.bg7yoz.ft8cn.connector.ConnectMode;
 import com.bg7yoz.ft8cn.database.DatabaseOpr;
 import com.bg7yoz.ft8cn.database.OnAfterQueryConfig;
 import com.bg7yoz.ft8cn.database.OperationBand;
@@ -64,9 +71,12 @@ import com.bg7yoz.ft8cn.ui.SetVolumeDialog;
 import com.bg7yoz.ft8cn.ui.ShareLogsProgressDialog;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.navigation.NavigationBarView;
+import com.bg7yoz.ft8cn.wave.AudioForegroundService;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 
@@ -95,21 +105,25 @@ public class MainActivity extends AppCompatActivity {
             , Manifest.permission.ACCESS_FINE_LOCATION};
     List<String> mPermissionList = new ArrayList<>();
 
-    private static final int PERMISSION_REQUEST = 1;
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             permissions = new String[]{Manifest.permission.RECORD_AUDIO
                     , Manifest.permission.ACCESS_COARSE_LOCATION
                     , Manifest.permission.ACCESS_WIFI_STATE
-                    , Manifest.permission.BLUETOOTH
-                    , Manifest.permission.BLUETOOTH_ADMIN
                     , Manifest.permission.BLUETOOTH_CONNECT
+                    , Manifest.permission.BLUETOOTH_SCAN
+                    , Manifest.permission.BLUETOOTH_ADVERTISE
                     , Manifest.permission.MODIFY_AUDIO_SETTINGS
                     , Manifest.permission.WAKE_LOCK
                     , Manifest.permission.ACCESS_FINE_LOCATION};
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            List<String> permissionList = new ArrayList<>(Arrays.asList(permissions));
+            permissionList.add(Manifest.permission.POST_NOTIFICATIONS);
+            permissions = permissionList.toArray(new String[0]);
         }
 
         checkPermission();
@@ -120,7 +134,7 @@ public class MainActivity extends AppCompatActivity {
         //禁止休眠
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
                 , WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        super.onCreate(savedInstanceState);
+
         GeneralVariables.getInstance().setMainContext(getApplicationContext());
 
         //判断是不是简体中文
@@ -131,7 +145,7 @@ public class MainActivity extends AppCompatActivity {
         GeneralVariables.isChina = (getResources().getConfiguration().locale
                 .getLanguage().toUpperCase().startsWith("ZH"));
 
-        mainViewModel = MainViewModel.getInstance(this);
+        mainViewModel = new ViewModelProvider(this).get(MainViewModel.class);
         binding = MainActivityBinding.inflate(getLayoutInflater());
         binding.initDataLayout.setVisibility(View.VISIBLE);//显示LOG页面
         setContentView(binding.getRoot());
@@ -182,7 +196,7 @@ public class MainActivity extends AppCompatActivity {
                         && mainViewModel.ft8TransmitSignal.isActivated()) {
                     binding.utcProgressBar.setBackgroundColor(getColor(R.color.calling_list_isMyCall_color));
                 } else {
-                    binding.utcProgressBar.setBackgroundColor(getColor(R.color.progresss_bar_back_color));
+                    binding.utcProgressBar.setBackgroundColor(getColor(R.color.progress_bar_back_color));
                 }
                 binding.utcProgressBar.setProgress((int) ((aLong / 1000) % 15));
             }
@@ -206,13 +220,10 @@ public class MainActivity extends AppCompatActivity {
         navController = navHostFragment.getNavController();
 
         NavigationUI.setupWithNavController(binding.navView, navController);
-        //此处增加回调是因为当APP主动navigation后，无法回到解码的界面
-        binding.navView.setOnNavigationItemSelectedListener(new BottomNavigationView.OnNavigationItemSelectedListener() {
+        binding.navView.setOnItemSelectedListener(new NavigationBarView.OnItemSelectedListener() {
             @Override
             public boolean onNavigationItemSelected(@NonNull MenuItem item) {
-                //Log.e(TAG, "onNavigationItemSelected: "+item.toString() );
                 navController.navigate(item.getItemId());
-                //binding.navView.setLabelFor(item.getItemId());
                 return true;
             }
         });
@@ -232,6 +243,18 @@ public class MainActivity extends AppCompatActivity {
         }
         //初始化数据
         InitData();
+
+        // Safety check to hide welcome layout
+        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (binding.initDataLayout.getVisibility() == View.VISIBLE) {
+                    Log.w(TAG, "InitDataLayout still visible, force hiding.");
+                    binding.initDataLayout.setVisibility(View.GONE);
+                    InitFloatView();
+                }
+            }
+        }, 5000);
 
 
         //观察是不是flex radio
@@ -498,12 +521,19 @@ public class MainActivity extends AppCompatActivity {
                             navController.navigate(R.id.menu_nav_config);
                         }
                     });
+                } else if (GeneralVariables.connectMode == ConnectMode.USB_CABLE) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            setSelectUsbDevice();
+                        }
+                    });
                 }
             }
         });
 
         //把历史中通联成功的呼号与网格的对应关系
-        new DatabaseOpr.GetCallsignMapGrid(mainViewModel.databaseOpr.getDb()).execute();
+        mainViewModel.databaseOpr.getCallsignMapGrid();
 
         mainViewModel.getFollowCallsignsFromDataBase();
         //打开呼号位置信息的数据库，目前是以内存数据库方式。
@@ -528,6 +558,18 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
+    private final ActivityResultLauncher<String[]> requestPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), result -> {
+                Boolean audioGranted = result.get(Manifest.permission.RECORD_AUDIO);
+                if (audioGranted != null && audioGranted) {
+                    Log.i(TAG, "RECORD_AUDIO permission granted, restarting recorder.");
+                    if (mainViewModel != null && mainViewModel.hamRecorder != null) {
+                        mainViewModel.hamRecorder.stopRecord();
+                        mainViewModel.hamRecorder.startRecord();
+                    }
+                }
+            });
+
     /**
      * 检查权限
      */
@@ -543,21 +585,8 @@ public class MainActivity extends AppCompatActivity {
 
         //判断是否为空
         if (!mPermissionList.isEmpty()) {//请求权限方法
-            String[] permissions = mPermissionList.toArray(new String[mPermissionList.size()]);//将List转为数组
-            ActivityCompat.requestPermissions(MainActivity.this, permissions, PERMISSION_REQUEST);
-        }
-    }
-
-
-    /**
-     * 响应授权
-     * 这里不管用户是否拒绝，都进入首页，不再重复申请权限
-     */
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode != PERMISSION_REQUEST) {
-            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+            String[] permissionsToRequest = mPermissionList.toArray(new String[0]);
+            requestPermissionLauncher.launch(permissionsToRequest);
         }
     }
 
@@ -567,6 +596,31 @@ public class MainActivity extends AppCompatActivity {
      */
     public void setSelectUsbDevice() {
         ArrayList<CableSerialPort.SerialPort> ports = mainViewModel.mutableSerialPorts.getValue();
+        if (ports == null || ports.isEmpty()) {
+            binding.selectSerialPortLayout.setVisibility(View.GONE);
+            return;
+        }
+
+        // 如果是 Yaesu 电台系列 (指令集 1, 2, 3, 4, 6, 19, 21)，自动尝试连接第一个串口
+        int iset = GeneralVariables.instructionSet;
+        if (!mainViewModel.isRigConnected()) {
+            // 优先匹配上次保存的 VendorID/ProductID
+            for (CableSerialPort.SerialPort p : ports) {
+                if (p.vendorId == GeneralVariables.usbVendorId && p.productId == GeneralVariables.usbProductId) {
+                    mainViewModel.connectCableRig(getApplicationContext(), p);
+                    binding.selectSerialPortLayout.setVisibility(View.GONE);
+                    return;
+                }
+            }
+
+            // 如果是 Yaesu 系列且没有匹配到，自动尝试连接第一个串口
+            if (iset == 1 || iset == 2 || iset == 3 || iset == 4 || iset == 6 || iset == 19 || iset == 21) {
+                mainViewModel.connectCableRig(getApplicationContext(), ports.get(0));
+                binding.selectSerialPortLayout.setVisibility(View.GONE);
+                return;
+            }
+        }
+
         binding.selectSerialPortLinearLayout.removeAllViews();
         for (int i = 0; i < ports.size(); i++) {//动态添加串口设备列表
             View layout = LayoutInflater.from(getApplicationContext())
@@ -707,8 +761,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         mainViewModel.ft8SignalListener.stopListen();
-        mainViewModel = null;
-        System.exit(0);
+        finishAndRemoveTask();
     }
 
 
@@ -732,7 +785,11 @@ public class MainActivity extends AppCompatActivity {
         intentFilter.addAction(BluetoothAdapter.EXTRA_STATE);
         intentFilter.addAction("android.bluetooth.BluetoothAdapter.STATE_OFF");
         intentFilter.addAction("android.bluetooth.BluetoothAdapter.STATE_ON");
-        registerReceiver(mReceive, intentFilter);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(mReceive, intentFilter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(mReceive, intentFilter);
+        }
     }
 
     /**

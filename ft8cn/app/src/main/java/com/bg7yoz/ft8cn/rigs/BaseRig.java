@@ -142,4 +142,10 @@ public abstract class BaseRig {
     public void onDisconnecting() {
     }
 
+    public void disconnect() {
+        onDisconnecting();
+        if (connector != null) {
+            connector.disconnect();
+        }
+    }
 }

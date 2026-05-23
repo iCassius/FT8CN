@@ -37,6 +37,7 @@ import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import androidx.lifecycle.ViewModelProvider;
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.MainViewModel;
 import com.bg7yoz.ft8cn.R;
@@ -78,7 +79,7 @@ public class LogFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mainViewModel = MainViewModel.getInstance(this);
+        mainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
 
     }
 

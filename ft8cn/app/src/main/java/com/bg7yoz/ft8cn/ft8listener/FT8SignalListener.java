@@ -73,6 +73,7 @@ public class FT8SignalListener {
 
     public void stopListen() {
         utcTimer.stop();
+        utcTimer.delete();
     }
 
     public boolean isListening() {

@@ -7,6 +7,8 @@ package com.bg7yoz.ft8cn;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.util.Log;
+import android.util.SparseArray;
+import android.util.SparseIntArray;
 
 import androidx.lifecycle.MutableLiveData;
 
@@ -54,7 +56,11 @@ public class GeneralVariables {
     public static CallsignDatabase callsignDatabase = null;
 
     public void setMainContext(Context context) {
-        mainContext = context;
+        if (context != null) {
+            mainContext = context.getApplicationContext();
+        } else {
+            mainContext = null;
+        }
     }
 
     public static boolean isChina = true;//语言是不是中国
@@ -63,8 +69,8 @@ public class GeneralVariables {
 
     //各已经通联的分区列表
     public static final Map<String, String> dxccMap = new HashMap<>();
-    public static final Map<Integer, Integer> cqMap = new HashMap<>();
-    public static final Map<Integer, Integer> ituMap = new HashMap<>();
+    public static final SparseIntArray cqMap = new SparseIntArray();
+    public static final SparseIntArray ituMap = new SparseIntArray();
 
     private static final Map<String, Integer> excludedCallsigns = new HashMap<>();
 
@@ -189,6 +195,8 @@ public class GeneralVariables {
     public static MutableLiveData<Integer> mutableBandChange = new MutableLiveData<>();//波段索引值变化
     public static int controlMode = ControlMode.VOX;
     public static int modelNo = 0;
+    public static int usbVendorId = -1;
+    public static int usbProductId = -1;
     public static int launchSupervision = DEFAULT_LAUNCH_SUPERVISION;//发射监管
     public static long launchSupervisionStart = UtcTimer.getSystemTime();//自动发射的起始时间
     public static int noReplyLimit = 0;//呼叫无回应次数0==忽略
@@ -536,7 +544,7 @@ public class GeneralVariables {
      * @return 是否存在
      */
     public static boolean getCqZoneById(int cq) {
-        return cqMap.containsKey(cq);
+        return cqMap.indexOfKey(cq) >= 0;
     }
 
     /**
@@ -555,7 +563,7 @@ public class GeneralVariables {
      * @return 是否存在
      */
     public static boolean getItuZoneById(int itu) {
-        return ituMap.containsKey(itu);
+        return ituMap.indexOfKey(itu) >= 0;
     }
 
     //用于触发新的网格

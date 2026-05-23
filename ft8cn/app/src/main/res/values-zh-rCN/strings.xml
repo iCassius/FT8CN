@@ -74,37 +74,39 @@
     <string name="pl_select_bluetooth">请选择可用的蓝牙设备</string>
     <string name="bluetooth_set">蓝牙设置</string>
     <string name="spp_device">蓝牙串口设备</string>
-    <string name="headset_device">蓝牙耳机</string>>
-    <string name="disconnect_rig">与电台连接中断</string>>
-    <string name="connected_rig">与电台建立连接。</string>>
-    <string name="current_frequency">当前频率:%s</string>>
-    <string name="radio_communication_error">与电台通讯出现错误：%s</string>>
-    <string name="does_not_support_recording">蓝牙设备不支持录音</string>>
-    <string name="bluetooth_headset_mode">进入到蓝牙耳机模式</string>>
-    <string name="bluetooth_Headset_mode_cancelled">离开蓝牙耳机模式</string>>
+    <string name="headset_device">蓝牙耳机</string>
+    <string name="disconnect_rig">与电台连接中断</string>
+    <string name="connected_rig">与电台建立连接。</string>
+    <string name="current_frequency">当前频率:%s</string>
+    <string name="radio_communication_error">与电台通讯出现错误：%s</string>
+    <string name="does_not_support_recording">蓝牙设备不支持录音</string>
+    <string name="bluetooth_headset_mode">进入到蓝牙耳机模式</string>
+    <string name="bluetooth_Headset_mode_cancelled">离开蓝牙耳机模式</string>
 
-    <string name="version_info">FT8CN Ver %s\nBG7YOZ\n%s</string>>
+    <string name="version_info">FT8CN Ver %s\nBG7YOZ\n%s</string>
 
 
-    <string name="exit">退出</string>>
-    <string name="cancel">取消</string>>
-    <string name="exit_confirmation">确认要退出么？</string>>
+    <string name="exit">退出</string>
+    <string name="cancel">取消</string>
+    <string name="exit_confirmation">确认要退出么？</string>
+    <string name="qsl_success">通联成功：%s</string>
+    <string name="transmitting_msg">正在发射：%s</string>
 
     <!--   FT8Message-->
-    <string name="std_msg">标准消息</string>>
-    <string name="none_std_msg">非标准消息</string>>
-    <string name="free_text">自由文本</string>>
-    <string name="dXpedition">远征</string>>
-    <string name="field_day">野外日</string>>
-    <string name="telemetry">遥测</string>>
+    <string name="std_msg">标准消息</string>
+    <string name="none_std_msg">非标准消息</string>
+    <string name="free_text">自由文本</string>
+    <string name="dXpedition">远征</string>
+    <string name="field_day">野外日</string>
+    <string name="telemetry">遥测</string>
 
 
     <!--   配置栏-->
-    <string name="offset_time_sec">%.1f秒</string>>
+    <string name="offset_time_sec">%.1f秒</string>
 
     <!--   频谱图-->
-    <string name="decoding_takes_milliseconds">解码耗时%d毫秒</string>>
-    <string name="sound_frequency_is_set_to">声音频率设定为%dHz</string>>
+    <string name="decoding_takes_milliseconds">解码耗时%d毫秒</string>
+    <string name="sound_frequency_is_set_to">声音频率设定为%dHz</string>
     <string name="de_noise">噪声抑制</string>
     <string name="raw_spectrum_data">原始频谱</string>
     <string name="markMessage">标记消息</string>
@@ -290,18 +292,18 @@
     <string name="itu_completion_statistics">ITU完成统计</string>
     <string name="count_incomplete">未完成</string>
     <string name="count_completed">已完成</string>
-    <string name="count_total_itu">ITU分区总数:%d\n完成数:%d(%.1f%%)</string>
+    <string name="count_total_itu">ITU分区总数:%1$d\n完成数:%2$d(%3$.1f%%)</string>
     <string name="count_itu_completed_scale">ITU分区完成比例</string>
     <string name="count_cqzone_completed">CQ分区完成统计</string>
-    <string name="count_total_cqzone">CQ分区总数:%d\n完成数:%d(%.1f%%)</string>
+    <string name="count_total_cqzone">CQ分区总数:%1$d\n完成数:%2$d(%3$.1f%%)</string>
     <string name="count_cqzone_proportion">CQ分区完成比例</string>
     <string name="dxcc_completion_statistics">DXCC分区完成统计</string>
-    <string name="count_total_dxcc">DXCC分区总数:%d\n完成数:%d(%.1f%%)</string>
+    <string name="count_total_dxcc">DXCC分区总数:%1$d\n完成数:%2$d(%3$.1f%%)</string>
     <string name="count_dxcc_proportion">DXCC分区完成比例</string>
-    <string name="callsign_info">呼号:%s\n位置:%s\nCQ分区:%d\nITU分区:%d\n大陆:%s\n经纬度:%.2f,%.2f\n时区:%.0f\nDXCC前缀:%s</string>
+    <string name="callsign_info">呼号:%1$s\n位置:%2$s\nCQ分区:%3$d\nITU分区:%4$d\n大陆:%5$s\n经纬度:%6$.2f,%7$.2f\n时区:%8$.0f\nDXCC前缀:%9$s</string>
     <string name="maximum_distance">最远\n\n%s</string>
     <string name="minimum_distance">最近\n\n%s</string>
-    <string name="count_distance_info">最远距离：%.0f公里(%s)\n最近距离：%.0f公里(%s)</string>
+    <string name="count_distance_info">最远距离：%1$.0f公里(%2$s)\n最近距离：%3$.0f公里(%4$s)</string>
     <string name="distance_statistics">距离统计</string>
     <string name="dxcc_image">dxcc</string>
     <string name="cqzone">cq zone</string>

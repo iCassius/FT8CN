@@ -34,6 +34,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bg7yoz.ft8cn.Ft8Message;
+import androidx.lifecycle.ViewModelProvider;
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.MainViewModel;
 import com.bg7yoz.ft8cn.R;
@@ -180,7 +181,7 @@ public class MyCallingFragment extends Fragment {
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        mainViewModel = MainViewModel.getInstance(this);
+        mainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
         binding = FragmentMyCallingBinding.inflate(inflater, container, false);
 
         //当横屏时显示频谱图

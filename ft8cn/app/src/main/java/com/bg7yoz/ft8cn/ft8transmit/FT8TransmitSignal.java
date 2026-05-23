@@ -16,6 +16,7 @@ import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.Observer;
 
 import com.bg7yoz.ft8cn.FT8Common;
+import com.bg7yoz.ft8cn.AppExecutors;
 import com.bg7yoz.ft8cn.Ft8Message;
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.R;
@@ -81,7 +82,7 @@ public class FT8TransmitSignal {
     public MutableLiveData<ArrayList<FunctionOfTransmit>> mutableFunctions = new MutableLiveData<>();
 
     private final OnDoTransmitted onDoTransmitted;//一般是用于打开关闭PTT
-    private final ExecutorService doTransmitThreadPool = Executors.newCachedThreadPool();
+    private final ExecutorService doTransmitThreadPool = AppExecutors.getInstance().decoding();
     private final DoTransmitRunnable doTransmitRunnable = new DoTransmitRunnable(this);
 
     static {
@@ -153,6 +154,10 @@ public class FT8TransmitSignal {
             ToastMessage.show(GeneralVariables.getStringFromResource(R.string.callsign_error));
             return;
         }
+        if (toCallsign == null) {
+            resetToCQ();
+        }
+
         ToastMessage.show(String.format(GeneralVariables.getStringFromResource(R.string.adjust_call_target)
                 , toCallsign.callsign));
 
@@ -290,6 +295,20 @@ public class FT8TransmitSignal {
     /**
      * 生成指令序列
      */
+    public void stop() {
+        if (utcTimer != null) {
+            utcTimer.stop();
+            utcTimer.delete();
+        }
+        if (audioTrack != null) {
+            try {
+                audioTrack.stop();
+            } catch (Exception ignored) {}
+            audioTrack.release();
+        }
+        doTransmitThreadPool.shutdown();
+    }
+
     public void generateFun() {
         //ArrayList<FunctionOfTransmit> functions = new ArrayList<>();
         GeneralVariables.noReplyCount = 0;
@@ -452,6 +471,8 @@ public class FT8TransmitSignal {
         });
         if (audioTrack != null) {
             audioTrack.play();
+        ToastMessage.show(String.format(GeneralVariables.getStringFromResource(R.string.transmitting_msg)
+                , msg.getMessageText()));
             audioTrack.setVolume(GeneralVariables.volumePercent);//设置播放的音量
         }
     }
@@ -528,8 +549,7 @@ public class FT8TransmitSignal {
             ));
 
             GeneralVariables.addQSLCallsign(toCallsign.callsign);//把通联成功的呼号添加到列表中
-            ToastMessage.show(String.format("QSO : %s , at %s", toCallsign.callsign
-                    , BaseRigOperation.getFrequencyAllInfo(GeneralVariables.band)));
+            ToastMessage.show(String.format(GeneralVariables.getStringFromResource(R.string.qsl_success), toCallsign.callsign));
         }
 
     }

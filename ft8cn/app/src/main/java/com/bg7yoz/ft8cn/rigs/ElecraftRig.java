@@ -30,9 +30,6 @@ public class ElecraftRig extends BaseRig {
             public void run() {
                 try {
                     if (!isConnected()) {
-                        readFreqTimer.cancel();
-                        readFreqTimer.purge();
-                        readFreqTimer = null;
                         return;
                     }
                     if (isPttOn()) {

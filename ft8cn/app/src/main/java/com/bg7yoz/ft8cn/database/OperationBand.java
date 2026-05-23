@@ -32,18 +32,16 @@ public class OperationBand {
 
     public static ArrayList<Band> bandList = new ArrayList<>();
     public OperationBand(Context context) {
-        this.context = context;
+        this.context = context.getApplicationContext();
         //把波段数据导入到内存
         getBandsFromFile();
     }
 
     public static OperationBand getInstance(Context context) {
         if (operationBand == null) {
-            operationBand=new OperationBand(context);
-            return operationBand;
-        } else {
-            return operationBand;
+            operationBand=new OperationBand(context.getApplicationContext());
         }
+        return operationBand;
     }
 
     /**

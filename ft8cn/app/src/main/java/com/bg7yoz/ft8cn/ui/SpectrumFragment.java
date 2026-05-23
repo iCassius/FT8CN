@@ -18,6 +18,7 @@ import android.widget.CompoundButton;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.Observer;
 
+import androidx.lifecycle.ViewModelProvider;
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.MainViewModel;
 import com.bg7yoz.ft8cn.R;
@@ -51,7 +52,7 @@ public class SpectrumFragment extends Fragment {
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        mainViewModel = MainViewModel.getInstance(this);
+        mainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
         binding = FragmentSpectrumBinding.inflate(inflater, container, false);
         binding.columnarView.setShowBlock(true);
         binding.deNoiseSwitch.setChecked(mainViewModel.deNoise);//噪声抑制
@@ -169,12 +170,18 @@ public class SpectrumFragment extends Fragment {
         if (buffer.length <= 0) {
             return;
         }
-        int[] fft = new int[buffer.length / 2];
+        int[] fftFull = new int[buffer.length / 2];
         if (mainViewModel.deNoise) {
-            getFFTDataFloat(buffer, fft);
+            getFFTDataFloat(buffer, fftFull);
         } else {
-            getFFTDataRawFloat(buffer, fft);
+            getFFTDataRawFloat(buffer, fftFull);
         }
+
+        // FT8 采样率为 12000Hz，FFT 结果对应 0-6000Hz。
+        // 我们只需要显示 0-3000Hz 的部分，即前一半数据。
+        int[] fft = new int[fftFull.length / 2];
+        System.arraycopy(fftFull, 0, fft, 0, fft.length);
+
         frequencyLineTimeOut--;
         if (frequencyLineTimeOut < 0) {
             frequencyLineTimeOut = 0;

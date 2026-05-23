@@ -11,6 +11,7 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.Observer;
 
 import com.bg7yoz.ft8cn.GeneralVariables;
+import androidx.lifecycle.ViewModelProvider;
 import com.bg7yoz.ft8cn.MainViewModel;
 import com.bg7yoz.ft8cn.R;
 import com.bg7yoz.ft8cn.connector.X6100Connector;
@@ -44,7 +45,7 @@ public class XieguInfoFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mainViewModel = MainViewModel.getInstance(this);
+        mainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
     }
 
     @Override

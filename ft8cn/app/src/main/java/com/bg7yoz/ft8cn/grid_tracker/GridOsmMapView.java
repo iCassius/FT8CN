@@ -479,7 +479,7 @@ public class GridOsmMapView {
             mapView.setTileSource(TileSourceFactory.USGS_SAT);
         } else {
             OfflineTileProvider tileProvider = new OfflineTileProvider(
-                    (IRegisterReceiver) new SimpleRegisterReceiver(context), new File[]{exitFile});
+                    new SafeSimpleRegisterReceiver(context), new File[]{exitFile});
             mapView.setTileProvider(tileProvider);
             String source = "";
             IArchiveFile[] archives = tileProvider.getArchives();

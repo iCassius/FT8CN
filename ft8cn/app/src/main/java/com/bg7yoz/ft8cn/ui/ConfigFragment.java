@@ -24,7 +24,9 @@ import androidx.lifecycle.Observer;
 
 import com.bg7yoz.ft8cn.FAQActivity;
 import com.bg7yoz.ft8cn.Ft8Message;
+import androidx.lifecycle.ViewModelProvider;
 import com.bg7yoz.ft8cn.GeneralVariables;
+import com.bg7yoz.ft8cn.MainActivity;
 import com.bg7yoz.ft8cn.MainViewModel;
 import com.bg7yoz.ft8cn.R;
 import com.bg7yoz.ft8cn.connector.ConnectMode;
@@ -337,7 +339,7 @@ public class ConfigFragment extends Fragment {
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        mainViewModel = MainViewModel.getInstance(this);
+        mainViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
         binding = FragmentConfigBinding.inflate(inflater, container, false);
 
 
@@ -396,7 +398,7 @@ public class ConfigFragment extends Fragment {
         setSpinnerOnItemSelected();
 
         //显示滚动箭头
-        new Handler().postDelayed(new Runnable() {
+        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
                 setScrollImageVisible();
@@ -701,7 +703,7 @@ public class ConfigFragment extends Fragment {
      * 设置各个spinner的OnItemSelected事件，防止在进入主界面时，重复向数据库写入配置信息
      */
     private void setSpinnerOnItemSelected(){
-        new Handler().postDelayed(new Runnable() {
+        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
                 binding.pttDelayOffsetSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -742,13 +744,21 @@ public class ConfigFragment extends Fragment {
                 binding.rigNameSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
                     @Override
                     public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
-                        GeneralVariables.modelNo = i;
-                        writeConfig("model", String.valueOf(i));
-                        setAddrAndBauRate(rigNameSpinnerAdapter.getRigName(i));
+                        if (GeneralVariables.modelNo != i) {
+                            GeneralVariables.modelNo = i;
+                            writeConfig("model", String.valueOf(i));
+                            setAddrAndBauRate(rigNameSpinnerAdapter.getRigName(i));
 
-                        //指令集
-                        GeneralVariables.instructionSet = rigNameSpinnerAdapter.getRigName(i).instructionSet;
-                        writeConfig("instruction", String.valueOf(GeneralVariables.instructionSet));
+                            //指令集
+                            GeneralVariables.instructionSet = rigNameSpinnerAdapter.getRigName(i).instructionSet;
+                            writeConfig("instruction", String.valueOf(GeneralVariables.instructionSet));
+
+                            // 重新初始化并尝试连接电台
+                            mainViewModel.connectRig();
+                            if (GeneralVariables.connectMode == ConnectMode.USB_CABLE) {
+                                ((MainActivity) requireActivity()).setSelectUsbDevice();
+                            }
+                        }
                     }
 
                     @Override
@@ -1288,10 +1298,15 @@ public class ConfigFragment extends Fragment {
                 int buttonId = binding.connectModeRadioGroup.getCheckedRadioButtonId();
                 if (buttonId == binding.cableConnectRadioButton.getId()) {
                     GeneralVariables.connectMode = ConnectMode.USB_CABLE;
+                    writeConfig("connectMode", String.valueOf(GeneralVariables.connectMode));
+                    // 弹出串口选择
+                    ((MainActivity) requireActivity()).setSelectUsbDevice();
                 } else if (buttonId == binding.bluetoothConnectRadioButton.getId()) {
                     GeneralVariables.connectMode = ConnectMode.BLUE_TOOTH;
-                }else if (buttonId==binding.networkConnectRadioButton.getId()){
-                    GeneralVariables.connectMode=ConnectMode.NETWORK;
+                    writeConfig("connectMode", String.valueOf(GeneralVariables.connectMode));
+                } else if (buttonId == binding.networkConnectRadioButton.getId()) {
+                    GeneralVariables.connectMode = ConnectMode.NETWORK;
+                    writeConfig("connectMode", String.valueOf(GeneralVariables.connectMode));
                 }
                 //------显示蓝牙列表，并选择，然后建立蓝牙连接
                 if (GeneralVariables.connectMode == ConnectMode.BLUE_TOOTH) {
@@ -1576,7 +1591,7 @@ public class ConfigFragment extends Fragment {
                                     binding.testCloudlogButton.setText(getResources().getString(R.string.fail));
                                 }
                                 // 清空文本
-                                new Handler().postDelayed(new Runnable() {
+                                new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
                                     @Override
                                     public void run() {
                                         binding.testCloudlogButton.setEnabled(true);
@@ -1607,7 +1622,7 @@ public class ConfigFragment extends Fragment {
                                     binding.testQrzButton.setText(getResources().getString(R.string.fail));
                                 }
                                 // 清空文本
-                                new Handler().postDelayed(new Runnable() {
+                                new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
                                     @Override
                                     public void run() {
                                         binding.testQrzButton.setEnabled(true);

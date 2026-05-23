@@ -42,6 +42,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.bg7yoz.ft8cn.Ft8Message;
 import com.bg7yoz.ft8cn.GeneralVariables;
+import androidx.lifecycle.ViewModelProvider;
 import com.bg7yoz.ft8cn.MainViewModel;
 import com.bg7yoz.ft8cn.R;
 import com.bg7yoz.ft8cn.database.DatabaseOpr;
@@ -136,7 +137,7 @@ public class GridTrackerMainActivity extends AppCompatActivity {
                 , WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
 
-        mainViewModel = MainViewModel.getInstance(this);
+        mainViewModel = new ViewModelProvider(this).get(MainViewModel.class);
         binding = ActivityGridTrackerMainBinding.inflate(getLayoutInflater());
 
         gridOsmMapView = new GridOsmMapView(getBaseContext(), binding.osmMap, mainViewModel);
@@ -280,7 +281,7 @@ public class GridTrackerMainActivity extends AppCompatActivity {
                         && mainViewModel.ft8TransmitSignal.isActivated()) {
                     binding.utcProgressBar.setBackgroundColor(getColor(R.color.calling_list_isMyCall_color));
                 } else {
-                    binding.utcProgressBar.setBackgroundColor(getColor(R.color.progresss_bar_back_color));
+                    binding.utcProgressBar.setBackgroundColor(getColor(R.color.progress_bar_back_color));
                 }
                 binding.utcProgressBar.setProgress((int) ((aLong / 1000) % 15));
             }

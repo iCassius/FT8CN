@@ -43,6 +43,9 @@ public class CallsignInfo {
     }
 
 
+    public CallsignInfo() {
+    }
+
     public CallsignInfo(String callSign, String countryNameEn,
                         String countryNameCN, int CQZone, int ITUZone,
                         String continent, float latitude, float longitude,
