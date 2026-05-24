@@ -3,6 +3,14 @@ Developed by BG7YOZ and hosted by N0BOY
 
 Run FT8 natively on Android
 
+## Recent major update
+
+This branch contains a major maintenance update focused on Android 14 compatibility, lower CPU/battery usage, and more stable long-running operation. Highlights include centralized background execution with `AppExecutors`, lifecycle cleanup for timers/recording/network services, reduced waterfall redraw pressure, reusable audio buffers, removal of forced process exit, safer asynchronous database/callsign work, Gradle build modernization, and added radio model support for YAESU FT-710 and FTX-1.
+
+See [RELEASES.md](RELEASES.md) and [ft8cn/OPTIMIZATION_GUIDE.md](ft8cn/OPTIMIZATION_GUIDE.md) for the release summary and technical notes.
+
+Version numbers now use `major.minor.build`, starting from `0.93.001`. For each new release on the same base version, increase only the three-digit build number by 1, for example `0.93.002`, `0.93.003`, and so on.
+
 Check [Releases](https://github.com/N0BOY/FT8CN/releases) to download the latest apk file.
 
 ```
