@@ -1,17 +1,17 @@
 # FT8CN
-Developed by BG7YOZ and hosted by N0BOY
+由 BG7YOZ 开发，N0BOY 托管
 
-Run FT8 natively on Android
+在 Android 上原生运行 FT8
 
-## Recent major update
+## 近期重大更新
 
-This branch contains a major maintenance update focused on Android 14 compatibility, lower CPU/battery usage, and more stable long-running operation. Highlights include centralized background execution with `AppExecutors`, lifecycle cleanup for timers/recording/network services, reduced waterfall redraw pressure, reusable audio buffers, removal of forced process exit, safer asynchronous database/callsign work, Gradle build modernization, and added radio model support for YAESU FT-710 and FTX-1.
+当前分支包含一次重要维护更新，重点提升 Android 14 兼容性、降低 CPU/电池消耗，并改善长时间运行稳定性。主要内容包括：使用 `AppExecutors` 集中管理后台任务，完善定时器、录音、网络服务等生命周期清理，降低瀑布图重绘压力，复用音频缓冲区，移除强制进程退出，改进数据库/呼号查询的异步处理，更新 Gradle 构建配置，并新增 YAESU FT-710 与 FTX-1 电台型号支持。
 
-See [RELEASES.md](RELEASES.md) and [ft8cn/OPTIMIZATION_GUIDE.md](ft8cn/OPTIMIZATION_GUIDE.md) for the release summary and technical notes.
+发布概要和技术说明请查看 [RELEASES.md](RELEASES.md) 与 [ft8cn/OPTIMIZATION_GUIDE.md](ft8cn/OPTIMIZATION_GUIDE.md)。
 
-Version numbers now use `major.minor.build`, starting from `0.93.001`. For each new release on the same base version, increase only the three-digit build number by 1, for example `0.93.002`, `0.93.003`, and so on.
+版本号采用 `主版本.次版本.构建号` 格式，从 `0.93.001` 开始。同一基础版本的后续发布，每次只将三位构建号加 1，例如 `0.93.002`、`0.93.003`，以此类推。
 
-Check [Releases](https://github.com/N0BOY/FT8CN/releases) to download the latest apk file.
+请前往 [Releases](https://github.com/N0BOY/FT8CN/releases) 下载最新 APK 文件。
 
 ```
 免责声明：
@@ -19,12 +19,6 @@ Check [Releases](https://github.com/N0BOY/FT8CN/releases) to download the latest
    在中华人民共和国境内，使用FT8CN请遵守《中华人民共和国无线电管理条例》等相关规定。
    考虑到手机的性能和续航的限制，对信号的处理采用轻量化的运算，未做深度解码等处理。
    如有好的建议或问题可以提交到到”有问题要吐槽“。
-
-Disclaimer
-FT8CN aims to learn how to decode, transmit FT8 signal for research purposes, which is not responsible for the consequences caused by the user's operation.
-Please comply with local laws and regulations when using FT8CN.
-Considering the performance and endurance limitations of the mobile phone, the processing of the signal adopts lightweight operations instead of deep decoding and other processing.
-Please click "FAQ" if you have good suggestions or questions .
 
 BG7YOZ
 2022-07-01
