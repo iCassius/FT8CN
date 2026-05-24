@@ -11,6 +11,23 @@
 
 版本号采用 `主版本.次版本.构建号` 格式，从 `0.93.001` 开始。同一基础版本的后续发布，每次只将三位构建号加 1，例如 `0.93.002`、`0.93.003`，以此类推。
 
+## 发布操作规范
+
+普通分支推送只同步代码，不会自动创建 GitHub Release，也不会上传 APK：
+
+```powershell
+git push origin release
+```
+
+正式发布版本时，需要在推送代码后创建并推送版本 tag。tag 名称必须和应用版本号一致，并以 `v` 开头：
+
+```powershell
+git tag -a v0.93.001 -m "FT8CN v0.93.001"
+git push origin v0.93.001
+```
+
+推送 `v*.*.*` 格式的 tag 后，GitHub Actions 会自动构建 APK，并上传到对应的 GitHub Release。后续版本按构建号递增，例如 `v0.93.002`、`v0.93.003`。
+
 请前往 [Releases](https://github.com/N0BOY/FT8CN/releases) 下载最新 APK 文件。
 
 ```
