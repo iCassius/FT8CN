@@ -28,7 +28,7 @@ git push origin v0.93.001
 
 推送 `v*.*.*` 格式的 tag 后，GitHub Actions 会自动构建 APK，并上传到对应的 GitHub Release。后续版本按构建号递增，例如 `v0.93.002`、`v0.93.003`。
 
-请前往 [Releases](https://github.com/N0BOY/FT8CN/releases) 下载最新 APK 文件。
+请前往 [Releases](https://github.com/iCassius/FT8CN/releases) 下载最新 APK 文件。
 
 ```
 免责声明：
