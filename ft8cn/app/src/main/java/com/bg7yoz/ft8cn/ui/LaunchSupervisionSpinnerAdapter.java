@@ -1,81 +1,31 @@
 package com.bg7yoz.ft8cn.ui;
-/**
- * 发射监管的列表。
- * @author BGY70Z
- * @date 2023-03-20
- */
 
-import android.annotation.SuppressLint;
 import android.content.Context;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.BaseAdapter;
-import android.widget.TextView;
-
-import com.bg7yoz.ft8cn.GeneralVariables;
-import com.bg7yoz.ft8cn.R;
+import android.widget.ArrayAdapter;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class LaunchSupervisionSpinnerAdapter extends BaseAdapter {
-    private final List<Integer> timeOutList=new ArrayList<>();
-    private final Context mContext;
+/**
+ * 发射监管列表适配器 (现代化 M3 版本)。
+ */
+public class LaunchSupervisionSpinnerAdapter extends ArrayAdapter<String> {
+    private final List<Integer> timeOutList = new ArrayList<>();
 
     public LaunchSupervisionSpinnerAdapter(Context context) {
-        mContext=context;
-        timeOutList.add(0);
-        for (int i = 1; i <= 10; i++) {
-            timeOutList.add(i*10-5);
+        super(context, android.R.layout.simple_dropdown_item_1line);
+        int[] timeouts = {0, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30};
+        for (int t : timeouts) {
+            timeOutList.add(t);
+            add(String.valueOf(t));
         }
     }
-    public static int getTimeOut(int index){
-        if (index==0) return 0;
-       return  ((index) * 10-5) * 60 * 1000;
+
+    public int getTimeOut(int position) {
+        return timeOutList.get(position);
     }
 
-    @Override
-    public int getCount() {
-        return timeOutList.size();
-    }
-
-    @Override
-    public Object getItem(int i) {
-        return timeOutList.get(i);
-    }
-
-    @Override
-    public long getItemId(int i) {
-        return i;
-    }
-
-    @SuppressLint({"DefaultLocale", "ViewHolder", "InflateParams"})
-    @Override
-    public View getView(int i, View view, ViewGroup viewGroup) {
-        LayoutInflater _LayoutInflater=LayoutInflater.from(mContext);
-        view=_LayoutInflater.inflate(R.layout.launch_supervision_spinner_item, null);
-        if (view!=null){
-            TextView textView=(TextView)view.findViewById(R.id.timeOutTextView);
-            if (i==0){
-                textView.setText(
-                        GeneralVariables.getStringFromResource(R.string.launch_supervision_ignore));
-            }else {
-                textView.setText(String.format(
-                        GeneralVariables.getStringFromResource(R.string.minutes), timeOutList.get(i)));
-            }
-        }
-        return view;
-    }
-
-    public int getPosition(int timeOut){
-        if (timeOut==0){
-            return 0;
-        }else if (timeOut<5*60*1000) {
-            return 1;
-        }else {
-            return ((timeOut-5*60*1000)/60/1000/10);
-        }
-
+    public int getPosition(int timeOut) {
+        return timeOutList.indexOf(timeOut);
     }
 }

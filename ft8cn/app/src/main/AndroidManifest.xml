@@ -31,7 +31,8 @@
         android:label="@string/app_name"
         android:roundIcon="@drawable/ft8cn_icon"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Ft8CN">
+        android:theme="@style/Theme.Ft8CN"
+        android:enableOnBackInvokedCallback="true">
 
         <service
             android:name=".wave.AudioForegroundService"

@@ -39,6 +39,8 @@
     <string name="help">Help</string>
     <string name="scroll_down">▾</string>
     <string name="about_me">About FT8CN</string>
+    <string name="sync_time">Sync time</string>
+    <string name="syncing">Syncing…</string>
 
     <string name="connectMode">Control</string>
     <string name="VOX">VOX</string>

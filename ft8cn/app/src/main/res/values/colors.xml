@@ -175,5 +175,17 @@
     <color name="char_bar_15">#770A8F</color>
     <color name="char_bar_16">#61024D</color>
 
+    <!-- JTDX Style Priority Highlighting Colors -->
+    <color name="priority_new_dxcc">#B100B1</color>
+    <color name="priority_new_dxcc_text">#FFFFFF</color>
+    <color name="priority_new_band">#800000</color>
+    <color name="priority_new_band_text">#FFFFFF</color>
+    <color name="priority_new_prefix">#FFFF00</color>
+    <color name="priority_new_prefix_text">#000000</color>
+    <color name="priority_new_callsign">#00FFFF</color>
+    <color name="priority_new_callsign_text">#000000</color>
+    <color name="priority_rare_dx">#FFFF00</color>
+    <color name="priority_rare_dx_text">#000000</color>
+
 
 </resources>

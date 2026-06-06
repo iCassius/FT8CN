@@ -37,6 +37,8 @@
     <string name="help">帮助</string>
     <string name="scroll_down">▾</string>
     <string name="about_me">你应当知道的</string>
+    <string name="sync_time">同步时间</string>
+    <string name="syncing">正在同步…</string>
 
     <string name="connectMode">控制方式</string>
     <string name="VOX">VOX</string>

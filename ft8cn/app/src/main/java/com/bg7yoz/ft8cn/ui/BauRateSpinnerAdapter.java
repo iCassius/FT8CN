@@ -1,63 +1,38 @@
 package com.bg7yoz.ft8cn.ui;
-/**
- * 波特率列表界面
- * @author BGY70Z
- * @date 2023-03-20
- */
 
-import android.annotation.SuppressLint;
 import android.content.Context;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.BaseAdapter;
-import android.widget.TextView;
+import android.widget.ArrayAdapter;
 
-import com.bg7yoz.ft8cn.R;
+import java.util.ArrayList;
+import java.util.List;
 
+/**
+ * 波特率列表适配器 (现代化 M3 版本)。
+ */
+public class BauRateSpinnerAdapter extends ArrayAdapter<String> {
+    private final int[] bauRates = {1200, 2400, 4800, 9600, 14400, 19200, 38400, 57600, 115200, 128000};
 
-public class BauRateSpinnerAdapter extends BaseAdapter {
-    private final Context mContext;
-    private final int[] bauRates= {4800,9600,14400,19200,38400,43000,56000,57600,115200};
     public BauRateSpinnerAdapter(Context context) {
-        mContext=context;
+        super(context, android.R.layout.simple_dropdown_item_1line, getBauRateList());
     }
 
-    @Override
-    public int getCount() {
-        return bauRates.length;
-    }
-
-    @Override
-    public Object getItem(int i) {
-        return bauRates[i];
-    }
-
-    @Override
-    public long getItemId(int i) {
-        return i;
-    }
-
-    @SuppressLint({"ViewHolder", "InflateParams"})
-    @Override
-    public View getView(int i, View view, ViewGroup viewGroup) {
-        LayoutInflater _LayoutInflater=LayoutInflater.from(mContext);
-        view=_LayoutInflater.inflate(R.layout.bau_rate_spinner_item, null);
-        if (view!=null){
-            TextView textView=(TextView)view.findViewById(R.id.bauRateItemTextView);
-            textView.setText(String.valueOf(bauRates[i]));
+    private static List<String> getBauRateList() {
+        int[] rates = {1200, 2400, 4800, 9600, 14400, 19200, 38400, 57600, 115200, 128000};
+        List<String> list = new ArrayList<>();
+        for (int r : rates) {
+            list.add(String.valueOf(r));
         }
-        return view;
+        return list;
     }
-    public int getPosition(int i){
-        for (int j = 0; j < bauRates.length; j++) {
-            if (bauRates[j]==i){
-                return j;
-            }
+
+    public int getPosition(int baudRate) {
+        for (int i = 0; i < bauRates.length; i++) {
+            if (bauRates[i] == baudRate) return i;
         }
-        return 2;
+        return -1;
     }
-    public int getValue(int position){
+
+    public int getValue(int position) {
         return bauRates[position];
     }
 }

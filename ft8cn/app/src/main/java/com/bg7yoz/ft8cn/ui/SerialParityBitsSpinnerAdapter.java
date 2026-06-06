@@ -1,71 +1,39 @@
 package com.bg7yoz.ft8cn.ui;
-/**
- * 串口校验位列表界面
- * @author BGY70Z
- * @date 2024-01-03
- */
 
-import android.annotation.SuppressLint;
 import android.content.Context;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.BaseAdapter;
-import android.widget.TextView;
+import android.widget.ArrayAdapter;
 
-import com.bg7yoz.ft8cn.GeneralVariables;
-import com.bg7yoz.ft8cn.R;
+import java.util.ArrayList;
+import java.util.List;
 
+/**
+ * 串口校验位列表适配器 (现代化 M3 版本)。
+ */
+public class SerialParityBitsSpinnerAdapter extends ArrayAdapter<String> {
+    private final int[] parityBits = {0, 1, 2, 3, 4};
+    private final String[] parityStr = {"NONE", "ODD", "EVEN", "MARK", "SPACE"};
 
-public class SerialParityBitsSpinnerAdapter extends BaseAdapter {
-    private final Context mContext;
-    private final int[] parityBits= {0,1,2,3,4};
-    private final String[] parityStr={GeneralVariables.getStringFromResource(R.string.serial_parity_none)
-            ,GeneralVariables.getStringFromResource(R.string.serial_parity_odd)
-            ,GeneralVariables.getStringFromResource(R.string.serial_parity_even)
-            ,GeneralVariables.getStringFromResource(R.string.serial_parity_mark)
-            ,GeneralVariables.getStringFromResource(R.string.serial_parity_space)
-        };
     public SerialParityBitsSpinnerAdapter(Context context) {
-        mContext=context;
+        super(context, android.R.layout.simple_dropdown_item_1line, getParityList());
     }
 
-    @Override
-    public int getCount() {
-        return parityBits.length;
-    }
-
-    @Override
-    public Object getItem(int i) {
-        return parityBits[i];
-    }
-
-    @Override
-    public long getItemId(int i) {
-        return i;
-    }
-
-    @SuppressLint({"ViewHolder", "InflateParams"})
-    @Override
-    public View getView(int i, View view, ViewGroup viewGroup) {
-        LayoutInflater _LayoutInflater=LayoutInflater.from(mContext);
-        view=_LayoutInflater.inflate(R.layout.serial_parity_bits_spinner_item, null);
-        if (view!=null){
-            TextView textView=(TextView)view.findViewById(R.id.serialParityBitsItemTextView);
-            //textView.setText(String.valueOf(parityBits[i]));
-            textView.setText(parityStr[i]);
+    private static List<String> getParityList() {
+        String[] strs = {"NONE", "ODD", "EVEN", "MARK", "SPACE"};
+        List<String> list = new ArrayList<>();
+        for (String s : strs) {
+            list.add(s);
         }
-        return view;
+        return list;
     }
-    public int getPosition(int i){
-        for (int j = 0; j < parityBits.length; j++) {
-            if (parityBits[j]==i){
-                return j;
-            }
+
+    public int getPosition(int parity) {
+        for (int i = 0; i < parityBits.length; i++) {
+            if (parityBits[i] == parity) return i;
         }
-        return 2;
+        return -1;
     }
-    public int getValue(int position){
+
+    public int getValue(int position) {
         return parityBits[position];
     }
 }

@@ -13,6 +13,8 @@ import androidx.annotation.Nullable;
 
 import com.bg7yoz.ft8cn.AppExecutors;
 import com.bg7yoz.ft8cn.Ft8Message;
+import com.bg7yoz.ft8cn.GeneralVariables;
+import com.bg7yoz.ft8cn.maidenhead.MaidenheadGrid;
 
 import java.util.ArrayList;
 import java.util.Set;
@@ -96,17 +98,75 @@ public class CallsignDatabase extends android.database.sqlite.SQLiteOpenHelper {
 
     public static void getMessagesLocation(SQLiteDatabase db, ArrayList<Ft8Message> messages) {
         for (int i = 0; i < messages.size(); i++) {
-            if (messages.get(i).callsignFrom != null) {
-                CallsignInfo callsignInfo = getCallsignInfo(db, messages.get(i).callsignFrom);
-                messages.get(i).fromWhere = callsignInfo.CountryNameCN;
-                messages.get(i).fromLatLng = new com.google.android.gms.maps.model.LatLng(callsignInfo.Latitude, callsignInfo.Longitude);
-                messages.get(i).fromDxcc = callsignInfo.DXCC != null && !callsignInfo.DXCC.isEmpty();
+            Ft8Message msg = messages.get(i);
+            if (msg.callsignFrom != null) {
+                CallsignInfo callsignInfo = getCallsignInfo(db, msg.callsignFrom);
+                msg.fromWhere = callsignInfo.CountryNameCN;
+                msg.fromLatLng = new com.google.android.gms.maps.model.LatLng(callsignInfo.Latitude, callsignInfo.Longitude);
+                msg.fromDxcc = callsignInfo.DXCC != null && !callsignInfo.DXCC.isEmpty();
+                
+                // Calculate Priority and Session Stats
+                updateMessagePriority(msg, callsignInfo);
             }
-            if (messages.get(i).callsignTo != null) {
-                CallsignInfo callsignInfo = getCallsignInfo(db, messages.get(i).callsignTo);
-                messages.get(i).toWhere = callsignInfo.CountryNameCN;
-                messages.get(i).toLatLng = new com.google.android.gms.maps.model.LatLng(callsignInfo.Latitude, callsignInfo.Longitude);
-                messages.get(i).toDxcc = callsignInfo.DXCC != null && !callsignInfo.DXCC.isEmpty();
+            if (msg.callsignTo != null) {
+                CallsignInfo callsignInfo = getCallsignInfo(db, msg.callsignTo);
+                msg.toWhere = callsignInfo.CountryNameCN;
+                msg.toLatLng = new com.google.android.gms.maps.model.LatLng(callsignInfo.Latitude, callsignInfo.Longitude);
+                msg.toDxcc = callsignInfo.DXCC != null && !callsignInfo.DXCC.isEmpty();
+            }
+        }
+    }
+
+    private static void updateMessagePriority(Ft8Message msg, CallsignInfo info) {
+        String dxcc = info.DXCC;
+        String call = msg.getCallsignFrom();
+        if (call == null) return;
+        String prefix = GeneralVariables.getShortCallsign(call);
+
+        // 1. Session Stats Tracking (For Rarity Calculation)
+        if (dxcc != null) {
+            Integer dxccCount = GeneralVariables.sessionDxccCount.get(dxcc);
+            GeneralVariables.sessionDxccCount.put(dxcc, dxccCount == null ? 1 : dxccCount + 1);
+        }
+        Integer prefixCount = GeneralVariables.sessionPrefixCount.get(prefix);
+        GeneralVariables.sessionPrefixCount.put(prefix, prefixCount == null ? 1 : prefixCount + 1);
+        
+        Integer callCount = GeneralVariables.sessionCallCount.get(call);
+        GeneralVariables.sessionCallCount.put(call, callCount == null ? 1 : callCount + 1);
+
+        // 2. Worked Tracking (Permanent Logs)
+        boolean workedDxcc = GeneralVariables.getDxccByPrefix(dxcc);
+        boolean workedBand = GeneralVariables.isWorkedDxccOnBand(dxcc, msg.band);
+        boolean workedPrefix = GeneralVariables.workedPrefixes.contains(prefix);
+        boolean workedCall = GeneralVariables.checkQSLCallsign(call) || GeneralVariables.checkQSLCallsign_OtherBand(call);
+
+        // 3. JTDX Style Priority Logic (Highest first)
+        if (dxcc != null && !workedDxcc) {
+            msg.priority = Ft8Message.Priority.NEW_DXCC;
+        } else if (dxcc != null && !workedBand) {
+            msg.priority = Ft8Message.Priority.NEW_BAND;
+        } else if (!workedPrefix) {
+            msg.priority = Ft8Message.Priority.NEW_PREFIX;
+        } else if (!workedCall) {
+            msg.priority = Ft8Message.Priority.NEW_CALLSIGN;
+        }
+
+        // 4. Dynamic Rarity Fallback (When logs are thin)
+        if (msg.priority == Ft8Message.Priority.NONE || msg.priority == Ft8Message.Priority.NEW_CALLSIGN) {
+            // Check if this DXCC is rare in this session
+            if (dxcc != null) {
+                Integer sessionCount = GeneralVariables.sessionDxccCount.get(dxcc);
+                if (sessionCount != null && sessionCount <= 2) { 
+                    // Calculate distance if grids are available
+                    String myGrid = GeneralVariables.getMyMaidenheadGrid();
+                    String hisGrid = msg.maidenGrid;
+                    if (hisGrid != null && !hisGrid.isEmpty() && !myGrid.isEmpty()) {
+                        msg.distanceKm = (float) (MaidenheadGrid.getDist(myGrid, hisGrid) / 1000.0);
+                        if (msg.distanceKm > 5000) { // Distance > 5000km and rare in session
+                            msg.priority = Ft8Message.Priority.RARE_DX;
+                        }
+                    }
+                }
             }
         }
     }

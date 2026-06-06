@@ -646,10 +646,17 @@ public class DatabaseOpr extends SQLiteOpenHelper {
 
     public void getQslDxccToMap() {
         dbExecutor.execute(() -> {
-            try (Cursor cursor = db.rawQuery("select distinct gridsquare from QSLTable where length(gridsquare)>=4", null)) {
+            try (Cursor cursor = db.rawQuery("select distinct callsign, grid, band_i from QslCallsigns where length(grid)>=4", null)) {
                 if (cursor == null) return;
                 while (cursor.moveToNext()) {
-                    String gridStr = cursor.getString(0);
+                    String callsign = cursor.getString(0);
+                    String gridStr = cursor.getString(1);
+                    long workedBand = cursor.getLong(2);
+
+                    if (callsign != null) {
+                        GeneralVariables.workedPrefixes.add(GeneralVariables.getShortCallsign(callsign));
+                    }
+
                     if (gridStr == null || gridStr.length() < 4) continue;
                     String grid = gridStr.toUpperCase().substring(0, 4);
 
@@ -665,7 +672,11 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                         if (cDxcc.moveToFirst()) {
                             int dxccId = cDxcc.getInt(0);
                             try (Cursor cName = db.rawQuery("select name from dxccList where dxcc=?", new String[]{String.valueOf(dxccId)})) {
-                                if (cName.moveToFirst()) GeneralVariables.addDxcc(cName.getString(0));
+                                if (cName.moveToFirst()) {
+                                    String dxccName = cName.getString(0);
+                                    GeneralVariables.addDxcc(dxccName);
+                                    GeneralVariables.addWorkedDxccOnBand(dxccName, workedBand);
+                                }
                             }
                         }
                     }

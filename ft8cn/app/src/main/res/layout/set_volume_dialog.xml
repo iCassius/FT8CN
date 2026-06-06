@@ -4,19 +4,19 @@
     android:id="@+id/linearLayout2"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/select_bluetooth_dialog_style"
+    android:background="?attr/colorSurface"
     android:minWidth="300dp"
-    android:minHeight="60dp">
+    android:minHeight="60dp"
+    android:padding="16dp">
 
 
     <TextView
         android:id="@+id/volumeValueMessage"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
         android:gravity="start"
         android:text="@string/volume_percent"
-        android:textColor="#FFFFFF"
+        android:textColor="?attr/colorOnSurface"
         android:textSize="16sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.5"

@@ -1,120 +1,87 @@
 package com.bg7yoz.ft8cn.ui;
-/**
- * 设置信号输出强度的对话框。
- * @author BGY70Z
- * @date 2023-03-20
- */
 
 import android.annotation.SuppressLint;
-import android.app.Dialog;
 import android.content.Context;
-import android.os.Bundle;
 import android.util.Log;
-import android.view.WindowManager;
+import android.view.LayoutInflater;
+import android.view.View;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.lifecycle.Observer;
 
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.MainViewModel;
 import com.bg7yoz.ft8cn.R;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
-public class SetVolumeDialog extends Dialog {
+/**
+ * 设置信号输出强度的对话框（现代化 M3 版本）。
+ * 使用 MaterialAlertDialogBuilder 替换旧的自定义 Dialog。
+ */
+public class SetVolumeDialog {
     private static final String TAG = "SetVolumeDialog";
-    private TextView volumeValueMessage;
-    private SeekBar volumeSeekBar;
+    private final Context context;
     private final MainViewModel mainViewModel;
+    private TextView volumeValueMessage;
     private VolumeProgress volumeProgress;
 
     public SetVolumeDialog(@NonNull Context context, MainViewModel mainViewModel) {
-        super(context);
+        this.context = context;
         this.mainViewModel = mainViewModel;
     }
 
+    @SuppressLint("DefaultLocale")
+    public void show() {
+        View view = LayoutInflater.from(context).inflate(R.layout.set_volume_dialog, null);
+        volumeValueMessage = view.findViewById(R.id.volumeValueMessage);
+        SeekBar volumeSeekBar = view.findViewById(R.id.volumeSeekBar);
+        volumeProgress = view.findViewById(R.id.volumeProgress);
 
-    @SuppressLint({"NotifyDataSetChanged", "MissingInflatedId"})
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.set_volume_dialog);
-        volumeValueMessage = (TextView) findViewById(R.id.volumeValueMessage);
-        volumeSeekBar = (SeekBar) findViewById(R.id.volumeSeekBar);
-        volumeProgress=(VolumeProgress) findViewById(R.id.volumeProgress);
         volumeProgress.setAlarmValue(1.1f);
-        volumeProgress.setValueColor(getContext().getColor(R.color.volume_progress_value));//白色
+        volumeProgress.setValueColor(context.getColor(R.color.volume_progress_value));
+        
         setVolumeText(GeneralVariables.volumePercent);
-        volumeSeekBar.setProgress((int) (GeneralVariables.volumePercent*100));
+        volumeSeekBar.setProgress((int) (GeneralVariables.volumePercent * 100));
 
-        GeneralVariables.mutableVolumePercent.observeForever(new Observer<Float>() {
-            @Override
-            public void onChanged(Float aFloat) {
-                setVolumeText(aFloat);
-            }
-        });
-
+        GeneralVariables.mutableVolumePercent.observeForever(this::setVolumeText);
 
         volumeSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int i, boolean b) {
-                GeneralVariables.volumePercent=i/100f;
-                GeneralVariables.mutableVolumePercent.postValue(i/100f);
-                mainViewModel.databaseOpr.writeConfig("volumeValue",String.valueOf(i),null);
-                if (mainViewModel.baseRig!=null){
-                    if (mainViewModel.baseRig.getConnector()!=null) {
-                        mainViewModel.baseRig.getConnector().setRFVolume(i);
-                        Log.e(TAG,String.format("set volume:%d",i));
-                    }
+                float vol = i / 100f;
+                GeneralVariables.volumePercent = vol;
+                GeneralVariables.mutableVolumePercent.postValue(vol);
+                mainViewModel.databaseOpr.writeConfig("volumeValue", String.valueOf(i), null);
+                if (mainViewModel.baseRig != null && mainViewModel.baseRig.getConnector() != null) {
+                    mainViewModel.baseRig.getConnector().setRFVolume(i);
+                    Log.d(TAG, String.format("set volume:%d", i));
                 }
             }
 
             @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-
-            }
+            public void onStartTrackingTouch(SeekBar seekBar) {}
 
             @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-
-            }
+            public void onStopTrackingTouch(SeekBar seekBar) {}
         });
 
+        new MaterialAlertDialogBuilder(context)
+                .setTitle(R.string.volume_percent)
+                .setView(view)
+                .setPositiveButton(R.string.close, null)
+                .show();
     }
 
-    private void setVolumeText(float vol){
-        volumeValueMessage.setText(String.format(
-                GeneralVariables.getStringFromResource(R.string.volume_percent)
-                , vol*100f));
-        volumeProgress.setPercent(vol);
-
-    }
-
-    /**
-     * 把配置信息写到数据库
-     *
-     * @param Value 值
-     */
-    private void writeConfig(String Value) {
-        mainViewModel.databaseOpr.writeConfig("volumeValue", Value, null);
-    }
-
-    @Override
-    public void show() {
-        super.show();
-        WindowManager.LayoutParams params = getWindow().getAttributes();
-        //设置对话框的大小，以百分比0.6
-        int height = getWindow().getWindowManager().getDefaultDisplay().getHeight();
-        int width = getWindow().getWindowManager().getDefaultDisplay().getWidth();
-        if (width > height) {
-            params.width = (int) (width * 0.7);
-            //params.height = (int) (height * 0.6);
-        } else {
-            params.width = (int) (width * 0.95);
-            //params.height = (int) (height * 0.5);
+    @SuppressLint("DefaultLocale")
+    private void setVolumeText(float vol) {
+        if (volumeValueMessage != null) {
+            volumeValueMessage.setText(String.format(
+                    GeneralVariables.getStringFromResource(R.string.volume_percent),
+                    vol * 100f));
         }
-        getWindow().setAttributes(params);
+        if (volumeProgress != null) {
+            volumeProgress.setPercent(vol);
+        }
     }
-
-
 }

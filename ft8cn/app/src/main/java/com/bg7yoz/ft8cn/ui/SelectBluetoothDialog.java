@@ -1,22 +1,12 @@
 package com.bg7yoz.ft8cn.ui;
-/**
- * 蓝牙设备选择对话框。
- * @author BGY70Z
- * @date 2023-03-20
- */
 
 import android.annotation.SuppressLint;
-import android.app.Dialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.Context;
-import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.widget.ImageView;
 import android.widget.TextView;
 
@@ -29,124 +19,75 @@ import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.MainViewModel;
 import com.bg7yoz.ft8cn.R;
 import com.bg7yoz.ft8cn.bluetooth.BluetoothConstants;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
 
-public class SelectBluetoothDialog extends Dialog {
-    class BluetoothDeviceInfo {
+/**
+ * 蓝牙设备选择对话框（现代化 M3 版本）。
+ * 使用 MaterialAlertDialogBuilder 替换旧的自定义 Dialog。
+ */
+public class SelectBluetoothDialog {
+    static class BluetoothDeviceInfo {
         BluetoothDevice device;
         boolean isSPP;
         boolean isHeadSet;
 
-        public BluetoothDeviceInfo(BluetoothDevice device, boolean isSPP,boolean isHeadSet) {
+        public BluetoothDeviceInfo(BluetoothDevice device, boolean isSPP, boolean isHeadSet) {
             this.device = device;
             this.isSPP = isSPP;
-            this.isHeadSet=isHeadSet;
+            this.isHeadSet = isHeadSet;
         }
     }
 
-    private MainViewModel mainViewModel;
-    private BluetoothAdapter bluetoothAdapter;
+    private final Context context;
+    private final MainViewModel mainViewModel;
     private final ArrayList<BluetoothDeviceInfo> devices = new ArrayList<>();
-    private RecyclerView devicesRecyclerView;
-    private BluetoothDevicesAdapter blueToothListAdapter;
-
-    private ImageView upImage;
-    private ImageView downImage;
-
+    private androidx.appcompat.app.AlertDialog dialog;
 
     public SelectBluetoothDialog(@NonNull Context context, MainViewModel mainViewModel) {
-        super(context);
+        this.context = context;
         this.mainViewModel = mainViewModel;
-
     }
 
-
-
     @SuppressLint({"MissingPermission", "NotifyDataSetChanged"})
-    private void getBluetoothDevice() {
+    private void getBluetoothDevice(BluetoothDevicesAdapter adapter) {
         devices.clear();
+        BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         if (bluetoothAdapter == null) {
             return;
         }
         for (BluetoothDevice device : bluetoothAdapter.getBondedDevices()) {
-            if (BluetoothConstants.checkIsSpp(device)){//spp设备放前面
-                devices.add(0,new BluetoothDeviceInfo(device,true,BluetoothConstants.checkIsHeadSet(device)));
-                continue;
-            }
-            if (BluetoothConstants.checkIsHeadSet(device)){//headset设备放后面
-                devices.add(new BluetoothDeviceInfo(device, false,BluetoothConstants.checkIsHeadSet(device)));
-                continue;
+            boolean isHeadset = BluetoothConstants.checkIsHeadSet(device);
+            boolean isSpp = BluetoothConstants.checkIsSpp(device);
+            if (isSpp) {
+                devices.add(0, new BluetoothDeviceInfo(device, true, isHeadset));
+            } else if (isHeadset) {
+                devices.add(new BluetoothDeviceInfo(device, false, true));
             }
         }
-
-        blueToothListAdapter.notifyDataSetChanged();
+        adapter.notifyDataSetChanged();
     }
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.select_bluetooth_dialog_layout);
-        devicesRecyclerView = (RecyclerView) findViewById(R.id.bluetoothListRecyclerView);
-        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        blueToothListAdapter = new BluetoothDevicesAdapter();
-        devicesRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
-        devicesRecyclerView.setAdapter(blueToothListAdapter);
-        upImage=(ImageView) findViewById(R.id.bluetoothScrollUpImageView);
-        downImage=(ImageView)findViewById(R.id.bluetoothScrollDownImageView);
-        getBluetoothDevice();
-
-        //显示滚动箭头
-        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                setScrollImageVisible();
-            }
-        }, 1000);
-        devicesRecyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
-                super.onScrolled(recyclerView, dx, dy);
-                setScrollImageVisible();
-            }
-        });
-
-    }
-
-    @Override
     public void show() {
-        super.show();
-        WindowManager.LayoutParams params = getWindow().getAttributes();
-        //设置对话框的大小，以百分比0.6
-        int height = getWindow().getWindowManager().getDefaultDisplay().getHeight();
-        int width = getWindow().getWindowManager().getDefaultDisplay().getWidth();
-//        params.height = (int) (height * 0.6);
-        if (width > height) {
-            params.width = (int) (width * 0.6);
-            params.height = (int) (height * 0.6);
-        } else {
-            params.width = (int) (width * 0.8);
-            params.height = (int) (height * 0.5);
-        }
-        getWindow().setAttributes(params);
+        View view = LayoutInflater.from(context).inflate(R.layout.select_bluetooth_dialog_layout, null);
+        RecyclerView devicesRecyclerView = view.findViewById(R.id.bluetoothListRecyclerView);
+        
+        // 隐藏旧布局中的控制图标
+        view.findViewById(R.id.bluetoothScrollUpImageView).setVisibility(View.GONE);
+        view.findViewById(R.id.bluetoothScrollDownImageView).setVisibility(View.GONE);
 
-    }
-    /**
-     * 设置界面的上下滚动的图标
-     */
-    private void setScrollImageVisible() {
+        BluetoothDevicesAdapter adapter = new BluetoothDevicesAdapter();
+        devicesRecyclerView.setLayoutManager(new LinearLayoutManager(context));
+        devicesRecyclerView.setAdapter(adapter);
 
-        if (devicesRecyclerView.canScrollVertically(1)) {
-            upImage.setVisibility(View.VISIBLE);
-        } else {
-            upImage.setVisibility(View.GONE);
-        }
+        getBluetoothDevice(adapter);
 
-        if (devicesRecyclerView.canScrollVertically(-1)) {
-            downImage.setVisibility(View.VISIBLE);
-        } else {
-            downImage.setVisibility(View.GONE);
-        }
+        dialog = new MaterialAlertDialogBuilder(context)
+                .setTitle(R.string.pl_select_bluetooth)
+                .setView(view)
+                .setNegativeButton(R.string.cancel, null)
+                .show();
     }
 
     class BluetoothDevicesAdapter extends RecyclerView.Adapter<BluetoothDevicesAdapter.BluetoothHolder> {
@@ -154,46 +95,31 @@ public class SelectBluetoothDialog extends Dialog {
         @NonNull
         @Override
         public BluetoothHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            LayoutInflater layoutInflater = LayoutInflater.from(parent.getContext());
-            View view = layoutInflater.inflate(R.layout.bluetooth_device_list_item, parent, false);
-            final BluetoothDevicesAdapter.BluetoothHolder holder = new BluetoothDevicesAdapter.BluetoothHolder(view);
-            return holder;
+            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.bluetooth_device_list_item, parent, false);
+            return new BluetoothHolder(view);
         }
 
         @SuppressLint("MissingPermission")
         @Override
         public void onBindViewHolder(@NonNull BluetoothHolder holder, int position) {
-            holder.device = devices.get(position);
-            holder.bluetoothNameTextView.setText(holder.device.device.getName());
-            if (holder.device.isSPP){
-                holder.bluetoothNameTextView.setTextColor(getContext().getResources().getColor(
-                        R.color.bluetooth_device_enable_color));
-            }else {
-                holder.bluetoothNameTextView.setTextColor(getContext().getResources().getColor(
-                        R.color.bluetooth_device_disable_color));
-            }
-            if (BluetoothConstants.checkIsHeadSet(holder.device.device)){
-                holder.headsetImageView.setVisibility(View.VISIBLE);
-            }else {
-                holder.headsetImageView.setVisibility(View.GONE);
-            }
-            if (BluetoothConstants.checkIsSpp(holder.device.device)){
-                holder.sppDeviceImageView.setVisibility(View.VISIBLE);
-            }else {
-                holder.sppDeviceImageView.setVisibility(View.GONE);
-            }
-            holder.bluetoothAddressTextView.setText(holder.device.device.getAddress());
+            BluetoothDeviceInfo deviceInfo = devices.get(position);
+            holder.deviceInfo = deviceInfo;
+            holder.bluetoothNameTextView.setText(deviceInfo.device.getName());
+            
+            int colorRes = deviceInfo.isSPP ? R.color.bluetooth_device_enable_color : R.color.bluetooth_device_disable_color;
+            holder.bluetoothNameTextView.setTextColor(context.getColor(colorRes));
 
-            holder.bluetoothListConstraintLayout.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View view) {
-                    ToastMessage.show(String.format(
-                            GeneralVariables.getStringFromResource(R.string.select_bluetooth_device)
-                            ,holder.device.device.getName()));
-                    mainViewModel.connectBluetoothRig(GeneralVariables.getMainContext(), holder.device.device);
+            holder.headsetImageView.setVisibility(deviceInfo.isHeadSet ? View.VISIBLE : View.GONE);
+            holder.sppDeviceImageView.setVisibility(deviceInfo.isSPP ? View.VISIBLE : View.GONE);
+            
+            holder.bluetoothAddressTextView.setText(deviceInfo.device.getAddress());
 
-                    dismiss();
-                }
+            holder.bluetoothListConstraintLayout.setOnClickListener(v -> {
+                ToastMessage.show(String.format(
+                        GeneralVariables.getStringFromResource(R.string.select_bluetooth_device),
+                        deviceInfo.device.getName()));
+                mainViewModel.connectBluetoothRig(GeneralVariables.getMainContext(), deviceInfo.device);
+                if (dialog != null) dialog.dismiss();
             });
         }
 
@@ -203,10 +129,11 @@ public class SelectBluetoothDialog extends Dialog {
         }
 
         class BluetoothHolder extends RecyclerView.ViewHolder {
-            public BluetoothDeviceInfo device;
+            BluetoothDeviceInfo deviceInfo;
             TextView bluetoothNameTextView, bluetoothAddressTextView;
             ConstraintLayout bluetoothListConstraintLayout;
-            ImageView headsetImageView,sppDeviceImageView;
+            ImageView headsetImageView, sppDeviceImageView;
+
             public BluetoothHolder(@NonNull View itemView) {
                 super(itemView);
                 bluetoothNameTextView = itemView.findViewById(R.id.bluetoothNameTextView);
@@ -217,5 +144,4 @@ public class SelectBluetoothDialog extends Dialog {
             }
         }
     }
-
 }

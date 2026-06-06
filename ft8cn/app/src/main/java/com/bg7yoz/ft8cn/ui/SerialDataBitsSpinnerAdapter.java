@@ -1,63 +1,38 @@
 package com.bg7yoz.ft8cn.ui;
-/**
- * 串口数据位列表界面
- * @author BGY70Z
- * @date 2024-01-03
- */
 
-import android.annotation.SuppressLint;
 import android.content.Context;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.BaseAdapter;
-import android.widget.TextView;
+import android.widget.ArrayAdapter;
 
-import com.bg7yoz.ft8cn.R;
+import java.util.ArrayList;
+import java.util.List;
 
+/**
+ * 串口数据位列表适配器 (现代化 M3 版本)。
+ */
+public class SerialDataBitsSpinnerAdapter extends ArrayAdapter<String> {
+    private final int[] dataBits = {5, 6, 7, 8};
 
-public class SerialDataBitsSpinnerAdapter extends BaseAdapter {
-    private final Context mContext;
-    private final int[] dataBits= {8,7,6,5};
     public SerialDataBitsSpinnerAdapter(Context context) {
-        mContext=context;
+        super(context, android.R.layout.simple_dropdown_item_1line, getDataBitsList());
     }
 
-    @Override
-    public int getCount() {
-        return dataBits.length;
-    }
-
-    @Override
-    public Object getItem(int i) {
-        return dataBits[i];
-    }
-
-    @Override
-    public long getItemId(int i) {
-        return i;
-    }
-
-    @SuppressLint({"ViewHolder", "InflateParams"})
-    @Override
-    public View getView(int i, View view, ViewGroup viewGroup) {
-        LayoutInflater _LayoutInflater=LayoutInflater.from(mContext);
-        view=_LayoutInflater.inflate(R.layout.serial_data_bits_spinner_item, null);
-        if (view!=null){
-            TextView textView=(TextView)view.findViewById(R.id.serialDataBitsItemTextView);
-            textView.setText(String.valueOf(dataBits[i]));
+    private static List<String> getDataBitsList() {
+        int[] bits = {5, 6, 7, 8};
+        List<String> list = new ArrayList<>();
+        for (int b : bits) {
+            list.add(String.valueOf(b));
         }
-        return view;
+        return list;
     }
-    public int getPosition(int i){
-        for (int j = 0; j < dataBits.length; j++) {
-            if (dataBits[j]==i){
-                return j;
-            }
+
+    public int getPosition(int bits) {
+        for (int i = 0; i < dataBits.length; i++) {
+            if (dataBits[i] == bits) return i;
         }
-        return 0;
+        return -1;
     }
-    public int getValue(int position){
+
+    public int getValue(int position) {
         return dataBits[position];
     }
 }

@@ -9,7 +9,6 @@ package com.bg7yoz.ft8cn.ui;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Paint;
-import android.opengl.Visibility;
 import android.view.ContextMenu;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -192,31 +191,20 @@ public class CallingListAdapter extends RecyclerView.Adapter<CallingListAdapter.
             holder.callingListSequenceTextView.setTextColor(context.getColor(R.color.follow_call_text_color));
         }
 
-        //根据1分钟内的4个时序区分颜色
-        switch (holder.ft8Message.getSequence4()) {
-            case 0:
-                holder.callListHolderConstraintLayout.setBackgroundResource(R.drawable.calling_list_cell_0_style);
-                break;
-            case 1:
-                holder.callListHolderConstraintLayout.setBackgroundResource(R.drawable.calling_list_cell_1_style);
-                break;
-            case 2:
-                holder.callListHolderConstraintLayout.setBackgroundResource(R.drawable.calling_list_cell_2_style);
-                break;
-            case 3:
-                holder.callListHolderConstraintLayout.setBackgroundResource(R.drawable.calling_list_cell_3_style);
-                break;
-        }
+        // --- Apply JTDX Style Priority Colors ---
+        applyPriorityColors(holder);
 
         holder.callingListIdBTextView.setText(holder.ft8Message.getdB());
         //时间偏移，如果超过1.0秒，-0.05秒，红色提示
         holder.callListDtTextView.setText(holder.ft8Message.getDt());
-        if (holder.ft8Message.time_sec > 1.0f || holder.ft8Message.time_sec < -0.05) {
-            holder.callListDtTextView.setTextColor(context.getResources().getColor(
-                    R.color.message_in_my_call_text_color));
-        } else {
-            holder.callListDtTextView.setTextColor(context.getResources().getColor(
-                    R.color.text_view_color));
+        
+        // Handle DT text color (might be overridden by priority, but we handle it here if no priority)
+        if (holder.ft8Message.priority == Ft8Message.Priority.NONE) {
+            if (holder.ft8Message.time_sec > 1.0f || holder.ft8Message.time_sec < -0.05) {
+                holder.callListDtTextView.setTextColor(context.getResources().getColor(R.color.message_in_my_call_text_color));
+            } else {
+                holder.callListDtTextView.setTextColor(context.getResources().getColor(R.color.text_view_color));
+            }
         }
 
 
@@ -225,44 +213,27 @@ public class CallingListAdapter extends RecyclerView.Adapter<CallingListAdapter.
         //查是不是通联过的呼号，获取是否存在holder.otherBandIsQso中
         setQueryHolderQSL_Callsign(holder);
 
-        //是否有与我呼号有关的消息
-        if (holder.ft8Message.inMyCall()) {
-            holder.callListMessageTextView.setTextColor(context.getResources().getColor(
-                    R.color.message_in_my_call_text_color));
-        } else if (holder.otherBandIsQso) {
-            //设置在别的波段通联过的消息颜色
-            holder.callListMessageTextView.setTextColor(context.getResources().getColor(
-                    R.color.fromcall_is_qso_text_color));
-        } else {
-            holder.callListMessageTextView.setTextColor(context.getResources().getColor(
-                    R.color.message_text_color));
-        }
-
-
+        // Calculate distance
+        holder.callingListDistTextView.setText(MaidenheadGrid.getDistStr(
+                GeneralVariables.getMyMaidenheadGrid()
+                , holder.ft8Message.getMaidenheadGrid(mainViewModel.databaseOpr)));
+        
         holder.callListMessageTextView.setText(holder.ft8Message.getMessageText(true));
 
         //载波频率
         holder.bandItemTextView.setText(BaseRigOperation.getFrequencyStr(holder.ft8Message.band));
-        //计算距离
-        holder.callingListDistTextView.setText(MaidenheadGrid.getDistStr(
-                GeneralVariables.getMyMaidenheadGrid()
-                , holder.ft8Message.getMaidenheadGrid(mainViewModel.databaseOpr)));
+
         holder.callingListCallsignToTextView.setText("");//被呼叫者
         holder.callingListCallsignFromTextView.setText("");//呼叫者
 
         //消息类型
         holder.callingListCommandIInfoTextView.setText(holder.ft8Message.getCommandInfo());
-        if (holder.ft8Message.i3 == 1 || holder.ft8Message.i3 == 2) {
-            holder.callingListCommandIInfoTextView.setTextColor(context.getResources().getColor(
-                    R.color.text_view_color));
-        } else {
-            holder.callingListCommandIInfoTextView.setTextColor(context.getResources().getColor(
-                    R.color.message_in_my_call_text_color));
-        }
-
-        //设置是否CQ的颜色
+        
+        // Priority colors already handle most text view colors, but some specific ones like CQ background are handled here
         if (holder.ft8Message.checkIsCQ()) {
-            holder.callListMessageTextView.setBackgroundResource(R.color.textview_cq_color);
+            if (holder.ft8Message.priority == Ft8Message.Priority.NONE) {
+                holder.callListMessageTextView.setBackgroundResource(R.color.textview_cq_color);
+            }
             holder.ft8Message.toWhere = "";
         } else {
             holder.callListMessageTextView.setBackgroundResource(R.color.textview_none_color);
@@ -285,11 +256,6 @@ public class CallingListAdapter extends RecyclerView.Adapter<CallingListAdapter.
         setToDxcc(holder);
         setFromDxcc(holder);
 
-
-        //查询呼号归属地，为防止占用太多运算资源，当from为空是再做查询的工作
-//        if (holder.ft8Message.fromWhere == null) {
-//            setQueryHolderCallsign(holder);//查询呼号归属地
-//        }
 
         if (holder.ft8Message.freq_hz <= 0.01f) {//这是发射界面
             holder.callingListIdBTextView.setVisibility(View.GONE);
@@ -326,6 +292,74 @@ public class CallingListAdapter extends RecyclerView.Adapter<CallingListAdapter.
             holder.callingListCallsignToTextView.setVisibility(View.VISIBLE);
             holder.callingListCallsignFromTextView.setVisibility(View.VISIBLE);
         }
+    }
+
+    private void applyPriorityColors(CallingListItemHolder holder) {
+        int bgColor = -1;
+        int textColor = -1;
+
+        if (holder.ft8Message.priority != null) {
+            switch (holder.ft8Message.priority) {
+                case NEW_DXCC:
+                    bgColor = context.getColor(R.color.priority_new_dxcc);
+                    textColor = context.getColor(R.color.priority_new_dxcc_text);
+                    break;
+                case NEW_BAND:
+                    bgColor = context.getColor(R.color.priority_new_band);
+                    textColor = context.getColor(R.color.priority_new_band_text);
+                    break;
+                case RARE_DX:
+                    bgColor = context.getColor(R.color.priority_rare_dx);
+                    textColor = context.getColor(R.color.priority_rare_dx_text);
+                    break;
+                case NEW_PREFIX:
+                    // Only change text color for new prefix to keep background clean
+                    textColor = context.getColor(R.color.priority_new_prefix);
+                    break;
+                case NEW_CALLSIGN:
+                    // Only change text color for new callsign to keep background clean
+                    textColor = context.getColor(R.color.priority_new_callsign);
+                    break;
+            }
+        }
+
+        if (bgColor != -1) {
+            holder.callListHolderConstraintLayout.setBackgroundColor(bgColor);
+            setTextViewColors(holder, textColor);
+        } else {
+            // Restore default sequence-based background
+            switch (holder.ft8Message.getSequence4()) {
+                case 0: holder.callListHolderConstraintLayout.setBackgroundResource(R.drawable.calling_list_cell_0_style); break;
+                case 1: holder.callListHolderConstraintLayout.setBackgroundResource(R.drawable.calling_list_cell_1_style); break;
+                case 2: holder.callListHolderConstraintLayout.setBackgroundResource(R.drawable.calling_list_cell_2_style); break;
+                case 3: holder.callListHolderConstraintLayout.setBackgroundResource(R.drawable.calling_list_cell_3_style); break;
+            }
+            
+            // If textColor wasn't set by NEW_PREFIX/NEW_CALLSIGN, use defaults
+            if (textColor == -1) {
+                textColor = context.getColor(R.color.message_text_color);
+                if (holder.ft8Message.inMyCall()) {
+                    textColor = context.getColor(R.color.message_in_my_call_text_color);
+                } else if (holder.otherBandIsQso) {
+                    textColor = context.getColor(R.color.fromcall_is_qso_text_color);
+                }
+            }
+            setTextViewColors(holder, textColor);
+        }
+    }
+
+    private void setTextViewColors(CallingListItemHolder holder, int color) {
+        holder.callingUtcTextView.setTextColor(color);
+        holder.callingListSequenceTextView.setTextColor(color);
+        holder.callingListIdBTextView.setTextColor(color);
+        holder.callListDtTextView.setTextColor(color);
+        holder.callingListFreqTextView.setTextColor(color);
+        holder.callListMessageTextView.setTextColor(color);
+        holder.callingListDistTextView.setTextColor(color);
+        holder.callingListCallsignFromTextView.setTextColor(color);
+        holder.callingListCallsignToTextView.setTextColor(color);
+        holder.callingListCommandIInfoTextView.setTextColor(color);
+        holder.bandItemTextView.setTextColor(color);
     }
 
     private void setFromDxcc(@NonNull CallingListItemHolder holder) {

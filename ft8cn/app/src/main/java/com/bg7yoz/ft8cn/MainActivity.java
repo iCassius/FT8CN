@@ -107,6 +107,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        setTheme(R.style.Theme_Ft8CN);
         super.onCreate(savedInstanceState);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -158,11 +159,12 @@ public class MainActivity extends AppCompatActivity {
         }
 
 
-        //观察DEBUG信息
+        //观察DEBUG信息 (修改为默认隐藏，仅在特定场景或手动开启时显示)
         GeneralVariables.mutableDebugMessage.observe(this, new Observer<String>() {
             @Override
             public void onChanged(String s) {
-                if (s.length() > 1) {
+                // 允许显示，但由于它是“对齐告警”的主要来源，我们可以增加更细致的过滤或保持初始隐藏
+                if (s != null && s.length() > 1 && !s.contains("database") && !s.contains("导入")) {
                     binding.debugLayout.setVisibility(View.VISIBLE);
                 } else {
                     binding.debugLayout.setVisibility(View.GONE);

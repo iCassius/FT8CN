@@ -4,7 +4,6 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <data>
-
     </data>
 
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -17,61 +16,53 @@
             android:id="@+id/mycall_tools_bar"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="1dp"
-            android:layout_marginTop="1dp"
-            android:layout_marginEnd="1dp"
-            android:background="@color/purple_500"
+            android:background="?attr/colorSurfaceVariant"
+            android:elevation="2dp"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintHorizontal_bias="0.0"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent">
-
 
             <TextView
                 android:id="@+id/timerTextView"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="@color/bar_text_view_color"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="12sp"
-
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/setTransmitImageButton"
                 app:layout_constraintStart_toStartOf="@+id/guideline6"
                 app:layout_constraintTop_toBottomOf="@+id/toCallsignTextView"
                 tools:text="123456" />
 
-
             <ImageButton
                 android:id="@+id/clearMycallListImageButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/imagebutton_style"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/delete"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/clear_calling_list_image_48"
-                tools:ignore="TouchTargetSizeCheck" />
+                app:tint="?attr/colorOnSurface" />
 
             <TextView
                 android:id="@+id/transmittingSequentialTextView"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="@color/bar_text_view_color"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="12sp"
-
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/guideline6"
                 app:layout_constraintStart_toEndOf="@+id/clearMycallListImageButton"
                 app:layout_constraintTop_toBottomOf="@+id/baseFrequencyTextView"
-                tools:text="发射时序:0"
-                tools:visibility="visible" />
+                tools:text="发射时序:0" />
 
             <TextView
                 android:id="@+id/toCallsignTextView"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="@color/bar_text_view_color"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="12sp"
                 app:layout_constraintBottom_toTopOf="@+id/timerTextView"
                 app:layout_constraintEnd_toStartOf="@+id/guideline6"
@@ -91,9 +82,8 @@
                 android:id="@+id/baseFrequencyTextView"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="@color/bar_text_view_color"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="12sp"
-
                 app:layout_constraintBottom_toTopOf="@+id/transmittingSequentialTextView"
                 app:layout_constraintEnd_toStartOf="@+id/setTransmitImageButton"
                 app:layout_constraintHorizontal_bias="0.5"
@@ -103,100 +93,92 @@
 
             <ImageButton
                 android:id="@+id/setTransmitImageButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/imagebutton_style"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/send"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_baseline_cancel_schedule_send_off"
-                tools:ignore="DuplicateSpeakableTextCheck,ImageContrastCheck,TouchTargetSizeCheck" />
+                app:tint="?attr/colorOnSurface" />
         </androidx.constraintlayout.widget.ConstraintLayout>
-
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/constraintLayout5"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="1dp"
-            android:layout_marginEnd="1dp"
+            android:background="?attr/colorSurfaceVariant"
+            android:padding="4dp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent">
 
-
-            <Spinner
-                android:id="@+id/functionOrderSpinner"
-                android:layout_width="0dp"
-                android:layout_height="32dp"
-                android:layout_marginStart="4dp"
-                android:layout_marginEnd="4dp"
-                android:background="@drawable/editor_style"
-                android:dropDownWidth="match_parent"
-                android:popupBackground="@drawable/spinner_style"
-                android:prompt="@string/timeOffset"
-                android:spinnerMode="dropdown"
-                android:visibility="gone"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@+id/resetToCQImageView"
-                app:layout_constraintHorizontal_bias="0.0"
-                app:layout_constraintStart_toEndOf="@+id/pauseTransmittingImageButton"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintVertical_bias="0.555"
-                tools:ignore="TouchTargetSizeCheck,SpeakableTextPresentCheck"
-                tools:listitem="@layout/function_order_spinner_item" />
-
             <ImageButton
                 android:id="@+id/resetToCQImageView"
                 android:layout_width="48dp"
-                android:layout_height="30dp"
-                android:background="@drawable/imagebutton_style"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/send"
                 android:src="@drawable/cq"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                tools:ignore="TouchTargetSizeCheck" />
+                app:layout_constraintTop_toTopOf="parent" />
 
             <ImageButton
                 android:id="@+id/pauseTransmittingImageButton"
-                android:layout_width="30dp"
-                android:layout_height="30dp"
-                android:background="@drawable/imagebutton_style"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/launch"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_baseline_pause_circle_outline_24"
-                tools:ignore="SpeakableTextPresentCheck,TouchTargetSizeCheck" />
+                app:tint="?attr/colorOnSurface" />
+
+            <Spinner
+                android:id="@+id/functionOrderSpinner"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp"
+                android:background="?attr/colorSurface"
+                android:spinnerMode="dropdown"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/resetToCQImageView"
+                app:layout_constraintStart_toEndOf="@+id/pauseTransmittingImageButton"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:listitem="@layout/function_order_spinner_item" />
 
             <EditText
                 android:id="@+id/transFreeTextEdit"
                 android:layout_width="0dp"
-                android:layout_height="32dp"
+                android:layout_height="40dp"
                 android:layout_marginStart="4dp"
                 android:layout_marginEnd="4dp"
-                android:autofillHints=""
+                android:autofillHints="none"
                 android:background="@drawable/editor_style"
                 android:digits=" 0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
                 android:ems="10"
                 android:hint="@string/transmit_freeText"
                 android:inputType="text"
+                android:paddingHorizontal="8dp"
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOutline"
+                android:visibility="gone"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/resetToCQImageView"
                 app:layout_constraintStart_toEndOf="@+id/pauseTransmittingImageButton"
-                app:layout_constraintTop_toTopOf="parent"
-                tools:ignore="TextContrastCheck" />
+                app:layout_constraintTop_toTopOf="parent" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/constraintLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="1dp"
-            android:layout_marginEnd="1dp"
-            android:background="@drawable/calling_list_cell_style"
+            android:background="?attr/colorSurfaceVariant"
+            android:paddingVertical="4dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/mycall_tools_bar">
@@ -207,6 +189,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/message"
                 android:textSize="12sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/textView9"
                 app:layout_constraintStart_toStartOf="@+id/guideline3"
@@ -223,10 +206,9 @@
                 android:id="@+id/textView4"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:layout_marginBottom="2dp"
                 android:text="@string/db"
                 android:textSize="12sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/guideline8"
                 app:layout_constraintStart_toStartOf="@+id/guideline8"
@@ -239,10 +221,10 @@
                 android:layout_marginEnd="8dp"
                 android:text="@string/dt"
                 android:textSize="12sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 app:layout_constraintBottom_toBottomOf="@+id/textView4"
                 app:layout_constraintEnd_toStartOf="@+id/guideline10"
-                app:layout_constraintTop_toTopOf="@+id/textView4"
-                app:layout_constraintVertical_bias="0.0" />
+                app:layout_constraintTop_toTopOf="@+id/textView4" />
 
             <TextView
                 android:id="@+id/textView10"
@@ -250,6 +232,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/freq"
                 android:textSize="12sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 app:layout_constraintBottom_toBottomOf="@+id/textView6"
                 app:layout_constraintEnd_toStartOf="@+id/guideline3"
                 app:layout_constraintStart_toStartOf="@+id/guideline10"
@@ -259,22 +242,22 @@
                 android:id="@+id/textView9"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:layout_marginEnd="2dp"
-                android:layout_marginBottom="2dp"
+                android:layout_marginEnd="8dp"
                 android:text="@string/dist"
                 android:textSize="12sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
             <TextView
                 android:id="@+id/textView2"
-                android:layout_width="15dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
                 android:text="@string/sequence"
                 android:textSize="12sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 app:layout_constraintBottom_toBottomOf="@+id/textView4"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="@+id/textView4" />
@@ -284,7 +267,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                app:layout_constraintGuide_begin="30dp" />
+                app:layout_constraintGuide_begin="35dp" />
 
             <androidx.constraintlayout.widget.Guideline
                 android:id="@+id/guideline10"
@@ -302,8 +285,6 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/constraintLayout" />
-
-
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </layout>

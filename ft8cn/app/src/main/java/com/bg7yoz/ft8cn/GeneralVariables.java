@@ -25,9 +25,12 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 
@@ -165,7 +168,11 @@ public class GeneralVariables {
     //用于记录呼号于网格的对应关系 todo---应当把此处列表也放到后台追踪信息里
     //public static ArrayList<CallsignMaidenheadGrid> callsignMaidenheadGrids=new ArrayList<>();
     public static final Map<String, String> callsignAndGrids = new ConcurrentHashMap<>();
-    //private static final Map<String,String> callsignAndGrids=new HashMap<>();
+    public static final Map<String, Integer> sessionDxccCount = new ConcurrentHashMap<>();
+    public static final Map<String, Integer> sessionCallCount = new ConcurrentHashMap<>();
+    public static final Map<String, Integer> sessionPrefixCount = new ConcurrentHashMap<>();
+    public static final Map<String, Set<Long>> workedBandsByDxcc = new ConcurrentHashMap<>();
+    public static final Set<String> workedPrefixes = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     public static String myCallsign = "";//我的呼号
     public static String toModifier = "";//呼叫的修饰符
@@ -519,12 +526,35 @@ public class GeneralVariables {
     }
 
     /**
+     * Check if DXCC worked on a specific band
+     */
+    public static boolean isWorkedDxccOnBand(String dxcc, long band) {
+        if (dxcc == null || dxcc.isEmpty()) return false;
+        Set<Long> bands = workedBandsByDxcc.get(dxcc);
+        return bands != null && bands.contains(band);
+    }
+
+    /**
+     * Record DXCC worked on a band
+     */
+    public static void addWorkedDxccOnBand(String dxcc, long band) {
+        if (dxcc == null || dxcc.isEmpty()) return;
+        Set<Long> bands = workedBandsByDxcc.get(dxcc);
+        if (bands == null) {
+            bands = Collections.newSetFromMap(new ConcurrentHashMap<>());
+            workedBandsByDxcc.put(dxcc, bands);
+        }
+        bands.add(band);
+    }
+
+    /**
      * 查看是不是已经通联的DXCC分区
      *
      * @param dxccPrefix DXCC前缀
      * @return 是否
      */
     public static boolean getDxccByPrefix(String dxccPrefix) {
+        if (dxccPrefix == null) return false;
         return dxccMap.containsKey(dxccPrefix);
     }
 

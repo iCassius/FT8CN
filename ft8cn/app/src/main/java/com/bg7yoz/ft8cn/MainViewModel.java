@@ -27,7 +27,10 @@ import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
+import androidx.core.app.ActivityCompat;
 import android.media.AudioManager;
 import android.os.Handler;
 import android.os.Looper;
@@ -528,14 +531,15 @@ public class MainViewModel extends ViewModel {
         }
         int count = 0;
         for (Ft8Message msg : messages) {
-            //与我的呼号有关，与关注的呼号有关
-            //if (msg.getCallsignFrom().equals(GeneralVariables.myCallsign)
+            //与我的呼号有关，与关注的呼号有关，或者是高优先级（新DXCC/新波段）
             if (GeneralVariables.checkIsMyCallsign(msg.getCallsignFrom())
-                    //|| msg.getCallsignTo().equals(GeneralVariables.myCallsign)
                     || GeneralVariables.checkIsMyCallsign(msg.getCallsignTo())
                     || GeneralVariables.callsignInFollow(msg.getCallsignFrom())
                     || (GeneralVariables.callsignInFollow(msg.getCallsignTo()) && (msg.getCallsignTo() != null))
-                    || (GeneralVariables.autoFollowCQ && msg.checkIsCQ())) {//是CQ，并且允许关注CQ
+                    || (GeneralVariables.autoFollowCQ && msg.checkIsCQ())
+                    || msg.priority == Ft8Message.Priority.NEW_DXCC
+                    || msg.priority == Ft8Message.Priority.NEW_BAND
+                    || msg.priority == Ft8Message.Priority.RARE_DX) {
                 //看不是通联成功的呼号的消息
                 msg.isQSL_Callsign = GeneralVariables.checkQSLCallsign(msg.getCallsignFrom());
                 if (!GeneralVariables.checkIsExcludeCallsign(msg.callsignFrom)) {//不在排除呼号前缀的，才加入列表
@@ -1061,6 +1065,9 @@ public class MainViewModel extends ViewModel {
      */
     @SuppressLint("MissingPermission")
     public boolean isBTConnected() {
+        if (ActivityCompat.checkSelfPermission(GeneralVariables.getMainContext(), Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            return false;
+        }
         BluetoothAdapter blueAdapter = BluetoothAdapter.getDefaultAdapter();
         if (blueAdapter == null) return false;
 

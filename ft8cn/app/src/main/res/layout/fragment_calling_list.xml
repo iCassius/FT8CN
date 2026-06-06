@@ -4,7 +4,6 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <data>
-
     </data>
 
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -17,12 +16,9 @@
             android:id="@+id/calling_list_tools_bar"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="1dp"
-            android:layout_marginTop="1dp"
-            android:layout_marginEnd="1dp"
-            android:background="@color/purple_500"
+            android:background="?attr/colorSurface"
+            android:elevation="2dp"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintHorizontal_bias="0.0"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent">
 
@@ -30,9 +26,8 @@
                 android:id="@+id/timerTextView"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="@color/bar_text_view_color"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="12sp"
-
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/timerImageButton"
                 app:layout_constraintHorizontal_bias="0.5"
@@ -42,34 +37,33 @@
 
             <ImageButton
                 android:id="@+id/timerImageButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/imagebutton_style"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/decode"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_baseline_mic_off_48"
-                tools:ignore="ImageContrastCheck,TouchTargetSizeCheck" />
-
+                app:tint="?attr/colorOnSurface" />
 
             <ImageButton
                 android:id="@+id/clearCallingListImageButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/imagebutton_style"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/delete"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/clear_calling_list_image_48"
-                tools:ignore="TouchTargetSizeCheck" />
+                app:tint="?attr/colorOnSurface" />
 
             <TextView
                 android:id="@+id/maidenheadTextView"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="@color/bar_text_view_color"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="12sp"
                 app:layout_constraintBottom_toTopOf="@+id/timerTextView"
                 app:layout_constraintEnd_toStartOf="@+id/timerImageButton"
@@ -82,7 +76,7 @@
                 android:id="@+id/timeOffsetTextView"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="@color/bar_text_view_color"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="12sp"
                 app:layout_constraintBottom_toTopOf="@+id/isDecodingTextView"
                 app:layout_constraintEnd_toStartOf="@+id/guideline6"
@@ -102,7 +96,7 @@
                 android:id="@+id/isDecodingTextView"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="@color/bar_text_view_color"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="12sp"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/guideline6"
@@ -115,8 +109,6 @@
             android:id="@+id/calling_list_recyclerView"
             android:layout_width="0dp"
             android:layout_height="0dp"
-            android:layout_marginStart="1dp"
-            android:layout_marginEnd="1dp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
@@ -126,9 +118,8 @@
             android:id="@+id/constraintLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="1dp"
-            android:layout_marginEnd="1dp"
-            android:background="@drawable/calling_list_cell_style"
+            android:background="?attr/colorSurfaceVariant"
+            android:paddingVertical="4dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/calling_list_tools_bar">
@@ -139,6 +130,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/message"
                 android:textSize="12sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/textView9"
                 app:layout_constraintStart_toStartOf="@+id/guideline3"
@@ -155,10 +147,9 @@
                 android:id="@+id/textView4"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:layout_marginBottom="2dp"
                 android:text="@string/db"
                 android:textSize="12sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/guideline8"
                 app:layout_constraintStart_toStartOf="@+id/guideline8"
@@ -171,10 +162,10 @@
                 android:layout_marginEnd="8dp"
                 android:text="@string/dt"
                 android:textSize="12sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 app:layout_constraintBottom_toBottomOf="@+id/textView4"
                 app:layout_constraintEnd_toStartOf="@+id/guideline10"
-                app:layout_constraintTop_toTopOf="@+id/textView4"
-                app:layout_constraintVertical_bias="0.0" />
+                app:layout_constraintTop_toTopOf="@+id/textView4" />
 
             <TextView
                 android:id="@+id/textView10"
@@ -182,6 +173,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/freq"
                 android:textSize="12sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 app:layout_constraintBottom_toBottomOf="@+id/textView6"
                 app:layout_constraintEnd_toStartOf="@+id/guideline3"
                 app:layout_constraintStart_toStartOf="@+id/guideline10"
@@ -191,11 +183,10 @@
                 android:id="@+id/textView9"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:layout_marginEnd="2dp"
-                android:layout_marginBottom="2dp"
+                android:layout_marginEnd="8dp"
                 android:text="@string/dist"
                 android:textSize="12sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
@@ -207,6 +198,7 @@
                 android:layout_marginStart="4dp"
                 android:text="@string/sequence"
                 android:textSize="12sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 app:layout_constraintBottom_toBottomOf="@+id/textView4"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="@+id/textView4" />

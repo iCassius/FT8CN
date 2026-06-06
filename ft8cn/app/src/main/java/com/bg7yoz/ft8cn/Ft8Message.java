@@ -85,11 +85,19 @@ public class Ft8Message {
     public LatLng fromLatLng = null;
     public LatLng toLatLng = null;
 
-    public boolean isWeakSignal=false;
+    public boolean isWeakSignal = false;
 
-
-
-
+    // Priority levels for highlighting (JTDX Style)
+    public enum Priority {
+        NONE,           // Normal
+        NEW_CALLSIGN,   // New callsign seen
+        NEW_PREFIX,     // New callsign prefix
+        NEW_BAND,       // New DXCC on this band
+        NEW_DXCC,       // New DXCC entity globally
+        RARE_DX         // Dynamically calculated rarity (fallback when logs empty)
+    }
+    public Priority priority = Priority.NONE;
+    public float distanceKm = -1f; // Calculated distance
 
     @NonNull
     @SuppressLint({"SimpleDateFormat", "DefaultLocale"})
@@ -193,6 +201,21 @@ public class Ft8Message {
             arrl_rac = message.arrl_rac;
             dx_call_to2 = message.dx_call_to2;
 
+            modifier = message.modifier;
+            isQSL_Callsign = message.isQSL_Callsign;
+            fromWhere = message.fromWhere;
+            toWhere = message.toWhere;
+            fromDxcc = message.fromDxcc;
+            fromItu = message.fromItu;
+            fromCq = message.fromCq;
+            toDxcc = message.toDxcc;
+            toItu = message.toItu;
+            toCq = message.toCq;
+            fromLatLng = message.fromLatLng;
+            toLatLng = message.toLatLng;
+            isWeakSignal = message.isWeakSignal;
+            priority = message.priority;
+            distanceKm = message.distanceKm;
 
             //Log.d(TAG, String.format("i3:%d,n3:%d,From:%s,To:%s", i3, n3, getCallsignFrom(), getCallsignTo()));
         }

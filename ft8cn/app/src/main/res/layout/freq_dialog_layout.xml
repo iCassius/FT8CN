@@ -4,33 +4,42 @@
     android:id="@+id/linearLayout2"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/help_dialog_style"
+    android:background="?attr/colorSurface"
     android:minWidth="300dp"
-    android:minHeight="200dp">
+    android:minHeight="200dp"
+    android:padding="16dp">
 
-    <ImageView
-        android:id="@+id/image"
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/image_card"
         android:layout_width="48dp"
         android:layout_height="48dp"
-        android:background="@drawable/icon_background_style"
-        android:contentDescription="@string/help"
-        android:visibility="visible"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="0dp"
+        app:strokeWidth="0dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:srcCompat="@drawable/ft8cn_icon" />
+        app:layout_constraintTop_toTopOf="parent">
+        <ImageView
+            android:id="@+id/image"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/help"
+            app:srcCompat="@drawable/ft8cn_icon" />
+    </com.google.android.material.card.MaterialCardView>
 
 
     <TextView
         android:id="@+id/freqDialogTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
         android:text="@string/operationBand"
-        android:textColor="@color/help_dialog_text_color"
-        android:textSize="16sp"
+        android:textColor="?attr/colorOnSurface"
+        android:textSize="18sp"
+        android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/image" />
+        app:layout_constraintTop_toBottomOf="@+id/image_card" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/freqDialogRecyclerView"

@@ -1,6 +1,7 @@
 package com.bg7yoz.ft8cn.timer;
 
 import android.annotation.SuppressLint;
+import android.util.Log;
 
 import com.bg7yoz.ft8cn.AppExecutors;
 
@@ -39,7 +40,7 @@ public class UtcTimer {
     private final Timer heartBeatTimer = new Timer();
     private int time_sec = 0;//时间的偏移量；
     
-    private final ExecutorService actionThreadPool = AppExecutors.getInstance().decoding();
+    private final ExecutorService actionThreadPool = AppExecutors.getInstance().timerTrigger();
     private final Executor heartBeatThreadPool = AppExecutors.getInstance().mainThread();
     
     private final Runnable doHeartBeat = new Runnable() {
@@ -111,7 +112,9 @@ public class UtcTimer {
 
         long now = getSystemTime();
         long slotMs = sec * 100L;
-        long timeInSlot = (now - time_sec) % slotMs;
+        // time_sec 是 100ms 为单位的偏移量，需要转换为毫秒
+        long timeInSlot = (now - (time_sec * 100L)) % slotMs;
+        if (timeInSlot < 0) timeInSlot += slotMs; // 确保正数
         long delayToNext = slotMs - timeInSlot;
 
         // 避免极短时间内重复触发，且确保对齐到槽位
@@ -124,12 +127,18 @@ public class UtcTimer {
             public void run() {
                 if (running) {
                     final long triggerUtc = getSystemTime();
-                    actionThreadPool.execute(new Runnable() {
-                        @Override
-                        public void run() {
-                            onUtcTimer.doOnSecTimer(triggerUtc);
-                        }
-                    });
+                    try {
+                        actionThreadPool.execute(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (onUtcTimer != null) {
+                                    onUtcTimer.doOnSecTimer(triggerUtc);
+                                }
+                            }
+                        });
+                    } catch (Exception e) {
+                        Log.e("UtcTimer", "Error executing timer action: " + e.getMessage());
+                    }
 
                     if (doOnce) {
                         running = false;
@@ -194,26 +203,51 @@ public class UtcTimer {
     }
 
     public static void syncTime(AfterSyncTime afterSyncTime) {
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                NTPUDPClient timeClient = new NTPUDPClient();
+        AppExecutors.getInstance().networkIO().execute(() -> {
+            // 优先使用中国境内高精度 NTP 服务器
+            String[] ntpServers = {
+                    "ntp.aliyun.com",
+                    "ntp1.aliyun.com",
+                    "ntp.tencent.com",
+                    "time.edu.cn",
+                    "cn.pool.ntp.org",
+                    "time.apple.com",
+                    "time.windows.com"
+            };
+
+            NTPUDPClient timeClient = new NTPUDPClient();
+            timeClient.setDefaultTimeout(3000); // 3秒超时
+
+            for (String server : ntpServers) {
                 try {
-                    InetAddress inetAddress = InetAddress.getByName("time.windows.com");
+                    InetAddress inetAddress = InetAddress.getByName(server);
                     TimeInfo timeInfo = timeClient.getTime(inetAddress);
-                    long serverTime = timeInfo.getMessage().getTransmitTimeStamp().getTime();
-                    int trueDelay = (int) ((serverTime - System.currentTimeMillis()));
-                    UtcTimer.delay = trueDelay % 15000;
-                    if (afterSyncTime != null) {
-                        afterSyncTime.doAfterSyncTimer(trueDelay);
+                    timeInfo.computeDetails();
+                    Long offset = timeInfo.getOffset();
+
+                    if (offset != null) {
+                        // 更新全局偏移量
+                        UtcTimer.delay = offset.intValue();
+                        android.util.Log.i("UtcTimer", String.format("NTP同步成功! 服务器: %s, 偏移量: %dms", server, UtcTimer.delay));
+
+                        if (afterSyncTime != null) {
+                            AppExecutors.getInstance().mainThread().execute(() ->
+                                    afterSyncTime.doAfterSyncTimer(UtcTimer.delay));
+                        }
+                        return; // 同步成功，退出循环
                     }
-                } catch (IOException e) {
-                    if (afterSyncTime != null) {
-                        afterSyncTime.syncFailed(e);
-                    }
+                } catch (Exception e) {
+                    // 当前服务器失败，尝试下一个
+                    android.util.Log.w("UtcTimer", "NTP server " + server + " failed: " + e.getMessage());
                 }
             }
-        }).start();
+
+            // 全部失败
+            if (afterSyncTime != null) {
+                AppExecutors.getInstance().mainThread().execute(() ->
+                        afterSyncTime.syncFailed(new IOException("所有 NTP 服务器均连接失败，请检查网络")));
+            }
+        });
     }
 
     public interface AfterSyncTime {

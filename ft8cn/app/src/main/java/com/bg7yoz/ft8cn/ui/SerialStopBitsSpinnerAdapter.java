@@ -1,64 +1,39 @@
 package com.bg7yoz.ft8cn.ui;
-/**
- * 串口停止位列表界面
- * @author BGY70Z
- * @date 2024-01-03
- */
 
-import android.annotation.SuppressLint;
 import android.content.Context;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.BaseAdapter;
-import android.widget.TextView;
+import android.widget.ArrayAdapter;
 
-import com.bg7yoz.ft8cn.R;
+import java.util.ArrayList;
+import java.util.List;
 
+/**
+ * 串口停止位列表适配器 (现代化 M3 版本)。
+ */
+public class SerialStopBitsSpinnerAdapter extends ArrayAdapter<String> {
+    private final int[] stopBits = {1, 2, 3};
+    private final String[] stopBitsStr = {"1", "2", "1.5"};
 
-public class SerialStopBitsSpinnerAdapter extends BaseAdapter {
-    private final Context mContext;
-    private final int[] stopBits= {1,3,2};
-    private final String[] stopBitsStr= {"1","1.5","2"};
     public SerialStopBitsSpinnerAdapter(Context context) {
-        mContext=context;
+        super(context, android.R.layout.simple_dropdown_item_1line, getStopBitsList());
     }
 
-    @Override
-    public int getCount() {
-        return stopBits.length;
-    }
-
-    @Override
-    public Object getItem(int i) {
-        return stopBits[i];
-    }
-
-    @Override
-    public long getItemId(int i) {
-        return i;
-    }
-
-    @SuppressLint({"ViewHolder", "InflateParams"})
-    @Override
-    public View getView(int i, View view, ViewGroup viewGroup) {
-        LayoutInflater _LayoutInflater=LayoutInflater.from(mContext);
-        view=_LayoutInflater.inflate(R.layout.serial_stop_bits_spinner_item, null);
-        if (view!=null){
-            TextView textView=(TextView)view.findViewById(R.id.serialStopBitsItemTextView);
-            textView.setText(stopBitsStr[i]);
+    private static List<String> getStopBitsList() {
+        String[] strs = {"1", "2", "1.5"};
+        List<String> list = new ArrayList<>();
+        for (String s : strs) {
+            list.add(s);
         }
-        return view;
+        return list;
     }
-    public int getPosition(int i){
-        for (int j = 0; j < stopBits.length; j++) {
-            if (stopBits[j]==i){
-                return j;
-            }
+
+    public int getPosition(int bits) {
+        for (int i = 0; i < stopBits.length; i++) {
+            if (stopBits[i] == bits) return i;
         }
-        return 0;
+        return -1;
     }
-    public int getValue(int position){
+
+    public int getValue(int position) {
         return stopBits[position];
     }
 }

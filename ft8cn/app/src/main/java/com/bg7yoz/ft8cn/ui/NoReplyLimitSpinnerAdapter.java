@@ -1,64 +1,24 @@
 package com.bg7yoz.ft8cn.ui;
-/**
- * 未回答时间列表。
- * @author BGY70Z
- * @date 2023-03-20
- */
 
-import android.annotation.SuppressLint;
 import android.content.Context;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.BaseAdapter;
-import android.widget.TextView;
-
-import com.bg7yoz.ft8cn.GeneralVariables;
-import com.bg7yoz.ft8cn.R;
+import android.widget.ArrayAdapter;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class NoReplyLimitSpinnerAdapter extends BaseAdapter {
-    private final List<Integer> noReplyCount=new ArrayList<>();
-    private final Context mContext;
-
+/**
+ * 无回应限制列表适配器 (现代化 M3 版本)。
+ */
+public class NoReplyLimitSpinnerAdapter extends ArrayAdapter<String> {
     public NoReplyLimitSpinnerAdapter(Context context) {
-        mContext=context;
-        for (int i = 0; i <= 30; i++) {
-            noReplyCount.add(i);
+        super(context, android.R.layout.simple_dropdown_item_1line, getLimitList());
+    }
+
+    private static List<String> getLimitList() {
+        List<String> list = new ArrayList<>();
+        for (int i = 0; i <= 20; i++) {
+            list.add(String.valueOf(i));
         }
-    }
-
-    @Override
-    public int getCount() {
-        return noReplyCount.size();
-    }
-
-    @Override
-    public Object getItem(int i) {
-        return noReplyCount.get(i);
-    }
-
-    @Override
-    public long getItemId(int i) {
-        return i;
-    }
-
-    @SuppressLint({"DefaultLocale", "ViewHolder", "InflateParams"})
-    @Override
-    public View getView(int i, View view, ViewGroup viewGroup) {
-        LayoutInflater _LayoutInflater=LayoutInflater.from(mContext);
-        view=_LayoutInflater.inflate(R.layout.no_reply_limit_spinner_item, null);
-        if (view!=null){
-            TextView textView=(TextView)view.findViewById(R.id.noReplyLimitCountItemTextView);
-            if (i==0){
-                textView.setText(GeneralVariables.getStringFromResource(R.string.ignore));
-            }
-            else {
-                textView.setText(String.format(GeneralVariables.getStringFromResource(R.string.times), i));
-            }
-        }
-        return view;
+        return list;
     }
 }

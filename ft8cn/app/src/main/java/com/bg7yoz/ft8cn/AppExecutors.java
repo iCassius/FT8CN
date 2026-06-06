@@ -18,15 +18,18 @@ public class AppExecutors {
     private final ExecutorService diskIO;
     private final ExecutorService networkIO;
     private final ExecutorService decoding;
+    private final ExecutorService timerTrigger;
     private final ScheduledExecutorService scheduledExecutor;
     private final Executor mainThread;
 
     private AppExecutors(ExecutorService diskIO, ExecutorService networkIO, 
-                        ExecutorService decoding, ScheduledExecutorService scheduledExecutor,
+                        ExecutorService decoding, ExecutorService timerTrigger,
+                        ScheduledExecutorService scheduledExecutor,
                         Executor mainThread) {
         this.diskIO = diskIO;
         this.networkIO = networkIO;
         this.decoding = decoding;
+        this.timerTrigger = timerTrigger;
         this.scheduledExecutor = scheduledExecutor;
         this.mainThread = mainThread;
     }
@@ -38,7 +41,8 @@ public class AppExecutors {
                     sInstance = new AppExecutors(
                             Executors.newSingleThreadExecutor(),
                             Executors.newFixedThreadPool(3),
-                            Executors.newFixedThreadPool(Math.max(2, Runtime.getRuntime().availableProcessors())),
+                            Executors.newFixedThreadPool(Math.max(4, Runtime.getRuntime().availableProcessors())),
+                            Executors.newSingleThreadExecutor(),
                             Executors.newScheduledThreadPool(2),
                             new MainThreadExecutor()
                     );
@@ -58,6 +62,10 @@ public class AppExecutors {
 
     public ExecutorService decoding() {
         return decoding;
+    }
+
+    public ExecutorService timerTrigger() {
+        return timerTrigger;
     }
     
     public ScheduledExecutorService scheduled() {
@@ -81,6 +89,7 @@ public class AppExecutors {
         diskIO.shutdown();
         networkIO.shutdown();
         decoding.shutdown();
+        timerTrigger.shutdown();
         scheduledExecutor.shutdown();
     }
 }
