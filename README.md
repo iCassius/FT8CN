@@ -22,8 +22,8 @@ git push origin release
 正式发布版本时，需要在推送代码后创建并推送版本 tag。tag 名称必须和应用版本号一致，并以 `v` 开头：
 
 ```powershell
-git tag -a v0.93.001 -m "FT8CN v0.93.001"
-git push origin v0.93.001
+git tag -a v0.93.002 -m "FT8CN v0.93.002"
+git push origin v0.93.002
 ```
 
 推送 `v*.*.*` 格式的 tag 后，GitHub Actions 会自动构建 APK，并上传到对应的 GitHub Release。后续版本按构建号递增，例如 `v0.93.002`、`v0.93.003`。
