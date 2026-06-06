@@ -26,8 +26,8 @@ android {
         applicationId "com.bg7yoz.ft8cn"
         minSdk 23
         targetSdk 34
-        versionCode 93001
-        versionName '0.93.001'
+        versionCode 93002
+        versionName '0.93.002'
 
         externalNativeBuild {
             cmake {
