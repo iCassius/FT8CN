@@ -56,7 +56,7 @@ public class HelpDialog {
         getNewButton.setOnClickListener(v -> {
             Intent intent = new Intent();
             intent.setAction("android.intent.action.VIEW");
-            intent.setData(Uri.parse("https://github.com/n0pra/ft8cn/releases"));
+            intent.setData(Uri.parse("https://github.com/iCassius/FT8CN/releases"));
             context.startActivity(intent);
         });
 

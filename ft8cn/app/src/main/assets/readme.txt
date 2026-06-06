@@ -123,7 +123,7 @@ BG7YOZ
   7.增加调整信号强度功能，用于调节ALC。
   8.增加支持3位呼号的呼叫能力。
   9.增加支持的电台。
-  10.增加获取最新版本的入口。https://github.com/N0BOY/FT8CN/releases
+  10.增加获取最新版本的入口。https://github.com/iCassius/FT8CN/releases
   11.增加呼号与网格的映射表（升级数据库）。
   12.增加地图可视化展示功能（类似于GridTracker）。
   13.增加在地图中呼叫的能力。
