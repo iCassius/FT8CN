@@ -77,13 +77,13 @@ public class CallsignDatabase extends android.database.sqlite.SQLiteOpenHelper {
                 "id INTEGER PRIMARY KEY AUTOINCREMENT," +
                 "CountryNameEn TEXT," +
                 "CountryNameCN TEXT," +
-                "CQZone TEXT," +
-                "ITUZone TEXT," +
+                "CQZone INTEGER," +
+                "ITUZone INTEGER," +
                 "Continent TEXT," +
                 "Latitude REAL," +
                 "Longitude REAL," +
                 "GMT_offset REAL," +
-                "DXCC INTEGER" +
+                "DXCC TEXT" +
                 ")";
         db.execSQL(createTableSQL);
     }
@@ -96,23 +96,52 @@ public class CallsignDatabase extends android.database.sqlite.SQLiteOpenHelper {
         return getCallsignInfo(db, callsign);
     }
 
-    public static void getMessagesLocation(SQLiteDatabase db, ArrayList<Ft8Message> messages) {
-        for (int i = 0; i < messages.size(); i++) {
-            Ft8Message msg = messages.get(i);
+    public static synchronized void getMessagesLocation(SQLiteDatabase db, ArrayList<Ft8Message> ft8Messages) {
+        if (ft8Messages == null) return;
+        ArrayList<Ft8Message> messages = new ArrayList<>(ft8Messages);//防止线程访问冲突
+
+        for (Ft8Message msg : messages) {
+            if (msg.i3 == 0 && msg.n3 == 0) continue;//如果是自由文本，就不查了
             if (msg.callsignFrom != null) {
-                CallsignInfo callsignInfo = getCallsignInfo(db, msg.callsignFrom);
-                msg.fromWhere = callsignInfo.CountryNameCN;
-                msg.fromLatLng = new com.google.android.gms.maps.model.LatLng(callsignInfo.Latitude, callsignInfo.Longitude);
-                msg.fromDxcc = callsignInfo.DXCC != null && !callsignInfo.DXCC.isEmpty();
-                
-                // Calculate Priority and Session Stats
-                updateMessagePriority(msg, callsignInfo);
+                CallsignInfo fromCallsignInfo = getCallsignInfo(db,
+                        msg.callsignFrom.replace("<", "").replace(">", ""));
+                if (fromCallsignInfo != null) {
+                    msg.fromDxcc = !GeneralVariables.getDxccByPrefix(fromCallsignInfo.DXCC);
+                    msg.fromItu = !GeneralVariables.getItuZoneById(fromCallsignInfo.ITUZone);
+                    msg.fromCq = !GeneralVariables.getCqZoneById(fromCallsignInfo.CQZone);
+                    if (GeneralVariables.isChina) {
+                        msg.fromWhere = fromCallsignInfo.CountryNameCN;
+                    } else {
+                        msg.fromWhere = fromCallsignInfo.CountryNameEn;
+                    }
+                    //CTY.DAT的经度是西经为正，所以要取反
+                    msg.fromLatLng = new com.google.android.gms.maps.model.LatLng(
+                            fromCallsignInfo.Latitude, fromCallsignInfo.Longitude * -1);
+
+                    // Calculate Priority and Session Stats
+                    updateMessagePriority(msg, fromCallsignInfo);
+                }
             }
+
+            if (msg.checkIsCQ() || msg.getCallsignTo().contains("...")) {//CQ就不查了
+                continue;
+            }
+
             if (msg.callsignTo != null) {
-                CallsignInfo callsignInfo = getCallsignInfo(db, msg.callsignTo);
-                msg.toWhere = callsignInfo.CountryNameCN;
-                msg.toLatLng = new com.google.android.gms.maps.model.LatLng(callsignInfo.Latitude, callsignInfo.Longitude);
-                msg.toDxcc = callsignInfo.DXCC != null && !callsignInfo.DXCC.isEmpty();
+                CallsignInfo toCallsignInfo = getCallsignInfo(db,
+                        msg.callsignTo.replace("<", "").replace(">", ""));
+                if (toCallsignInfo != null) {
+                    msg.toDxcc = !GeneralVariables.getDxccByPrefix(toCallsignInfo.DXCC);
+                    msg.toItu = !GeneralVariables.getItuZoneById(toCallsignInfo.ITUZone);
+                    msg.toCq = !GeneralVariables.getCqZoneById(toCallsignInfo.CQZone);
+                    if (GeneralVariables.isChina) {
+                        msg.toWhere = toCallsignInfo.CountryNameCN;
+                    } else {
+                        msg.toWhere = toCallsignInfo.CountryNameEn;
+                    }
+                    msg.toLatLng = new com.google.android.gms.maps.model.LatLng(
+                            toCallsignInfo.Latitude, toCallsignInfo.Longitude * -1);
+                }
             }
         }
     }
@@ -173,14 +202,16 @@ public class CallsignDatabase extends android.database.sqlite.SQLiteOpenHelper {
 
     @SuppressLint("Range")
     public static CallsignInfo getCallsignInfo(SQLiteDatabase db, String sqlParameter) {
+        //callsigns表里存的是CTY.DAT的前缀，必须做前缀匹配（取最长命中），"="开头的是完整呼号精确匹配
         String querySQL = "select a.*,b.* from callsigns as a left join countries as b on a.countryId =b.id \n" +
-                "WHERE (callsign=?) OR (callsign=\"=\"||?)\n" +
+                "WHERE (SUBSTR(?,1,LENGTH(callsign))=callsign) OR (callsign=\"=\"||?)\n" +
                 "order by LENGTH(callsign) desc\n" +
                 "LIMIT 1";
 
         Cursor cursor = db.rawQuery(querySQL, new String[]{sqlParameter.toUpperCase(), sqlParameter.toUpperCase()});
-        CallsignInfo callsignInfo = new CallsignInfo();
+        CallsignInfo callsignInfo = null;
         if (cursor.moveToFirst()) {
+            callsignInfo = new CallsignInfo();
             callsignInfo.CallSign = sqlParameter;
             callsignInfo.CountryNameEn = cursor.getString(cursor.getColumnIndex("CountryNameEn"));
             callsignInfo.CountryNameCN = cursor.getString(cursor.getColumnIndex("CountryNameCN"));
@@ -210,6 +241,7 @@ public class CallsignDatabase extends android.database.sqlite.SQLiteOpenHelper {
         @Override
         public void run() {
             final CallsignInfo callsignInfo = CallsignDatabase.getCallsignInfo(db, sqlParameter);
+            if (callsignInfo == null) return;//查不到就不回调，调用方不做null检查
             mainHandler.post(new Runnable() {
                 @Override
                 public void run() {

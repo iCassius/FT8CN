@@ -12,6 +12,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * 录音类。通过AudioRecord对象来实现录音。
  * HamRecorder录音的数据通过监听类GetVoiceData来实现。HamRecorder实例中有一个监听器列表onGetVoiceList。
@@ -33,7 +35,10 @@ public class HamRecorder {
     //private AudioRecord audioRecord = null;//AudioRecord对象
     private boolean isRunning = false;//是否处于录音的状态。
 
-    private final ArrayList<VoiceDataMonitor> voiceDataMonitorList = new ArrayList<>();//监听回调列表，在监听回调中获取数据。
+    //监听回调列表，在监听回调中获取数据。
+    //CopyOnWriteArrayList：音频线程遍历的同时，定时器线程会增删监听器，
+    //且一次性监听器会在回调中删除自己（普通ArrayList正向遍历时自删会跳过下一个监听器，导致丢数据）。
+    private final CopyOnWriteArrayList<VoiceDataMonitor> voiceDataMonitorList = new CopyOnWriteArrayList<>();
     private OnVoiceMonitorChanged onVoiceMonitorChanged=null;
 
     private boolean isMicRecord=true;
@@ -61,10 +66,9 @@ public class HamRecorder {
      */
     public void doOnWaveDataReceived(int bufferLen,float[] buffer){
         if (!isRunning) return;
-        for (int i = 0; i < voiceDataMonitorList.size(); i++) {
-            //逐个监听器调用回调，把数据提供给回调函数
-            if (voiceDataMonitorList.get(i)!=null) {
-                voiceDataMonitorList.get(i).onHamRecord.OnReceiveData(buffer, bufferLen);
+        for (VoiceDataMonitor monitor : voiceDataMonitorList) {//迭代的是快照，回调中增删监听器不影响本次遍历
+            if (monitor != null) {
+                monitor.onHamRecord.OnReceiveData(buffer, bufferLen);
             }
         }
 
@@ -127,7 +131,7 @@ public class HamRecorder {
      * 获取监听器的列表
      * @return 监听器列表
      */
-    public ArrayList<VoiceDataMonitor> getVoiceDataMonitors(){
+    public CopyOnWriteArrayList<VoiceDataMonitor> getVoiceDataMonitors(){
         return this.voiceDataMonitorList;
     }
 
@@ -155,6 +159,16 @@ public class HamRecorder {
      */
     public VoiceDataMonitor getVoiceData(int duration, boolean afterDoneRemove, OnGetVoiceDataDone getVoiceDataDone) {
         if (isRunning) {
+            if (afterDoneRemove) {
+                //新的一次性录音窗口（解码周期）开始前，把上一个还没凑满的一次性窗口强制结算（不足补零）。
+                //否则音频流一旦断流（发射期间、网络丢包），旧窗口会吞掉下一个周期的音频，
+                //解码数据与UTC时隙错位，且未完成的窗口会越积越多（每个持有720KB缓冲区）。
+                for (VoiceDataMonitor monitor : voiceDataMonitorList) {
+                    if (monitor.oneShot) {
+                        monitor.forceComplete();
+                    }
+                }
+            }
             VoiceDataMonitor dataMonitor = new VoiceDataMonitor(duration, this
                     , afterDoneRemove, getVoiceDataDone);
             dataMonitor.voiceDataMonitor = dataMonitor;//用于监听器删除自己用。
@@ -177,6 +191,10 @@ public class HamRecorder {
         private final String TAG = "GetVoiceData";
         private final float[] voiceData;//录音数据。大小由时长、采样率、采样位决定的。
         private int dataCount;//计数器，当前数据的获取量
+        private boolean done = false;//一次性监听器是否已经结算（正常凑满或被强制结算）
+        public final boolean oneShot;//是否是一次性监听器（afterDoneRemove=true）
+        private final HamRecorder hamRecorder;
+        private final OnGetVoiceDataDone onGetVoiceDataDone;
 
         //onHamRecord是当录音对象有数据时触发的回调，通过该回调填充voiceData缓冲区，当缓冲区满时，触发OnGetVoiceDataDone回调。
         public OnHamRecord onHamRecord;
@@ -200,38 +218,66 @@ public class HamRecorder {
             //宿主对象，方便用词对象调用删除数据获取动作列表中的本实例
 
             dataCount = 0;//当前的数据获取量
+            oneShot = afterDoneRemove;
+            this.hamRecorder = hamRecorder;
+            this.onGetVoiceDataDone = onGetVoiceDataDone;
             //生成预期大小中的数据缓冲区。
-            //因为是16Bit采样，所以byte*2。
-            //voiceData = new byte[duration * HamRecorder.sampleRateInHz * 2 / 1000];
             voiceData = new float[duration * HamRecorder.sampleRateInHz  / 1000];
 
-            //当有录音数据时触发的回调函数。
+            //当有录音数据时触发的回调函数。填充动作与强制结算共用一把锁，防止并发。
             onHamRecord = new OnHamRecord() {
                 @Override
                 public void OnReceiveData(float[] data, int size) {
-                    int remainingSize = size+dataCount-voiceData.length;//如果大于0,就是剩余的数据量，
-
-                    for (int i = 0; (i < size) && (dataCount < voiceData.length); i++) {
-                            voiceData[dataCount] = data[i];//把录音缓冲区的数据搬运到本监听器中来
-                            dataCount++;
-                    }
-
-                    if (dataCount >= (voiceData.length)) {//当数据量达到所需要的。发起回调。
-                        onGetVoiceDataDone.onGetDone(voiceData);
-                        if (afterDoneRemove) {//如果是一次性的获取数据，则在录音对象中的监听列表中删除此监听回调。
-                            hamRecorder.deleteVoiceDataMonitor(voiceDataMonitor);
-                        } else {
-                            dataCount = 0;//如果是循环录音，则复位计数器。
-                            if (remainingSize>0) {//把剩余的数据补发到后续事件上
-                                float[] remainingData = new float[remainingSize];
-                                System.arraycopy(data, size - remainingSize, remainingData, 0, remainingSize);
-                                OnReceiveData(remainingData,remainingSize);
-                            }
-                        }
-                    }
+                    receiveData(data, size);
                 }
             };
 
+        }
+
+        private synchronized void receiveData(float[] data, int size) {
+            if (done) return;//一次性监听器已经结算过，不再接收数据
+            int remainingSize = size + dataCount - voiceData.length;//如果大于0,就是剩余的数据量，
+
+            for (int i = 0; (i < size) && (dataCount < voiceData.length); i++) {
+                voiceData[dataCount] = data[i];//把录音缓冲区的数据搬运到本监听器中来
+                dataCount++;
+            }
+
+            if (dataCount >= (voiceData.length)) {//当数据量达到所需要的。发起回调。
+                if (oneShot) {//如果是一次性的获取数据，则在录音对象中的监听列表中删除此监听回调。
+                    done = true;
+                    onGetVoiceDataDone.onGetDone(voiceData);
+                    hamRecorder.deleteVoiceDataMonitor(voiceDataMonitor);
+                } else {
+                    onGetVoiceDataDone.onGetDone(voiceData);
+                    dataCount = 0;//如果是循环录音，则复位计数器。
+                    if (remainingSize > 0) {//把剩余的数据补发到后续事件上
+                        float[] remainingData = new float[remainingSize];
+                        System.arraycopy(data, size - remainingSize, remainingData, 0, remainingSize);
+                        receiveData(remainingData, remainingSize);
+                    }
+                }
+            }
+        }
+
+        /**
+         * 强制结算：把没凑满的部分补零，立刻触发onGetDone，并把自己从监听列表中删除。
+         * 用于新录音周期开始时结算上一个周期，保证录音窗口始终与UTC时隙对齐。
+         * 只对一次性监听器有效。
+         */
+        public synchronized void forceComplete() {
+            if (!oneShot || done) return;
+            done = true;
+            if (dataCount < voiceData.length) {
+                //缺口明显（超过5%）才提示，正常周期切换时只差零点几秒的尾巴
+                if (voiceData.length - dataCount > voiceData.length / 20) {
+                    Log.w(TAG, String.format("录音窗口强制结算：实收 %d/%d 采样，缺口补零"
+                            , dataCount, voiceData.length));
+                }
+                Arrays.fill(voiceData, dataCount, voiceData.length, 0f);
+            }
+            onGetVoiceDataDone.onGetDone(voiceData);
+            hamRecorder.deleteVoiceDataMonitor(voiceDataMonitor);
         }
 
     }

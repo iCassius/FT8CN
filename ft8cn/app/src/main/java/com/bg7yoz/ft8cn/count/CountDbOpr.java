@@ -166,7 +166,7 @@ public class CountDbOpr {
 
                 if (breakLine > 0) result.append("\n");
                 result.append(String.format("%s %s(%s) %s\n %s", call, freq, band
-                        , gridsquare, callsignInfo.toString()));
+                        , gridsquare, callsignInfo == null ? "" : callsignInfo.toString()));
                 breakLine++;
             }
             cursor.close();

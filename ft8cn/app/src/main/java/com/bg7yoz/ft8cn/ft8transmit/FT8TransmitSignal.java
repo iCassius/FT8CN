@@ -358,7 +358,7 @@ public class FT8TransmitSignal {
             long now = System.currentTimeMillis();
             while (isTransmitting) {//等待音频数据包发送完毕再退出，以触发afterTransmitting
                 try {
-                    Thread.sleep(1);
+                    Thread.sleep(10);
                     long current = System.currentTimeMillis() - now;
                     if (current > 13100) {//实际发射的时长
                         isTransmitting = false;
@@ -385,7 +385,7 @@ public class FT8TransmitSignal {
                     long now = System.currentTimeMillis();
                     while (isTransmitting) {//等待音频数据包发送完毕再退出，以触发afterTransmitting
                         try {
-                            Thread.sleep(1);
+                            Thread.sleep(10);
                             long current = System.currentTimeMillis() - now;
                             if (current > 13000) {//实际发射的时长
                                 isTransmitting = false;

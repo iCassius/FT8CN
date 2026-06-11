@@ -57,12 +57,13 @@ public class IcomAudioUdp extends AudioUdp {
             final int partialLen = IComPacketTypes.TX_BUFFER_SIZE * 2;//数据包的长度
             //要转换一下到BYTE,小端模式
 
-            //byte[] data = new byte[audioData.length * 2 + partialLen * 4];//多出一点空声音放在前后各20ms*2共80ms
             //先播放，是给出空的声音，for i 循环，做了一个判断，是给前面的空声音，for j循环，做得判断，是让后面发送空声音
             byte[] audioPacket = new byte[partialLen];
+            //用绝对时间表安排20ms的发包节拍，睡眠等待代替忙等。
+            //忙等会让一个CPU核在整个发射期间（约13秒）满载空转，整机发热导致降频，影响解码和WiFi。
+            long nextSendTime = System.currentTimeMillis();
             for (int i = 0; i < (audioData.length / IComPacketTypes.TX_BUFFER_SIZE) + 8; i++) {//多出6个周期，前面3个，后面3个多
                 if (!icomAudioUdp.isPttOn) break;
-                long now = System.currentTimeMillis() - 1;//获取当前时间
 
                 icomAudioUdp.sendTrackedPacket(IComPacketTypes.AudioPacket.getTxAudioPacket(audioPacket
                         , (short) 0, icomAudioUdp.localId, icomAudioUdp.remoteId, icomAudioUdp.innerSeq));
@@ -79,14 +80,17 @@ public class IcomAudioUdp extends AudioUdp {
                         }
                     }
                 }
-                while (icomAudioUdp.isPttOn) {
-                    if (System.currentTimeMillis() - now >= 21) {//20毫秒一个周期
+                nextSendTime += 20;//TX_BUFFER_SIZE=240采样@12kHz，正好20毫秒一包
+                long sleepMs = nextSendTime - System.currentTimeMillis();
+                if (sleepMs > 0) {
+                    try {
+                        Thread.sleep(sleepMs);
+                    } catch (InterruptedException e) {
                         break;
                     }
                 }
             }
             Log.d(TAG, "run: 音频发送完毕！！" );
-            Thread.currentThread().interrupt();
         }
 
     }

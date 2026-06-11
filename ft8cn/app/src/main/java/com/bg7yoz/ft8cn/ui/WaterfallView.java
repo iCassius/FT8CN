@@ -86,16 +86,23 @@ public class WaterfallView extends View {
         setClickable(true);
         blockHeight = Math.max(2, h / (symbols * cycle));
         freq_width = (float) w / 3000f;
-        
-        if (historyBitmap != null) historyBitmap.recycle();
-        if (pendingBitmap != null) pendingBitmap.recycle();
-        
-        historyBitmap = Bitmap.createBitmap(w, h, ARGB_8888);
-        pendingBitmap = Bitmap.createBitmap(w, h, ARGB_8888);
-        pendingCanvas = new Canvas(pendingBitmap);
-        
-        historyBitmap.eraseColor(Color.BLACK);
-        pendingBitmap.eraseColor(Color.BLACK);
+
+        //与setWaveData（后台音频线程）共用一把锁：
+        //回收/重建位图期间，后台线程可能正拿着旧位图绘制，会抛"recycled bitmap"异常导致闪退
+        synchronized (this) {
+            Bitmap oldHistory = historyBitmap;
+            Bitmap oldPending = pendingBitmap;
+
+            historyBitmap = Bitmap.createBitmap(w, h, ARGB_8888);
+            pendingBitmap = Bitmap.createBitmap(w, h, ARGB_8888);
+            pendingCanvas = new Canvas(pendingBitmap);
+
+            historyBitmap.eraseColor(Color.BLACK);
+            pendingBitmap.eraseColor(Color.BLACK);
+
+            if (oldHistory != null) oldHistory.recycle();
+            if (oldPending != null) oldPending.recycle();
+        }
 
         linePaint.setColor(0xff990000);
         scrollPaint.setAntiAlias(false);
@@ -165,6 +172,7 @@ public class WaterfallView extends View {
     public void setWaveData(int[] data, int sequential, List<Ft8Message> msgs) {
         if (historyBitmap == null || data == null || data.length == 0) return;
 
+        synchronized (this) {//与onSizeChanged的位图重建互斥，见onSizeChanged中的说明
         // 1. 准备 Pending Canvas
         // 将旧的 history 整体向下搬移到 pending
         scrollSrcRect.set(0, 0, getWidth(), getHeight() - blockHeight);
@@ -229,10 +237,9 @@ public class WaterfallView extends View {
         }
 
         // 5. 核心：原子化交换位图，确保 onDraw 看到的是完整的新帧
-        synchronized (this) {
-            Canvas historyCanvas = new Canvas(historyBitmap);
-            historyCanvas.drawBitmap(pendingBitmap, 0, 0, null);
-        }
+        Canvas historyCanvas = new Canvas(historyBitmap);
+        historyCanvas.drawBitmap(pendingBitmap, 0, 0, null);
+        }//synchronized
 
         long currentTime = System.currentTimeMillis();
         if (currentTime - lastDrawTime >= DRAW_INTERVAL_MS) {

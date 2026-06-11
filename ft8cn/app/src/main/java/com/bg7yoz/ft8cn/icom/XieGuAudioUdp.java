@@ -93,8 +93,10 @@ public class XieGuAudioUdp extends AudioUdp {
 
         @Override
         public void run() {
+            //此线程在整个连接期间常驻发包。原来用忙等控制20ms节拍，
+            //会让一个CPU核全程满载空转，导致整机发热降频，改为睡眠等待。
+            long nextSendTime = System.currentTimeMillis();
             while (isRunning) {
-                long now = System.currentTimeMillis() - 1;//获取当前时间
                 if (audioUdp.isPttOn) {
                     System.arraycopy(ft8Audio, index, audioPacket, 0, audioPacket.length);
                     index = index + partialLen * 2;
@@ -105,10 +107,17 @@ public class XieGuAudioUdp extends AudioUdp {
                 audioUdp.sendTrackedPacket(IComPacketTypes.AudioPacket.getTxAudioPacket(audioPacket
                         , (short) 0, audioUdp.localId, audioUdp.remoteId, audioUdp.innerSeq));
                 audioUdp.innerSeq++;
-                while (isRunning) {
-                    if (System.currentTimeMillis() - now >= 21) {//20毫秒一个周期
+                nextSendTime += 20;//20毫秒一个周期
+                long sleepMs = nextSendTime - System.currentTimeMillis();
+                if (sleepMs > 0) {
+                    try {
+                        Thread.sleep(sleepMs);
+                    } catch (InterruptedException e) {
                         break;
                     }
+                } else if (sleepMs < -1000) {
+                    //长时间欠账（比如系统休眠后恢复），重置节拍基准，避免突发大量发包
+                    nextSendTime = System.currentTimeMillis();
                 }
             }
         }
