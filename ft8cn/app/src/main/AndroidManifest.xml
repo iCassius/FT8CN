@@ -25,6 +25,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
     <application
+        android:name=".FT8CNApplication"
         android:allowBackup="true"
         android:usesCleartextTraffic="true"
         android:icon="@drawable/ft8cn_icon"
