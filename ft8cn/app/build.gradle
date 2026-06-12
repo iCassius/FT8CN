@@ -28,6 +28,7 @@ android {
         targetSdk 34
         versionCode 93002
         versionName '0.93.002'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
 
         externalNativeBuild {
             cmake {
@@ -89,5 +90,9 @@ dependencies {
     implementation files('src/libs/commons-net-3.6.jar')////用于时间同步
     implementation files('src/libs/nanohttpd-2.2.0.jar')
     implementation files('src/libs/osmdroid-android-6.1.14.aar')//地图控件
+
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test:runner:1.5.2'
+    androidTestImplementation 'androidx.test:core:1.5.0'
 
 }
