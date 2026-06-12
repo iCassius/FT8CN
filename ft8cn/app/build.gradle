@@ -42,11 +42,16 @@ android {
     buildTypes {
 
         debug{
+            //测试版独立包名+独立名称，可与正式版并存安装，数据互不影响
+            applicationIdSuffix '.beta'
+            versionNameSuffix '-beta'
+            manifestPlaceholders = [appLabel: "FT8CN测试版"]
             buildConfigField("String", "apkBuildTime", "\"${currentTime}\"")
         }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            manifestPlaceholders = [appLabel: "@string/app_name"]
             buildConfigField("String", "apkBuildTime", "\"${currentTime}\"")
 
         }

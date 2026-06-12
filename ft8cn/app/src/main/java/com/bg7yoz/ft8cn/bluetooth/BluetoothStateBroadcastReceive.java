@@ -13,6 +13,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.media.AudioManager;
+import android.util.Log;
 
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.MainViewModel;
@@ -40,8 +41,14 @@ public class BluetoothStateBroadcastReceive extends BroadcastReceiver {
         int headset=-1;
         int a2dp=-1;
         if (blueAdapter!=null) {
-            headset = blueAdapter.getProfileConnectionState(BluetoothProfile.HEADSET);
-            a2dp = blueAdapter.getProfileConnectionState(BluetoothProfile.A2DP);
+            //Android 12+ 查询蓝牙连接状态需要 BLUETOOTH_CONNECT 运行时权限，
+            //用户未授权时任何蓝牙广播都会让这里抛 SecurityException 闪退（挂机中蓝牙耳机连接/断开即触发）
+            try {
+                headset = blueAdapter.getProfileConnectionState(BluetoothProfile.HEADSET);
+                a2dp = blueAdapter.getProfileConnectionState(BluetoothProfile.A2DP);
+            } catch (SecurityException e) {
+                Log.w(TAG, "onReceive: BLUETOOTH_CONNECT not granted, skip profile state query.");
+            }
         }
         switch (action) {
             case BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED:
@@ -60,7 +67,7 @@ public class BluetoothStateBroadcastReceive extends BroadcastReceiver {
                 if (device!=null) {
                     ToastMessage.show(String.format(
                             GeneralVariables.getStringFromResource(R.string.bluetooth_is_connected)
-                            ,device.getName()));
+                            ,getDeviceNameSafely(device)));
                 }
                 break;
 
@@ -68,7 +75,7 @@ public class BluetoothStateBroadcastReceive extends BroadcastReceiver {
                 if (device!=null) {
                     ToastMessage.show(String.format(
                             GeneralVariables.getStringFromResource(R.string.bluetooth_is_diconnected)
-                            ,device.getName()));
+                            ,getDeviceNameSafely(device)));
                 }
                 break;
 
@@ -89,6 +96,17 @@ public class BluetoothStateBroadcastReceive extends BroadcastReceiver {
                 }
                 break;
 
+        }
+    }
+
+    //device.getName() 在 Android 12+ 同样需要 BLUETOOTH_CONNECT，未授权时返回空串而不是闪退
+    @SuppressLint("MissingPermission")
+    private static String getDeviceNameSafely(BluetoothDevice device) {
+        try {
+            String name = device.getName();
+            return name == null ? "" : name;
+        } catch (SecurityException e) {
+            return "";
         }
     }
 

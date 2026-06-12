@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
+import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
@@ -15,6 +16,7 @@ import androidx.core.app.NotificationCompat;
 import com.bg7yoz.ft8cn.R;
 
 public class AudioForegroundService extends Service {
+    private static final String TAG = "AudioForegroundService";
     private static final String CHANNEL_ID = "FT8CN_Audio_Channel";
     private static final int NOTIFICATION_ID = 101;
 
@@ -27,10 +29,17 @@ public class AudioForegroundService extends Service {
                 .setSmallIcon(R.drawable.ft8cn_icon)
                 .build();
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
-        } else {
-            startForeground(NOTIFICATION_ID, notification);
+        //未授权录音或 app 在后台时，startForeground(microphone) 会抛 SecurityException/
+        //ForegroundServiceStartNotAllowedException，必须兜底，否则整个 app 闪退
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+            } else {
+                startForeground(NOTIFICATION_ID, notification);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "startForeground failed: " + e.getMessage());
+            stopSelf();
         }
 
         return START_NOT_STICKY;

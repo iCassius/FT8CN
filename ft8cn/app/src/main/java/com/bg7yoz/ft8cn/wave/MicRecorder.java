@@ -6,9 +6,11 @@ package com.bg7yoz.ft8cn.wave;
  * 已优化：使用可重用缓冲区减少GC压力。
  */
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
@@ -60,6 +62,14 @@ public class MicRecorder {
         if (isRunning) return;
 
         Context context = GeneralVariables.getMainContext();
+        //未授予录音权限时不能启动 microphone 类型前台服务（Android 14+ 直接 SecurityException 闪退），
+        //等 MainActivity 授权回调里重启录音
+        if (context != null
+                && context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "start: RECORD_AUDIO not granted, skip recording until permission granted.");
+            return;
+        }
         if (context != null) {
             Intent intent = new Intent(context, AudioForegroundService.class);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

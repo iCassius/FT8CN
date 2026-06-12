@@ -10,6 +10,7 @@ import android.util.Log;
 
 import androidx.core.content.FileProvider;
 
+import com.bg7yoz.ft8cn.BuildConfig;
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.R;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
@@ -276,8 +277,9 @@ public class ShareLogs {
                 }
                 if (!isCancel) {
                     Intent sharingIntent = new Intent(Intent.ACTION_SEND);
+                    //authority 必须跟 applicationId 走，否则带包名后缀的测试版（.beta）分享日志会崩
                     Uri fileUri = FileProvider.getUriForFile(context.getApplicationContext()
-                            , "com.bg7yoz.ft8cn.fileprovider", file);
+                            , BuildConfig.APPLICATION_ID + ".fileprovider", file);
                     sharingIntent.setType("text/plain");
                     sharingIntent.putExtra(Intent.EXTRA_STREAM, fileUri);
                     sharingIntent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
