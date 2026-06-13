@@ -136,595 +136,584 @@
 - 状态：`进行中`
 - 优先级：`高`
 - 根问题：`FT-710 在 DATA-U 下仍无持续发射功率`
-## Latest Findings 2026-04-15
 
-- Disabled FT-710 auto mode switch: no change.
-- Released `AudioRecord` before TX: no change.
-- FT-710 TX path already tested with `48kHz / stereo / 16bit / MODE_STREAM`: still no RF output.
+## 最新发现 2026-04-15
 
-### Hard Evidence
+- 禁用 FT-710 的自动模式切换：无改善。
+- 在发射（TX）前释放 `AudioRecord`：无改善。
+- 采用 `48kHz / 立体声 / 16位 / MODE_STREAM` 测试 FT-710 发射链路：仍然没有射频（RF）输出。
 
-- Debug log now shows:
+### 确凿证据
+
+- 调试日志显示：
   - `partial write expected=1213456, actual=0, trackMode=1`
-- This means the current direct failure point is:
-  - `AudioTrack.write(...)` in stream mode returns `0`
-  - TX audio is not actually entering the playback pipeline
+- 这意味着当前直接的失败点是：
+  - 流模式下的 `AudioTrack.write(...)` 返回 `0`
+  - 发射音频未能真正进入播放管道
 
-### Player Comparison
+### 播放器对比
 
-- User verified:
-  - Before FT8CN connects, `DATA-U + manual PTT + music player` can produce audio on FT-710
-  - After FT8CN connects to the rig, music player output disappears
-  - Killing FT8CN is not enough to restore playback immediately
-  - Restarting the music player app restores audio
-- This strongly suggests FT8CN is disturbing the Android USB audio playback session after connecting to the FT-710 composite USB device.
+- 用户验证：
+  - 在 FT8CN 连接前，`DATA-U 模式 + 手动 PTT + 音乐播放器` 可以使 FT-710 输出声音。
+  - 在 FT8CN 连接电台后，音乐播放器的输出消失。
+  - 仅杀死 FT8CN 不足以立即恢复播放。
+  - 重启音乐播放器 App 可恢复声音。
+- 这强烈表明 FT8CN 在连接到 FT-710 复合 USB 设备后，干扰了 Android USB 音频播放会话。
 
-### Current Priorities
+### 当前优先级
 
-- Investigate why `AudioTrack.write(...)` returns `0` in the FT-710 stream path
-- Investigate whether serial connection to the FT-710 composite USB device disrupts the existing Android USB audio session
-- Keep the above as the top working hypotheses for the next debugging round
+- 调查为什么 `AudioTrack.write(...)` 在 FT-710 的 stream 路径中返回 `0`。
+- 调查连接到 FT-710 复合 USB 设备是否会扰乱现有的 Android USB 音频会话。
+- 将上述内容作为下一次调试的首要工作假设。
 
-## Serial-Link Hypothesis Update 2026-04-15
+## 串口链路假设更新 2026-04-15
 
-- The field symptom "music player loses audio immediately after FT8CN connects CAT" is now treated as a first-class clue, not a side effect.
-- This points more strongly to FT8CN disturbing the FT-710 composite USB device session, instead of only generating bad FT8 audio.
-- New code changes in this round:
-  - `CableSerialPort` now prefers exact `deviceId/productId` matching instead of only `vendorId`
-  - `CableSerialPort` now logs the selected USB device and all interface classes when connecting
-  - `CableSerialPort` now records audio route snapshots before and after serial open
-  - `CdcAcmSerialDriver` now tries `claimInterface(..., false)` first, and only falls back to forced claim if needed
-- Purpose of this round:
-  - reduce the chance that FT8CN forcibly disturbs FT-710 USB audio while opening CAT
-  - collect evidence on whether serial open itself changes Android USB audio routing
+- 现场表现出的“FT8CN 连接 CAT 后，外部音乐播放器立即失去声音”的现象，已被视作关键线索，而非常规副作用。
+- 这更强烈地指向 FT8CN 干扰了 FT-710 复合 USB 设备会话，而不仅是生成了错误的 FT8 音频。
+- 本轮的新增代码修改：
+  - `CableSerialPort` 现倾向于精确的 `deviceId/productId` 匹配，而非仅匹配 `vendorId`。
+  - `CableSerialPort` 现记录连接时选定的 USB 设备和所有接口类。
+  - `CableSerialPort` 现记录串口开启前后的音频路由快照。
+  - `CdcAcmSerialDriver` 现尝试首先使用 `claimInterface(..., false)`，仅在需要时回退到强制 claim。
+- 本轮目的：
+  - 减少 FT8CN 在打开 CAT 时强制干扰 FT-710 USB 音频的可能性。
+  - 收集关于串口开启本身是否会改变 Android USB 音频路由的证据。
 
-## Additional Log Clue 2026-04-16
+## 额外日志线索 2026-04-16
 
-- In the previously captured debug log, there is at least one TX attempt that starts normally and then drops about 1 second later.
-- Example timing from the screenshots:
-  - `15:46:15` TX start / `playFT8Signal`
+- 在之前捕获的调试日志中，至少有一次发射尝试是正常启动，然后在大约 1 秒后中断。
+- 截图中的具体时间：
+  - `15:46:15` 发射开始 / `playFT8Signal`
   - `15:46:16` `finishPlaybackOnce` / `afterPlayAudio release track` / `PTT OFF`
-- This is much shorter than a normal FT8 transmit window and should be treated as a key clue.
-- Interpretation:
-  - at least one failure mode is "TX playback chain ends early", not merely "audio keeps playing but RF stays at 0"
-  - this strongly supports investigating premature playback completion, early `PTT OFF`, or early USB audio session teardown
+- 这远短于标准的 15 秒 FT8发射窗口，应作为一个关键线索。
+- 解释：
+  - 至少有一种失败模式是“发射播放链路提前结束”，而不只是“音频一直在播放但射频一直为 0”。
+  - 这强烈支持去调查播放提前完成、提前 `PTT OFF`，或提前释放 USB 音频会话的原因。
 
-## USB Coexistence Breakthrough 2026-04-16
+## USB 共存突破 2026-04-16
 
-- User verified a diagnostic build where FT-710 CAT still opens, but the serial background read loop is not started.
-- In that build:
-  - the Android music player is no longer broken after FT8CN connects
-  - FT8 playback audio can be heard together with the music player audio
-  - this is the first change that clearly improves the USB audio coexistence symptom
-- Interpretation:
-  - the main interference source is very likely the FT-710 CAT serial background read loop
-  - `AudioTrack` alone is not sufficient to explain the playback breakage
-  - `AudioRecord` alone is also not sufficient to explain the playback breakage
-- Formalized direction for the next build:
-  - FT-710 should use a dedicated CAT branch
-  - disable serial background read loop for FT-710 over USB CAT
-  - disable inherited DX10 background CAT polling for FT-710
+- 用户在一个测试版本中进行了验证，该版本中 FT-710 CAT 串口仍然打开，但未启动串口后台读循环。
+- 在该版本中：
+  - FT8CN 连接后，Android 音乐播放器不再被破坏。
+  - 能够同时听到 FT8 发射音频和音乐播放器的音频。
+  - 这是首个明显改善 USB 音频共存状态的修改。
+- 解释：
+  - 主要干扰源极可能是 FT-710 CAT 串口的后台读取循环。
+  - 仅用 `AudioTrack` 无法完全解释播放中断的原因。
+  - 仅用 `AudioRecord` 也无法完全解释播放中断的原因。
+- 下一步正式版本的方向：
+  - FT-710 应当使用专用的 CAT 分支。
+  - 针对 FT-710 禁用 USB CAT 的串口后台读循环。
+  - 针对 FT-710 禁用继承自 DX10 的后台 CAT 轮询。
 
-## Current Thinking Snapshot 2026-04-16
+## 当前思路快照 2026-04-16
 
-- The USB coexistence issue and the `0` RF output issue should now be treated as two separate layers:
-  - layer 1: FT8CN must not break the Android music player or USB audio session after CAT connect
-  - layer 2: after layer 1 is stabilized, investigate why FT-710 still may not produce RF in `DATA-U`
-- Current evidence says layer 1 has improved substantially after disabling the FT-710 CAT read loop.
-- If a new build still has `0` RF while external audio playback remains healthy, the next suspect is no longer Android playback destruction, but FT-710 `DATA-U` transmit conditions on the radio side.
+- USB 共存问题与 `0` 射频输出问题目前应分为两个层次对待：
+  - 第一层：FT8CN 连接 CAT 后不能主动破坏 Android 音乐播放器或 USB 音频会话。
+  - 第二层：在第一层稳定后，调查为何 FT-710 在 `DATA-U` 模式下仍然没有射频输出。
+- 当前证据显示，在禁用 FT-710 CAT 读取循环后，第一层已经有了实质性的改善。
+- 如果新版本在外部音频播放保持健康的同时仍然表现为 `0` 射频，下一个怀疑点将不再是 Android 播放被毁，而是电台端的 `DATA-U` 发射条件。
 
-## Product Boundary Note 2026-04-16
+## 产品边界说明 2026-04-16
 
-- Opening FT8CN should not proactively pause or break an existing external music player.
-- Connecting FT8CN to FT-710 CAT should also not leave the player in a broken state that requires restarting the player app.
-- A future optional behavior may be acceptable:
-  - request audio focus only during actual TX
-  - optionally pause or duck external media only during TX
-- That future media-focus behavior is a product choice, not the root cause of the current FT-710 bug.
+- 打开 FT8CN 不应该主动暂停或破坏已有的外部音乐播放器。
+- 连接 FT8CN 到 FT-710 CAT 也不应该使播放器处于需要重启 App 才能恢复的损坏状态。
+- 未来采用以下策略是可接受的：
+  - 仅在实际发射期间请求音频焦点。
+  - 仅在实际发射期间主动暂停或降低外部媒体的音量。
+- 未来的媒体焦点策略是一个产品设计选择，并非当前 FT-710 故障的根本原因。
 
-## Next Work Items
+## 下一步工作项
 
-- Add a cleaner FT-710 TX trace focused on:
+- 针对以下内容增加更清晰的 FT-710 发射追踪：
   - `PTT ON/OFF`
-  - TX playback start/end timing
-  - route snapshots around TX
-  - FT-710 CAT write-only mode state
-- Create a minimal FT-710 TX path:
-  - no mode switching
-  - no CAT readback
-  - no meter polling
-  - only `PTT ON -> play audio -> PTT OFF`
-- Once the minimal TX path is verified stable, continue investigating FT-710 `DATA-U` side conditions:
+  - 发射播放的起止时间
+  - 发射前后的路由快照
+  - FT-710 CAT 只写模式状态
+- 创建极简的 FT-710 发射路径：
+  - 无模式切换
+  - 无 CAT 读取
+  - 无仪表盘轮询
+  - 仅执行 `PTT ON -> 播放音频 -> PTT OFF`
+- 一旦极简发射路径验证稳定，继续调查 FT-710 `DATA-U` 的附带条件：
   - `DATA MOD SELECT`
   - `USB AUDIO`
   - `DATA PTT SELECT`
-  - any radio-side prerequisite that differs from `RTTY-U`
+  - 与 `RTTY-U` 不同的任何电台端前提条件
 
-## Implementation Update 2026-04-16 (Today)
+## 落地进展更新 2026-04-16（当天）
 
-- Added clearer FT-710 TX lifecycle tracing in the actual transmit path:
-  - TX lifecycle begin
-  - playback start
-  - playback finished
-  - cleanup complete
-- Added FT-710 boundary logs around:
-  - `before-transmit-entry`
-  - `After PTT ON`
-  - `after-transmit-entry`
-  - `After PTT OFF`
-- Added extra FT-710 route snapshots around TX playback:
-  - `FT710 TX stream started`
-  - `FT710 before PTT tail hold`
-  - `FT710 after TX cleanup`
-- Added a small FT-710-only PTT tail hold after playback completes and before `PTT OFF`:
-  - current value: `250ms`
-  - purpose: reduce the chance that the last part of TX audio is cut off too early
+- 在实际发射路径中增加了更清晰的 FT-710 发射生命周期追踪：
+  - 发射生命周期开始
+  - 播放开始
+  - 播放结束
+  - 清理完成
+- 在以下节点增加了 FT-710 的边界日志：
+  - `before-transmit-entry`（发射前入口）
+  - `After PTT ON`（PTT 开启后）
+  - `after-transmit-entry`（发射后入口）
+  - `After PTT OFF`（PTT 关闭后）
+- 在发射播放前后增加了额外的 FT-710 路由快照：
+  - `FT710 TX stream started`（FT710 发射流已启动）
+  - `FT710 before PTT tail hold`（FT710 在 PTT 尾部保持前）
+  - `FT710 after TX cleanup`（FT710 在发射清理后）
+- 在音频播放结束后、`PTT OFF` 之前，增加了一个微小的 FT-710 专属 PTT 尾部保持时间：
+  - 当前设定值：`250ms`
+  - 目的：降低 FT8 信号末尾被过早切掉的概率。
 
-## What To Look For In The Next Field Test
+## 下一次现场测试的关注点
 
-- Whether FT-710 still keeps the external player healthy after CAT connect
-- Whether `DATA-U` still has `0` RF output even when FT8 playback clearly starts
-- Whether the new logs show:
-  - TX playback lasting normally
-  - `After PTT ON` route still on USB headset
-  - `After PTT OFF` route remaining stable
-  - any clear transition point where `DATA-U` stops accepting modulation
+- 连接 CAT 后，FT-710 是否仍能保持外部播放器处于健康状态。
+- 当 FT8 播放明显开始时，`DATA-U` 是否仍然为 `0` 射频输出。
+- 新日志是否显示：
+  - 发射播放时长正常
+  - `After PTT ON` 路由仍然在 USB 头戴式耳机上
+  - `After PTT OFF` 路由保持稳定
+  - 导致 `DATA-U` 拒绝调制的任何明确过渡节点。
 
-## Source Cleanup Note
+## 源码清理说明
 
-- Some source files were found to contain garbled Chinese comments introduced by an earlier commit.
-- Known example:
+- 发现部分源文件包含由于早期提交引入的乱码中文注释。
+- 已知实例：
   - `ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java`
-  - visible corrupted text like `?????????`
-- This is not considered the current FT-710 root cause, but it should be repaired later from git history so the original Chinese comments can be restored accurately.
+  - 出现可见的乱码文本，如 `?????????`。
+- 这不是当前 FT-710 故障的根源，但后续应从 git 历史记录中修复，以准确还原原始的中文注释。
 
-## Log Interpretation 2026-04-16 (Latest Test)
+## 日志解读 2026-04-16（最新测试）
 
-- Current screenshots show a much healthier Android-side TX path:
-  - USB route remains `USB_HEADSET` before serial open, after serial open, and at TX start
-  - track binding reports `bind=true`
-  - FT8 stream write completes almost fully:
+- 当前截图显示 Android 端的发射路径健康得多：
+  - 在串口打开前、打开后以及发射开始时，USB 路由均维持在 `USB_HEADSET`。
+  - 音频轨道绑定汇报为 `bind=true`。
+  - FT8 音频流的写入几乎完全结束：
     - `writtenFrames=606728`
     - `actualDurationMs=12640`
     - `elapsedMs=12002`
     - `remainingMs=638`
-- Interpretation:
-  - Android audio routing is no longer the primary failure point
-  - FT8CN is now successfully pushing a full TX audio stream toward the USB audio path
-  - the remaining `0` RF problem is increasingly likely to be on the FT-710 `DATA-U` acceptance side
+- 解释：
+  - Android 音频路由不再是首要故障点。
+  - FT8CN 现在能够成功将完整的发射音频流推向 USB 音频路径。
+  - 剩下的 `0` 射频问题越来越有可能是 FT-710 端的 `DATA-U` 接收问题。
 
-## Targeted Change After Latest Test
+## 最新测试后的针对性修改
 
-- Added FT-710-only USB audio padding around the actual FT8 tones:
-  - `250ms` silent pre-roll
-  - `250ms` silent post-roll
-- Purpose:
-  - let FT-710 see a stable USB audio stream before the FT8 tones begin
-  - reduce the chance that `DATA-U` ignores modulation because the stream starts too abruptly
+- 在真实的 FT8 信号音前后，增加了 FT-710 专属的 USB 音频静音填充：
+  - 前置静音填充：`250ms`
+  - 后置静音填充：`250ms`
+- 目的：
+  - 让 FT-710 在 FT8 音频开始前看到一个稳定的 USB 音频流。
+  - 降低由于音频流开始过于突兀而导致 `DATA-U` 忽略调制的概率。
 
-## Confirmed Success 2026-04-16
+## 确认解决 2026-04-16
 
-- User confirmed that `DATA-U` now produces RF power output.
-- Important nuance:
-  - the previous build already produced RF output in `DATA-U`
-  - this newer build with USB audio padding also produces RF output
-- Therefore the currently proven effective baseline is more likely:
-  - FT-710 CAT write-only mode
-  - no serial background read loop
-  - no inherited DX10 CAT polling
-  - stable local USB audio playback path
-- The newly added `250ms` pre-roll / `250ms` post-roll padding is not yet proven to be the decisive fix by itself.
+- 用户确认 `DATA-U` 现已能产生射频功率输出。
+- 重要细微差别：
+  - 之前的版本在 `DATA-U` 中就已经产生了射频输出。
+  - 新加入 USB 音频静音填充的版本同样能产生射频输出。
+- Therefore, 目前证实的有效基线更有可能是：
+  - FT-710 采用 CAT 只写模式。
+  - 禁用串口后台读循环。
+  - 禁用继承自 DX10 的后台 CAT 轮询。
+  - 稳定本地 USB 音频播放路径。
+- 新加入的 `250ms` 前置/后置静音填充本身尚未被证实是起到决定性作用的修复。
 
-## Latest Log Reading (Successful TX)
+## 最新日志阅读（发射成功）
 
-- The successful log still shows:
+- 成功的日志依然显示：
   - `bind=true`
-  - USB route stays on `USB_HEADSET`
-  - stream write completes almost fully
-  - full TX duration is now slightly longer because padding is included
-- This supports the conclusion that the Android-side TX chain is now healthy enough for FT-710 `DATA-U` to accept modulation.
+  - USB 路由保持在 `USB_HEADSET`。
+  - 音频流写入几乎完全完成。
+  - 由于包含了静音填充，整个发射持续时间略微延长。
+- 这支持了以下结论：Android 端的发射链条目前已足够健康，能够使 FT-710 的 `DATA-U` 接收调制。
 
-## Next Recommended Work
+## 下一步推荐工作
 
-- Freeze the current FT-710 working branch as the new known-good baseline.
-- Do one careful A/B cleanup pass later:
-  - keep the FT-710 minimal USB TX architecture
-  - evaluate whether USB padding is actually needed
-  - remove only changes that are confirmed unnecessary
-- After that, shift focus from “can it transmit” to:
-  - stability across repeated TX/RX cycles
-  - receive recovery after TX
-  - whether debug-only traces should become optional or be reduced
+- 将当前的 FT-710 工作分支冻结为新的已知良好基线。
+- 稍后进行一次细致的 A/B 清理对比：
+  - 保留 FT-710 极简 USB 发射架构。
+  - 评估是否真的需要 USB 填充。
+  - 仅移除确认没有必要的修改。
+- 之后，将重点从“能否发射”转移到：
+  - 连续发射/接收循环的稳定性。
+  - 发射后的接收恢复情况。
+  - 是否应当减少或将仅调试日志设为可选。
 
-## Latest Checkpoint 2026-04-17
+## 最新检查点 2026-04-17
 
-### Safe Commit Baseline
+### 安全提交基线
 
-- Safe checkpoint commit created:
+- 创建了安全检查点提交：
   - `73ae96f Stabilize FT-710 USB TX path and debug cleanup`
-- Branch:
+- 分支：
   - `Feature/FT710Support`
-- Purpose:
-  - preserve the currently working FT-710 USB TX path before touching CQ state-machine behavior
+- 目的：
+  - 在修改 CQ 状态机行为前，保留当前可正常工作的 FT-710 USB 发射路径。
 
-### Updated Current Conclusion
+### 更新后的当前结论
 
-- FT-710 `DATA-U` transmit is now considered basically repaired at the USB/CAT/audio boundary level.
-- The most credible working repair chain is:
-  - FT-710 dedicated rig branch
-  - FT-710 CAT write-only mode
-  - no USB serial background read loop
-  - no inherited DX10 polling behavior
-  - stable local USB audio playback path
-  - recorder pause/resume around TX
-- Remaining concern has shifted from “no RF output” to “post-QSO or CQ activation behavior may not match expectation”.
+- 认为在 USB/CAT/音频边界层面上，FT-710 `DATA-U` 的发射问题已基本修复。
+- 最可信的有效修复链条为：
+  - FT-710 专属电台分支。
+  - FT-710 CAT 只写模式。
+  - 禁用 USB 串口后台读循环。
+  - 禁用继承自 DX10 的轮询行为。
+  - 稳定本地 USB 音频播放路径。
+  - 发射前后暂停/恢复录音。
+- 剩余的担忧已从“无射频输出”转移到“QSO 完成后或 CQ 激活行为可能不符合预期”。
 
-### Important Timing Distinction
+### 重要的时间概念区分
 
-- The FT-710 TX tail-hold is not the same thing as the user-configurable `PTT delay`.
-- Current timing concepts:
-  - `transmitDelay`
-    - cycle scheduling offset
-  - `pttDelay`
-    - wait after `PTT ON` before audio starts
-  - FT-710 TX tail-hold
-    - wait after audio ends before `PTT OFF`
-- Therefore:
-  - adjusting settings-page `PTT delay` does not change the FT-710 TX tail-hold behavior
+- FT-710 的发射尾部保持（tail-hold）与用户可配的 `PTT 延迟`（PTT delay）并不等同。
+- 当前的时间概念：
+  - `transmitDelay`（发射延迟）：周期调度的偏移量。
+  - `pttDelay`（PTT 延迟）：开启 PTT 后到音频播放前的等待时间。
+  - FT-710 发射尾部保持：音频播放结束后到关闭 PTT 前的等待时间。
+- 因此：
+  - 调整设置页面的 `PTT 延迟` 不会改变 FT-710 发射尾部保持的行为。
 
-### New Behavior Risk To Evaluate
+### 需要评估的新行为风险
 
-- A new observation needs careful comparison with non-FT710 behavior:
-  - after the TX path became stable, the app may stay in activated `CQ` mode and continue transmitting `CQ`
-  - user screenshot characteristics:
-    - target callsign is `CQ`
-    - function order is `6`
-    - TX message is `CQ <MYCALL> <GRID>`
-- Current interpretation:
-  - this does not yet prove an FT-710-only bug
-  - this may be inherited shared behavior from the common transmit state machine
-  - the main logic is in `FT8TransmitSignal.parseMessageToFunction(...)` and `resetToCQ()`
+- 需要将一个新观察与非 FT-710 行为进行仔细对比：
+  - 在发射路径稳定后，应用可能会保持在已激活的 `CQ` 模式并持续发射 `CQ`。
+  - 用户截图特征：
+    - 目标呼号为 `CQ`
+    - 功能序列为 `6`
+    - 发射内容为 `CQ <呼号> <网格>`
+- 当前解读：
+  - 这尚未被证实是 FT-710 专属的 Bug。
+  - 这可能是从通用发射状态机中继承下来的共享行为。
+  - 核心逻辑位于 `FT8TransmitSignal.parseMessageToFunction(...)` 和 `resetToCQ()`。
 
-### Decision For The Next Round
+### 下一阶段的决策
 
-- Do not modify CQ auto-return logic blindly in the FT-710 branch.
-- First compare the current CQ/state-machine behavior with non-FT710 rigs.
-- Only after that comparison decide whether to:
-  - keep current behavior
-  - clear activation when the state machine automatically returns to `CQ`
-  - separate manual `resetToCQ()` behavior from automatic state-machine `resetToCQ()` behavior
+- 不要盲目修改 FT-710 分支中的 CQ 自动重置逻辑。
+- 首先将当前的 CQ/状态机行为与非 FT-710 电台进行对比。
+- 仅在对比后，决定是：
+  - 保留当前行为。
+  - 当状态机自动回到 `CQ` 时清除激活状态。
+  - 将手动的 `resetToCQ()` 行为与状态机自动的 `resetToCQ()` 行为区分开。
 
-### Immediate Next Actions
+### 紧接工作项
 
-- Treat `73ae96f` as the new rollback-safe baseline.
-- Review shared CQ behavior in common transmit logic before making any functional change.
-- Keep the FT-710 USB TX path frozen while evaluating CQ/state behavior.
+- 将 `73ae96f` 视作新的回滚安全基线。
+- 在对通用发射逻辑做任何功能性改动前，先审视共享的 CQ 行为。
+- 在评估 CQ/状态机行为的同时，保持 FT-710 USB 发射路径冻结。
 
-## Current Repair Thinking 2026-04-17
+## 当前修复思路 2026-04-17
 
-### Reclassification Of Existing Changes
+### 对现有修改重新归类
 
-- After comparing the working branch against `main`, the FT-710 changes should now be split into three buckets:
-  - likely true fixes
-  - usability / stability improvements
-  - uncertain or optional changes
-- This matters because the branch already contains many experiments, and future cleanup should protect the real fix path first.
+- 在对比工作分支与 `main` 分支后，FT-710 的改动现应划分为三个部分：
+  - 极有可能是真正的修复。
+  - 易用性/稳定性改进。
+  - 不确定或可选的修改。
+- 这一点很重要，因为该分支已经包含了许多尝试性改动，后续的清理应首先保护好真正的修复路径。
 
-### Likely True Fixes
+### 极有可能是真正的修复
 
-- Add a dedicated FT-710 rig branch:
+- 增加专用的 FT-710 电台分支：
   - `InstructionSet.YAESU_FT710`
   - `YaesuFT710Rig`
-  - FT-710 entry in `rigaddress.txt`
-- Stop FT-710 from inheriting DX10 background CAT polling behavior.
-- Stop the FT-710 USB CAT background read loop and keep CAT on a write-heavy path.
-- Stop aggressively forcing rig mode rewrites during FT-710 USB TX preparation.
-- These are the changes that best match the observed turning point:
-  - FT8CN no longer breaks the external music player after CAT connect
-  - `DATA-U` TX becomes able to produce RF
+  - `rigaddress.txt` 中的 FT-710 条目
+- 阻止 FT-710 继承 DX10 的后台 CAT 轮询行为。
+- 停止 FT-710 USB CAT 后台读循环，让 CAT 保持在只写路径上。
+- 停止在 FT-710 USB 发射准备期间强行重写电台模式。
+- 这些修改最契合观察到的转折点：
+  - 连接 CAT 后，FT8CN 不再破坏外部音乐播放器。
+  - `DATA-U` 发射能够产生射频功率。
 
-### Usability / Stability Improvements
+### 易用性/稳定性改进
 
-- Pause recorder around TX and resume after TX
-- `MicRecorder` reinitialization hardening
-- richer route / TX lifecycle debug logging
-- debug switch gating
-- FT-710 default `CAT` selection in config
-- TX/RX button state refresh work
-- These are useful and should likely remain, but they do not currently look like the decisive root fix.
+- 发射前后暂停和恢复录音。
+- `MicRecorder` 重新初始化健壮性提升。
+- 更丰富的路由/发射生命周期调试日志。
+- 调试模式开关。
+- 配置中 FT-710 默认选择 `CAT`。
+- 发射/接收按钮状态刷新工作。
+- 这些都是有用的改动，应当予以保留，但它们目前看起来不像起决定性作用的根本修复。
 
-### Uncertain / Optional Changes
+### 不确定/可选的修改
 
-- FT-710 USB pre-roll / post-roll padding
-- FT-710 tail-hold timing
-- `AudioRouteHelper.bindTrackToPreferredOutput(...)`
-- exact USB `deviceId/productId` matching
-- safer `claimInterface` fallback in `CdcAcmSerialDriver`
-- FT-710 local playback parameter tweaks in `FT8TransmitSignal`
-- These changes should be treated as A/B candidates rather than assumed necessities.
+- FT-710 USB 前置/后置静音填充。
+- FT-710 尾部保持时间。
+- `AudioRouteHelper.bindTrackToPreferredOutput(...)`。
+- 精确的 USB `deviceId/productId` 匹配。
+- `CdcAcmSerialDriver` 中更安全的 `claimInterface` 回退机制。
+- `FT8TransmitSignal` 中针对 FT-710 本地播放参数的微调。
+- 这些改动应当被视作 A/B 候选方案，而非假定的必然需求。
 
-### Working Principle For The Next Round
+### 下一步工作原则
 
-- Freeze the currently working FT-710 minimal path.
-- Prefer subtraction over new additions.
-- Change only one uncertain variable at a time.
-- Keep CQ behavior review separate unless a direct FT-710 coupling is proven.
+- 冻结当前已验证正常的 FT-710 极简路径。
+- 宁做减法，不做加法。
+- 每次仅改动一个不确定的变量。
+- 保持对 CQ 行为的独立评审，除非证实其与 FT-710 有直接耦合。
 
-## Subtraction Validation Checklist 2026-04-17
+## 减法验证清单 2026-04-17
 
-### Verification Snapshot 2026-04-19
+### 验证快照 2026-04-19
 
-- Already verified as normal after rollback:
+- 回滚后已验证正常的项目：
   - `TX_AUDIO_FOCUS_SETTLE_MS = 0`
   - `FT710_USB_AUDIO_PREROLL_MS = 0`
   - `FT710_USB_AUDIO_POSTROLL_MS = 0`
   - `FT710_TX_TAIL_HOLD_MS = 0`
-  - FT-710 transmit path without `bindTrackToPreferredOutput(...)`
-  - rollback of exact `deviceId/productId` matching in `CableSerialPort`
-  - rollback of the non-forced-first `claimInterfaceSafely(...)` strategy in `CdcAcmSerialDriver`
-  - FT-710 local playback parameters rolled back to near-`main` behavior:
-    - sample rate follows `GeneralVariables.audioSampleRate`
-    - output bit depth follows `GeneralVariables.audioOutput32Bit`
-    - `trackMode = MODE_STATIC`
-    - mono `float2Short(...)` path
-- Meaning of the current results:
-  - the FT-710 repair does not currently look dependent on the added timing compensations
-  - the FT-710 repair also does not currently look dependent on explicit preferred-output binding
-  - the FT-710 repair also does not currently look dependent on exact `deviceId/productId` matching
-  - the FT-710 repair also does not currently look dependent on the safer non-forced-first CDC ACM claim strategy
-  - the FT-710 repair also does not currently look dependent on the previously added FT-710-specific local playback parameter bundle
-- Remaining likely core path after subtraction:
-  - dedicated FT-710 rig branch
-  - no inherited DX10 background polling
-  - FT-710 CAT write-only / no serial read loop
-  - preserve radio mode instead of forcing rewrite
-- Next queued A-B item if subtraction continues:
-  - only the remaining high-confidence core path is left, so any further subtraction is now high-risk
+  - 无 `bindTrackToPreferredOutput(...)` 的 FT-710 发射路径。
+  - 回滚 `CableSerialPort` 中精确的 `deviceId/productId` 匹配。
+  - 回滚 `CdcAcmSerialDriver` 中非强制优先的 `claimInterfaceSafely(...)` 策略。
+  - 回滚 FT-710 本地播放参数至接近 `main` 的行为：
+    - 采样率遵循 `GeneralVariables.audioSampleRate`。
+    - 输出位深遵循 `GeneralVariables.audioOutput32Bit`。
+    - `trackMode = MODE_STATIC`。
+    - 单声道 `float2Short(...)` 路径。
+- 当前结果的含义：
+  - FT-710 的修复目前看来不依赖新增的延迟补偿。
+  - FT-710 的修复目前看来也不依赖显式的首选输出绑定。
+  - FT-710 的修复目前看来也不依赖精确的 `deviceId/productId` 匹配。
+  - FT-710 的修复目前看来也不依赖 CDC ACM 接口的非强制优先 claim 策略。
+  - FT-710 的修复目前看来也不依赖之前新增的针对 FT-710 的本地播放参数组合。
+- 减法后剩下的高置信度核心路径：
+  - 专用的 FT-710 电台分支。
+  - 不继承 DX10 的后台轮询。
+  - FT-710 CAT 只写 / 禁用串口读循环。
+  - 保留电台当前模式，不强制重写。
+- 若继续做减法，下一步候选风险极高：
+  - 因为只剩下了高置信度的核心路径。
 
-### Live Handoff Snapshot
+### 现场交接快照
 
-- Last confirmed normal result:
-  - rollback of FT-710 local playback parameter bundle to near-`main` behavior
-- Current APK already verified in field test:
+- 最后一个确认正常的测试结果：
+  - 回滚 FT-710 本地播放参数至接近 `main` 分支的行为。
+- 已经在现场测试中验证过的当前 APK：
   - `app-debug.apk`
-  - build timestamp: `2026-04-19 22:19:46`
-- Current code state under test:
+  - 构建时间戳：`2026-04-19 22:19:46`
+- 处于验证中的当前代码状态：
   - `FT710_TX_TAIL_HOLD_MS = 0`
   - `TX_AUDIO_FOCUS_SETTLE_MS = 0`
   - `FT710_USB_AUDIO_PREROLL_MS = 0`
   - `FT710_USB_AUDIO_POSTROLL_MS = 0`
-  - sample rate follows `GeneralVariables.audioSampleRate`
-  - output bit depth follows `GeneralVariables.audioOutput32Bit`
-  - `trackMode = MODE_STATIC`
-  - FT-710 local PCM path changed from stereo duplication back to mono `float2Short(...)`
-  - FT-710 path still skips `bindTrackToPreferredOutput(...)`
-  - `CableSerialPort` is currently on relaxed vendor-only matching
-  - `CdcAcmSerialDriver` is currently on forced `claimInterface(..., true)`
-- Next expected step:
-  - decide whether to stop subtraction and start cleanup / consolidation
+  - 采样率遵循 `GeneralVariables.audioSampleRate`。
+  - 输出位深遵循 `GeneralVariables.audioOutput32Bit`。
+  - `trackMode = MODE_STATIC`。
+  - FT-710 本地 PCM 路径由立体声复制改回单声道 `float2Short(...)`。
+  - FT-710 路径依然跳过 `bindTrackToPreferredOutput(...)`。
+  - `CableSerialPort` 目前使用宽松的 vendor 匹配。
+  - `CdcAcmSerialDriver` 目前处于强制 `claimInterface(..., true)`。
+- 下一步预期：
+  - 决定是否停止做减法，并开始进行收尾与整合。
 
-### Highest Priority A-B Rollback Items
+### 优先级最高的 A/B 回滚项
 
 - `TX_AUDIO_FOCUS_SETTLE_MS`
-  - code:
-    - [FT8TransmitSignal.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java#L47)
-    - [FT8TransmitSignal.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java#L605)
-  - reason:
-    - compared with `main`, this is a newly introduced timing delay and should be validated before FT-710-specific timing compensations
+  - 代码位置：
+    - [FT8TransmitSignal.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java#L47)
+    - [FT8TransmitSignal.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java#L605)
+  - 理由：与 `main` 相比，这是新引入的延迟，应当在其他 FT-710 特有延迟补偿之前完成验证。
 
-- FT-710 USB pre-roll
-  - code:
-    - [FT8TransmitSignal.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java#L48)
-    - [FT8TransmitSignal.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java#L471)
-  - reason:
-    - among FT-710-only timing additions, this is the one most likely to push the effective FT8 symbol start later inside the 15-second slot
+- FT-710 USB 前置静音填充
+  - 代码位置：
+    - [FT8TransmitSignal.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java#L48)
+    - [FT8TransmitSignal.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java#L471)
+  - 理由：在 FT-710 特有的时间改动中，这一项最有可能将 FT8 的实际起发时刻推迟到 15 秒时隙内较晚的位置。
 
-- FT-710 USB post-roll
-  - code:
-    - [FT8TransmitSignal.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java#L49)
-    - [FT8TransmitSignal.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java#L472)
-  - reason:
-    - it extends occupied TX time and compresses the return-to-RX margin, but is less risky to symbol start timing than pre-roll
+- FT-710 USB 后置静音填充
+  - 代码位置：
+    - [FT8TransmitSignal.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java#L49)
+    - [FT8TransmitSignal.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java#L472)
+  - 理由：这延长了发射时间占用的时段，缩减了切回接收的余量，但对起发时刻的影响风险小于前置静音。
 
-- FT-710 TX tail-hold
-  - code:
-    - [FT8TransmitSignal.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java#L46)
-    - [FT8TransmitSignal.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java#L133)
-  - reason:
-    - still worth A-B rollback, but it happens after audio playback and is less likely than pre-roll to disturb FT8 slot discipline
+- FT-710 发射尾部保持
+  - 代码位置：
+    - [FT8TransmitSignal.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java#L46)
+    - [FT8TransmitSignal.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java#L133)
+  - 理由：仍值得做 A/B 回滚，但其发生在音频播放结束之后，对时隙规范的干扰概率小于前置静音填充。
 
 - `AudioRouteHelper.bindTrackToPreferredOutput(...)`
-  - code:
-    - [AudioRouteHelper.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/audio/AudioRouteHelper.java#L41)
-    - [FT8TransmitSignal.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java#L769)
-  - reason:
-    - useful routing reinforcement, but the main repair turning point looks serial-side
+  - 代码位置：
+    - [AudioRouteHelper.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/audio/AudioRouteHelper.java#L41)
+    - [FT8TransmitSignal.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/ft8transmit/FT8TransmitSignal.java#L769)
+  - 理由：是有用的路由加固手段，但核心的修复转折点仍然是在串口侧。
 
-### Second-Tier A-B Rollback Items
+### 第二梯队 A/B 回滚项
 
-- exact `deviceId/productId` matching
-  - code:
-    - [CableSerialPort.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/connector/CableSerialPort.java#L56)
-    - [CableSerialPort.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/connector/CableSerialPort.java#L107)
-    - [CableSerialPort.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/connector/CableSerialPort.java#L110)
-  - reason:
-    - strong robustness logic, but not yet proven as a decisive repair
+- 精确的 `deviceId/productId` 匹配
+  - 代码位置：
+    - [CableSerialPort.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/connector/CableSerialPort.java#L56)
+    - [CableSerialPort.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/connector/CableSerialPort.java#L107)
+  - 理由：高健壮性逻辑，但目前尚未证明是起到决定性作用的修复。
 
-- safer `claimInterface` fallback
-  - code:
-    - [CdcAcmSerialDriver.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/serialport/CdcAcmSerialDriver.java#L108)
-  - reason:
-    - may matter for composite USB coexistence, but should be tested after the lower-risk items
+- 更安全的 `claimInterface` 回退
+  - 代码位置：
+    - [CdcAcmSerialDriver.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/serialport/CdcAcmSerialDriver.java#L108)
+  - 理由：可能对复合 USB 共存有影响，但应当放在风险较低的项之后进行验证。
 
-### Later Candidate
+### 较后的候选
 
-- FT-710 local playback parameter tweaks
-  - code:
-    - [FT8TransmitSignal.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/ft8transmit/FT8TransmitSignal.java)
-  - reason:
-    - historical evidence says format-only changes were mostly ineffective
+- FT-710 本地播放参数微调
+  - 代码位置：
+    - [FT8TransmitSignal.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/ft8transmit/FT8TransmitSignal.java)
+  - 理由：历史证据表明纯音频格式层面的修改大部分是无效的。
 
-### Do Not Roll Back First
+### 绝不要首先回滚的项
 
-- FT-710 dedicated rig branch
-  - [YaesuFT710Rig.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/rigs/YaesuFT710Rig.java)
-- disable inherited DX10 polling
-  - [YaesuDX10Rig.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/rigs/YaesuDX10Rig.java#L29)
-  - [YaesuFT710Rig.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/rigs/YaesuFT710Rig.java#L14)
-- FT-710 CAT write-only / no serial read loop
-  - [CableSerialPort.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/connector/CableSerialPort.java#L161)
-  - [CableSerialPort.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/connector/CableSerialPort.java#L286)
-- preserve radio mode instead of forcing rewrite
-  - [YaesuFT710Rig.java](/d:/Workshop/FT8CN/ft8cn/app/src/main/java/com/bg7yoz/ft8cn/rigs/YaesuFT710Rig.java#L19)
-- These are currently the strongest candidates for the real FT-710 repair chain.
+- 专用的 FT-710 电台分支
+  - [YaesuFT710Rig.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/rigs/YaesuFT710Rig.java)
+- 阻止继承 DX10 的后台轮询
+  - [YaesuDX10Rig.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/rigs/YaesuDX10Rig.java#L29)
+  - [YaesuFT710Rig.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/rigs/YaesuFT710Rig.java#L14)
+- FT-710 CAT 只写 / 禁用串口读循环
+  - [CableSerialPort.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/connector/CableSerialPort.java#L161)
+  - [CableSerialPort.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/connector/CableSerialPort.java#L286)
+- 保留电台当前模式，不强制重写
+  - [YaesuFT710Rig.java](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/ft8cn/rigs/YaesuFT710Rig.java#L19)
+- 这些目前是 FT-710 修复链路中置信度最高的核心改动候选。
 
-### Deferred At The End Of Current A-B Work
+### 在当前 A/B 工作结束时延后的事项
 
-- Revisit the user's observation that recent builds still "feel a bit off" in timing.
-- Scope of that later review:
-  - compare subjective TX/RX timing feel against `main`
-  - separately verify whether clock-sync / UTC offset behavior is actually different from `main`
-- Current interim judgment:
-  - `UtcTimer.syncTime(...)` itself is unchanged versus `main`
-  - the transmit execution path is not strictly identical to `main`
-- Priority:
-  - keep this item at the tail of the current to-do list
-  - do not interrupt the ongoing A-B rollback convergence for it
+- 重新审视用户关于最近的版本在时序上仍然“感觉有点不对劲”的观察。
+- 稍后评审的范围：
+  - 将主观的发射/接收时序体感与 `main` 分支进行对比。
+  - 独立验证对时/时间差（UTC 偏移量）行为是否确实与 `main` 分支存在差异。
+- 目前的临时研判：
+  - `UtcTimer.syncTime(...)` 相比 `main` 并没有发生变化。
+  - 发射执行路径与 `main` 并非完全相同。
+- 优先级：
+  - 放在当前待办事项的末尾。
+  - 不要为此中断当前正处于收敛中的 A/B 回滚。
 
-## Minimal Core Fix A-B Plan 2026-04-19
+## 极简核心修复 A/B 计划 2026-04-19
 
-### Goal
+### 目标
 
-- After the previous subtraction work, most FT-710 timing / local playback experiments have already been proven removable.
-- The next step is to verify the remaining likely core fixes one at a time instead of adding more new logic.
+- 经过前期的减法验证，大部分针对 FT-710 时序/本地播放的实验性改动已被证实可以移除。
+- 下一步是对剩下可能的核心修复逐一验证，而不是加入更多的新逻辑。
 
-### Remaining Core Candidates
+### 剩下的核心候选
 
-- dedicated `YaesuFT710Rig`
-- no inherited DX10 background polling
-- FT-710 CAT write-only / no serial read loop
-- preserve current rig mode instead of forcing rewrite
+- 专用的 `YaesuFT710Rig`。
+- 阻止继承 DX10 的后台轮询。
+- FT-710 CAT 只写 / 禁用串口读循环。
+- 保留电台当前模式，不强制重写。
 
-### Unified Field Checklist
+### 统一的现场验证清单
 
-- CAT connect must not break the music player
-- `DATA-U` must still produce RF power during FT8 TX
-- no unintended `RTTY-U` switch
-- no headset icon loss / USB audio collapse
-- TX must return to RX normally
+- CAT 连接不得破坏外部音乐播放器。
+- FT8 发射时 `DATA-U` 模式必须能正常产生射频功率输出。
+- 不得出现异常切换至 `RTTY-U` 的现象。
+- 头戴式耳机图标不得丢失 / USB 音频不得崩溃。
+- 发射后必须能正常返回接收状态。
 
-### Planned Order
+### 计划中的顺序
 
-- Round A:
-  - only restore FT-710 serial read loop in `CableSerialPort`
-- Round B:
-  - if needed, restore FT-710 background polling
-- Round C:
-  - if needed, restore FT-710 mode rewrite behavior
-- Round D:
-  - only as a last resort, compare against a DX10-like rig path
+- Round A：
+  - 仅恢复 `CableSerialPort` 中 FT-710 的串口读循环。
+- Round B：
+  - 如有必要，恢复 FT-710 的后台轮询。
+- Round C：
+  - 如有必要，恢复 FT-710 的 USB 模式重写行为。
+- Round D：
+  - 仅作为最后手段，与类似 DX10 的电台路径进行对比。
 
-### Round A Status
+### Round A 状态
 
-- completed
-- single-variable scope:
-  - `CableSerialPort` only
-- specific rollback:
-  - let `usbIoManager.start()` run again even for FT-710
-- frozen items during Round A:
-  - dedicated FT-710 rig branch
-  - no DX10 polling inheritance
-  - preserve current mode behavior
+- 已完成。
+- 单变量控制：
+  - 仅限 `CableSerialPort`。
+- 具体回滚：
+  - 让 `usbIoManager.start()` 对 FT-710 重新生效。
+- Round A 期间冻结的项目：
+  - 专用的 FT-710 电台分支。
+  - 阻止继承 DX10 轮询。
+  - 保留当前模式行为。
 
-### Round A Result
+### Round A 结果
 
-- User verification:
-  - problem reproduced again
-  - after TX starts, there is still no audio / no RF power output
-- Current interpretation:
-  - re-enabling the FT-710 serial read loop is now a high-confidence regression trigger
-  - this strongly supports treating `FT-710 CAT write-only / no serial read loop` as a true core fix rather than an optional workaround
-- Immediate action:
-  - restore the no-read-loop baseline before continuing with the next core-path comparison
+- 用户验证：
+  - 问题重新复现。
+  - 发射开始后，依旧无声音 / 无射频功率输出。
+- 当前解读：
+  - 重新启用 FT-710 串口读循环已经被证实是高置信度的回归诱因。
+  - 这强烈支持将“FT-710 CAT 只写 / 禁用串口读循环”视作核心修复，而非可选的权宜之计。
+- 紧接行动：
+  - 在继续进行下一项核心路径对比前，恢复禁用读循环的基线配置。
 
-### Round B Status
+### Round B 状态
 
-- completed
-- single-variable scope:
-  - `YaesuFT710Rig` only
-- specific rollback:
-  - restore DX10-like background CAT polling for FT-710
-- frozen items during Round B:
-  - FT-710 serial read loop remains disabled
-  - dedicated FT-710 rig branch remains
-  - preserve current mode behavior remains
+- 已完成。
+- 单变量控制：
+  - 仅限 `YaesuFT710Rig`。
+- 具体回滚：
+  - 恢复对 FT-710 类似 DX10 的后台 CAT 轮询。
+- Round B 期间冻结的项目：
+  - FT-710 串口读循环保持禁用。
+  - 专用的 FT-710 电台分支保持。
+  - 保留当前模式行为保持。
 
-### Round B Result
+### Round B 结果
 
-- User verification:
-  - RF power output is normal
-  - music player remains healthy
-  - headset icon / USB audio state remains stable
-  - no serial disconnect / TX stuck / mode anomaly observed
-- Current interpretation:
-  - re-enabling FT-710 background polling alone does not immediately bring back the `0` power symptom
-  - this makes `background polling disabled` look less likely to be the single decisive fix
-- Interim conclusion:
-  - `FT-710 CAT write-only / no serial read loop` remains the strongest confirmed core fix candidate
-  - `no inherited DX10 background polling` now looks more like a secondary safeguard or optional preference than a strict minimum requirement
+- 用户验证：
+  - 射频功率输出正常。
+  - 外部音乐播放器保持健康。
+  - 头戴式耳机图标 / USB 音频状态维持稳定。
+  - 未观察到串口断连 / 发射卡死 / 模式异常。
+- 当前解读：
+  - 仅重新启用对 FT-710 的后台轮询并不会立刻引发 `0` 功率症状。
+  - 这使得“禁用后台轮询”看起来不像是单一的决定性修复。
+- 阶段性结论：
+  - “FT-710 CAT 只写 / 禁用串口读循环”依然是经过证实的最强核心修复候选。
+  - “阻止继承 DX10 的后台轮询”目前看来更像是次要的保护性措施或可选偏好，而非硬性最低要求。
 
-### Round C Status
+### Round C 状态
 
-- completed
-- single-variable scope:
-  - `YaesuFT710Rig` only
-- specific rollback:
-  - restore DX10-like USB mode rewrite behavior for FT-710
-- frozen items during Round C:
-  - FT-710 serial read loop remains disabled
-  - dedicated FT-710 rig branch remains
-  - background polling remains enabled as in Round B
+- 已完成。
+- 单变量控制：
+  - 仅限 `YaesuFT710Rig`。
+- 具体回滚：
+  - 恢复 FT-710 对类似 DX10 的 USB 模式重写行为。
+- Round C 期间冻结的项目：
+  - FT-710 串口读循环保持禁用.
+  - 专用的 FT-710 电台分支保持。
+  - 后台轮询像 Round B 那样保持启用。
 
-### Round C Result
+### Round C 结果
 
-- User verification:
-  - operation remains normal after restoring mode rewrite behavior
-  - RF power output remains normal
-  - no additional player / USB audio / serial stability issue reported
-  - no mode anomaly reported in this round
-- Current interpretation:
-  - re-enabling FT-710 USB mode rewrite behavior alone does not bring the issue back
-  - this makes `preserve current mode instead of forcing rewrite` look less likely to be a strict minimum requirement
-- Updated conclusion:
-  - the strongest confirmed core candidate still remains `FT-710 CAT write-only / no serial read loop`
-  - background polling disable and preserve-mode behavior both now look more like optional safeguards than minimum required fixes
+- 用户验证：
+  - 恢复模式重写行为后，操作维持正常。
+  - 射频功率输出维持正常。
+  - 未汇报额外的播放器 / USB 音频 / 串口稳定性问题。
+  - 本轮中未汇报模式异常。
+- 当前解读：
+  - 仅重新启用 FT-710 USB 模式重写并不会引回问题。
+  - 这使得“保留当前模式，不强制重写”看起来不像是硬性的最低要求。
+- 更新后的结论：
+  - 置信度最高的核心候选依然是“FT-710 CAT 只写 / 禁用串口读循环”。
+  - 禁用后台轮询和保留当前模式目前看来均属于可选的保护机制，并非最低限度修复所必需。
 
-### Round D Status
+### Round D 状态
 
-- completed
-- single-variable scope:
-  - `MainViewModel` only
-- specific rollback:
-  - FT-710 selection still exists, but the rig instance is switched from `YaesuFT710Rig` to `YaesuDX10Rig`
-- frozen items during Round D:
-  - FT-710 serial read loop remains disabled
-  - background polling remains enabled
-  - mode rewrite remains enabled
+- 已完成。
+- 单变量控制：
+  - 仅限 `MainViewModel`。
+- 具体回滚：
+  - FT-710 的机型选项依旧存在，但将底层的电台实例由 `YaesuFT710Rig` 切换为 `YaesuDX10Rig`。
+- Round D 期间冻结的项目：
+  - FT-710 串口读循环保持禁用。
+  - 后台轮询保持启用。
+  - 模式重写保持启用。
 
-### Round D Result
+### Round D 结果
 
-- User verification:
-  - all checks are normal
-  - RF power output remains normal
-  - player / USB audio / serial stability remain normal
-  - no mode anomaly observed
-- Current interpretation:
-  - removing the dedicated `YaesuFT710Rig` instance does not bring the issue back
-  - this strongly lowers the likelihood that the dedicated FT-710 rig branch is a strict minimum requirement
-- Final convergence:
-  - the strongest confirmed minimum core candidate remains `FT-710 CAT write-only / no serial read loop`
-  - dedicated rig split, background polling disable, and preserve-mode behavior now all look more like optional isolation or safety preferences than required fixes
-- Final cleanup direction:
-  - keep FT-710 selection / instruction set
-  - but allow rig behavior to reuse `YaesuDX10Rig`
-  - keep the decisive FT-710 fix in the serial path only
+- 用户验证：
+  - 所有检查项正常。
+  - 射频功率输出维持正常。
+  - 播放器 / USB 音频 / 串口稳定性正常。
+  - 未观察到模式异常。
+- 当前解读：
+  - 移除专用的 `YaesuFT710Rig` 实例并没有引回问题。
+  - 这强烈降低了“专用的 FT-710 电台分支”是最低限度修复必需项的置信度。
+- 最终收敛：
+  - 经过证实的最简核心修复方案仅为“FT-710 CAT 只写 / 禁用串口读循环”。
+  - 电台类的独立拆分、禁用后台轮询以及保留当前模式等改动，现在看来均更符合“可选的隔离保护或安全偏好”，而非强制必需的修复手段。
+- 最终整理方向：
+  - 保留 FT-710 机型选项与独立指令集。
+  - 但允许其电台控制行为复用 `YaesuDX10Rig`。
+  - 将决定性的 FT-710 修复完全收紧于串口层（只写不读）。

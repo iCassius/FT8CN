@@ -1,56 +1,67 @@
-# Releases
+# 发布历史与变更日志
 
-## v0.93.004 - Cloudlog/Wavelog and stability update
+## v0.93.004 - Cloudlog/Wavelog 扩展与工作流优化
 
-This release packages the latest runtime hardening and logbook sync improvements for FT8CN.
+本版本打包了 FT8CN 最新的运行期健壮性改进和日志同步优化。
 
-### Highlights
+### 核心改进
 
-- Added combined Cloudlog/Wavelog upload support with automatic endpoint selection.
-- Updated the Cloudlog test flow to validate logbook connectivity without writing a dummy QSO.
-- Hardened broadcast receiver registration for Android 13+ compatibility.
-- Preserved the existing exit flow while silencing the lint false positive in `onBackPressed`.
-- Switched GitHub release workflows to build and publish release APKs instead of debug APKs.
+- **新增 Wavelog 日志同步支持**：支持与 Wavelog 平台无缝同步，并与现有的 Cloudlog 上传逻辑合并，支持自动匹配 Endpoint。
+- **优化日志连接测试**：更新了 Cloudlog/Wavelog 测试流程，无需写入虚拟 QSO 即可验证 API 连接是否正常。
+- **广播接收器注册安全强化**：针对 Android 13+ 的动态注册广播接收器要求进行适配，防止因缺少 Exported 标志而闪退。
+- **修复 onBackPressed 警告**：优化了退出流程，在静默 lint 误报的同时保留了现有的完全退出逻辑。
+- **构建工作流优化**：将 GitHub Actions 自动打包工作流从构建 debug APK 修改为编译并发布 release APK，并自动绑定到 Release 标签中。
 
-### Notes
+---
 
-- Known issues that are intentionally deferred are tracked in `KNOWN_ISSUES.md`.
-- Release APKs are now generated from the `release` build type and tagged GitHub release workflow.
+## v0.93.002 / v0.93.003 - 核心解码卡顿、忙等发热与闪退稳定性修复
 
-## v0.93.001 draft - Android 14 compatibility and performance modernization
+本版本是面向社区测试的稳定性修复版本，主要解决网络模式解码卡死、高发热以及全新安装时的闪退问题。
 
-This release is a major maintenance update for FT8CN. It focuses on runtime stability, lower power consumption, cleaner Android lifecycle handling, and improved radio compatibility while preserving the existing FT8 workflow.
+### 核心改进
 
-### Highlights
+- **修复网络模式发射后解码卡住**：
+  - 针对 WiFi 音频断流导致解码时隙错位的问题，在 `HamRecorder` 引入“新周期注册时强制结算未满窗口（补零）”策略。
+  - 修复 `CopyOnWriteArrayList` 遍历中由于在回调中自删导致跳过下一个监听器的 Bug，避免每周期丢失约 160ms 音频。
+- **消除发射忙等与烧 CPU 问题**：
+  - 移除了 ICOM 和协谷 UDP 协议以及 `FT8TransmitSignal` 状态机中的忙等自旋，改用绝对时间表配合 10ms/20ms 的 sleep 节拍，大幅减少发热和因降频导致的解码性能下降。
+  - 清除了发包线程结束时残留的 `interrupt` 标志，防止线程复用出现异常。
+- **修复 DXCC 归属地与分区显示失效**：
+  - 恢复呼号查询的最长前缀匹配查询（原版语义），修复此前将 SQL 改为精确匹配导致无法查到中国省级细分等前缀呼号的问题。
+  - 补全了 CTY.DAT 经度西经为正的转换逻辑，并修复了 `CountDbOpr` 中的空指针风险。
+- **解决瀑布图 bitmap 回收闪退**：
+  - 采用互斥锁对 UI 线程的 `recycle` 和音频线程的 `draw` 绘图过程进行同步，并改为先创建新位图再回收旧位图的逻辑，解决“recycled bitmap”崩溃。
+- **支持测试版与正式版并存（测试包）**：
+  - debug 构建配置独立包名 `com.bg7yoz.ft8cn.beta`，桌面名称为 "FT8CN测试版"，追加 `-beta` 版本后缀。
+  - 修复了 FileProvider authority 写死冲突的问题，支持两包完全独立安装和使用。
+- **修复两个全新安装必崩的闪退 bug**：
+  - **录音前台服务闪退**：当用户未授予录音权限启动 App 时，提前检查 `RECORD_AUDIO` 权限，未授权时不调用前台服务，且对前台服务启动方法添加 `try-catch` 防御。
+  - **蓝牙/SCO 广播接收器闪退**：当用户未授予蓝牙运行时权限（`BLUETOOTH_CONNECT`）时，蓝牙耳机连接/断开或状态改变会触发崩溃。通过在 `onReceive` 处增加 `try-catch` 和 `getDeviceNameSafely` 来解决。
+- **引入本地崩溃日志捕获**：
+  - 新增 `FT8CNApplication`，将未捕获异常的完整堆栈、机型、版本等信息写入本地 `Android/data/com.bg7yoz.ft8cn/files/crash/`（限制最多 10 份，保护隐私不自动上传）。
+- **自动化测试落地**：
+  - 新增 `CallsignDatabaseTest` instrumented 自动化测试，覆盖呼号前缀最长匹配、西经非负等核心规则，防止以后再次出现 DXCC 逻辑回归。
 
-- Improved Android 14 compatibility and project build configuration.
-- Added centralized background execution through `AppExecutors` to avoid uncontrolled thread growth.
-- Reworked `MainViewModel` lifecycle cleanup so timers, recording, FT8 listening, and the embedded HTTP server are stopped when the ViewModel is cleared.
-- Removed forced `System.exit(0)` shutdown and switched to a cleaner app exit path.
-- Reduced CPU and battery pressure by replacing high-frequency timer polling with scheduled FT8 cycle timing.
-- Optimized waterfall rendering with double buffering and redraw throttling around 5-10 FPS.
-- Reduced audio recording allocation pressure by reusing float buffers.
-- Migrated database and callsign operations away from deprecated `AsyncTask` patterns.
-- Improved Android data structures in hot paths with `SparseIntArray`.
-- Fixed XML string formatting issues by using explicit positional placeholders where needed.
-- Added connection, transmission, and QSO success feedback bubbles.
-- Added or restored radio model support for YAESU FT-710 and YAESU FTX-1.
+---
 
-### Build and Compatibility
+## v0.93.001 - Android 14 兼容性与性能现代化升级 (Draft)
 
-- Android Gradle Plugin configuration was updated for modern build behavior.
-- `BuildConfig` generation is explicitly enabled because the project uses `buildConfigField`.
-- Gradle JVM settings were tuned for better build throughput.
+本版本是一次重大的维护性更新，重点关注系统兼容性、功耗降低、生命周期收敛以及电台兼容性，不改变原有 FT8 的核心使用流程。
 
-### Versioning
+### 核心改进
 
-- Version numbering starts at `0.93.001`.
-- The format is `major.minor.build`.
-- For each new release on the same base version, increment the three-digit build number by 1: `0.93.002`, `0.93.003`, etc.
-- `versionCode` follows the same sequence numerically; `0.93.001` is represented as `93001`.
-
-### Notes
-
-- Release tags should match the Android `versionName`, for example `v0.93.001`.
-- See `ft8cn/OPTIMIZATION_GUIDE.md` for the detailed technical change list.
-- See `ft8cn/AGP_UPGRADE_FIX.md` for the Android Gradle Plugin upgrade note.
+- **升级 Android 14 兼容性**：更新了 Android Gradle Plugin，显式开启 `BuildConfig` 生成支持，并优化了 JVM 编译配置。
+- **引入后台任务管理器**：建立全局 `AppExecutors` 集中管理后台多线程，防止线程无节制增长。
+- **完善 ViewModel 生命周期清理**：重构 `MainViewModel` 的退出清理逻辑，确保在 ViewModel 被销毁（App退出或配置变更）时，后台定时器、音频录制、FT8 监听和内置 HTTP 服务能被完全释放和停用。
+- **优化应用退出流程**：移除了暴力的 `System.exit(0)`，改用更加标准和优雅的 Android 应用退出通路。
+- **降低功耗与发热**：
+  - 用计划的 FT8 周期时隙定时器取代了高频的轮询计时，降低了挂机时的 CPU 占用和电池消耗。
+  - 重构了瀑布图渲染机制，使用双缓冲并将最高重绘帧率限制在 5-10 FPS，避免无意义的高频刷新造成手机发热。
+  - 音频缓冲区复用，避免高频创建 float buffer 带来的垃圾回收（GC）压力。
+- **废弃 AsyncTask 并优化数据库**：将原有的呼号数据库和日志读写从已被 Android 废弃的 `AsyncTask` 转移到 `AppExecutors.diskIO()`，防止内存泄漏和操作卡顿。
+- **改进数据结构与文本格式化**：
+  - 在热点通路使用 `SparseIntArray` 替代传统的 Java Map 数据结构，减少自动装箱（Auto-boxing）开销。
+  - 修复了多语言 `strings.xml` 中多处 XML 字符串占位符缺失位置参数（例如 `%d` 改为 `%1$d`）的警告，防止国际化环境下崩溃。
+- **增强用户反馈与电台支持**：
+  - 增加了连接状态、发射触发和 QSO 成功的气泡/Toast 提示。
+  - 增加并恢复了对 YAESU FT-710 和 FTX-1 电台的 CAT 连接控制支持。
