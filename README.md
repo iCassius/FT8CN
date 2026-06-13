@@ -18,9 +18,9 @@
 - 🟢 **云同步扩展与构建发布 (v0.93.004)**：新增了 **Wavelog 日志同步** 支持，合并了 Cloudlog/Wavelog 的日志上传逻辑并支持连接免 Dummy QSO 验证；优化了 GitHub Actions 工作流，直接构建并发布 Release 版 APK。
 - 🎯 **当前阶段**：项目已在模拟器上完成自动化测试和功能冒烟验证，正在进行真机通联（WIFI 网络模式/QSO）与长时间挂机内测。准备在真机实测通过后，将全部稳定性补丁合入 release，发布 0.93.4 稳定版本。
 
-详细的发布历史和技术分析请查阅：
-- 📄 [中文发布说明与变更历史 (RELEASES.md)](RELEASES.md)
-- 📄 [电台 FT-710 兼容与串口修复分析 (FT710ReleaseAndDiffAnalysis.zh-CN.md)](FT710ReleaseAndDiffAnalysis.zh-CN.md)
+详细的维护文档、发布历史和技术分析请查阅：
+- 📂 [维护文档目录索引 (doc/README.md)](doc/README.md)
+- 📄 [项目已完成改动与变更历史 (doc/RELEASES.md)](doc/RELEASES.md)
 - 📄 [性能与内存优化指南 (ft8cn/OPTIMIZATION_GUIDE.md)](ft8cn/OPTIMIZATION_GUIDE.md)
 
 版本号采用 `主版本.次版本.构建号` 格式，从 `0.93.001` 开始。同一基础版本的后续发布，每次只将三位构建号加 1，例如 `0.93.002`、`0.93.003`，以此类推。

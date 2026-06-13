@@ -1,25 +1,21 @@
-# 发布历史与变更日志
+# 项目已完成改动与版本发布历史
 
-## v0.93.004 - Cloudlog/Wavelog 扩展与工作流优化
+本文件合并了项目所有已完成的改动记录、电台（如 YAESU FT-710）兼容性修复总结、最终代码差异分析以及历史版本发布日志。
 
+---
+
+## 第一部分：版本发布历史与变更日志
+
+### v0.93.004 - Cloudlog/Wavelog 扩展与工作流优化
 本版本打包了 FT8CN 最新的运行期健壮性改进和日志同步优化。
-
-### 核心改进
-
 - **新增 Wavelog 日志同步支持**：支持与 Wavelog 平台无缝同步，并与现有的 Cloudlog 上传逻辑合并，支持自动匹配 Endpoint。
 - **优化日志连接测试**：更新了 Cloudlog/Wavelog 测试流程，无需写入虚拟 QSO 即可验证 API 连接是否正常。
 - **广播接收器注册安全强化**：针对 Android 13+ 的动态注册广播接收器要求进行适配，防止因缺少 Exported 标志而闪退。
 - **修复 onBackPressed 警告**：优化了退出流程，在静默 lint 误报的同时保留了现有的完全退出逻辑。
-- **构建工作流优化**：将 GitHub Actions 自动打包工作流从构建 debug APK 修改为编译并发布 release APK，并自动绑定到 Release 标签中。
+- **构建工作流优化**：将 GitHub Actions 自动打包工作流从构建 debug APK 修改为编译并发布 release APK，并自动绑定 to Release 标签中。
 
----
-
-## v0.93.002 / v0.93.003 - 核心解码卡顿、忙等发热与闪退稳定性修复
-
+### v0.93.002 / v0.93.003 - 核心解码卡顿、忙等发热与闪退稳定性修复
 本版本是面向社区测试的稳定性修复版本，主要解决网络模式解码卡死、高发热以及全新安装时的闪退问题。
-
-### 核心改进
-
 - **修复网络模式发射后解码卡住**：
   - 针对 WiFi 音频断流导致解码时隙错位的问题，在 `HamRecorder` 引入“新周期注册时强制结算未满窗口（补零）”策略。
   - 修复 `CopyOnWriteArrayList` 遍历中由于在回调中自删导致跳过下一个监听器的 Bug，避免每周期丢失约 160ms 音频。
@@ -42,14 +38,8 @@
 - **自动化测试落地**：
   - 新增 `CallsignDatabaseTest` instrumented 自动化测试，覆盖呼号前缀最长匹配、西经非负等核心规则，防止以后再次出现 DXCC 逻辑回归。
 
----
-
-## v0.93.001 - Android 14 兼容性与性能现代化升级 (Draft)
-
+### v0.93.001 - Android 14 兼容性与性能现代化升级 (Draft)
 本版本是一次重大的维护性更新，重点关注系统兼容性、功耗降低、生命周期收敛以及电台兼容性，不改变原有 FT8 的核心使用流程。
-
-### 核心改进
-
 - **升级 Android 14 兼容性**：更新了 Android Gradle Plugin，显式开启 `BuildConfig` 生成支持，并优化了 JVM 编译配置。
 - **引入后台任务管理器**：建立全局 `AppExecutors` 集中管理后台多线程，防止线程无节制增长。
 - **完善 ViewModel 生命周期清理**：重构 `MainViewModel` 的退出清理逻辑，确保在 ViewModel 被销毁（App退出或配置变更）时，后台定时器、音频录制、FT8 监听和内置 HTTP 服务能被完全释放和停用。
@@ -65,3 +55,44 @@
 - **增强用户反馈与电台支持**：
   - 增加了连接状态、发射触发和 QSO 成功的气泡/Toast 提示。
   - 增加并恢复了对 YAESU FT-710 和 FTX-1 电台的 CAT 连接控制支持。
+
+---
+
+## 第二部分：YAESU FT-710 电台兼容性修复与差异分析
+
+### 1. FT-710 机型支持改动汇总
+- **机型识别入口**：
+  - `InstructionSet.java` 中增加 `InstructionSet.YAESU_FT710 = 23`。
+  - `rigaddress.txt` 资源文件中增加 `YAESU FT-710,00,38400,23` 条目，独立于 FTDX10 显示在机型列表中。
+- **复用 DX10 CAT 指令集**：
+  - 在 `MainViewModel` 中，当机型为 `YAESU_FT710` 时，复用 `YaesuDX10Rig` 实例，将具体的兼容性差异剥离出 CAT 指令层，下沉至 USB 串口共存层处理。
+- **控制方式默认 CAT 化**：
+  - 在 `ConfigFragment` 中，选择 FT-710 机型时，如果默认控制方式不是 `CAT`，则自动将其强制设为 `ControlMode.CAT` 并持久化，减少用户操作摩擦。
+
+### 2. 核心串口只写修复（最关键修复项）
+- **现象线索**：
+  - FT8CN 连接 FT-710 复合 USB 设备后，Android 的 USB 音频会话会被破坏，导致系统自带播放器静音，且断开连接后需重启播放器才能恢复。
+  - 调试日志显示发射时流模式下的 `AudioTrack.write(...)` 会返回 `0`，音频无法写入硬件。
+- **根因研判**：
+  - FT-710 的 USB 复合设备对 Android 系统的串口与音频并行占用极为敏感，FT8CN 原本继承自 DX10 的高频后台串口读取循环/轮询行为干扰了 USB 音频会话的稳定性。
+- **修复方案 (`CableSerialPort.java`)**：
+  - 新增 `shouldUseFt710WriteOnlyCatMode()` 判定。
+  - 当组合为 **FT-710 + USB线 + CAT控制** 时，**不再启动后台串口读循环**（禁用 `usbIoManager.start()`），使 FT-710 的 USB CAT 变为**只写不读模式**。
+  - 经实测，该修改彻底消除了外部音乐播放器静音的问题，并让 FT-710 的 `DATA-U` 模式能正常产生射频功率输出。
+
+### 3. 外围稳定性改进
+- **发射与录音切换保护 (`MicRecorder.java`)**：
+  - 延迟创建 `AudioRecord` 并添加初始化失效时的重试与释放逻辑，防止发射后恢复录音时抛出 `AudioRecord startRecording called on an uninitialized AudioRecord`。
+- **蓝牙状态广播收敛 (`BluetoothStateBroadcastReceive.java`)**：
+  - 恢复 `shouldHandleBluetoothAudioRouting()` 校验，将蓝牙音频路由切换仅限制在当前处于 `BLUE_TOOTH` 连接模式下，避免在 USB 线模式下错误响应蓝牙状态。
+- **CDC ACM 接口安全包装 (`CdcAcmSerialDriver.java`)**：
+  - 封装 `claimInterfaceSafely(...)`，集中处理接口空指针并安全处理 force claim 逻辑。
+
+---
+
+## 第三部分：已证伪并回收的尝试 (FT-710 排障历史)
+
+在解决 FT-710 发射无功率的过程中，以下尝试均已被证实对根因无效，并已从代码中清理回收：
+1. **专属音频格式修改**：曾尝试强推 `48kHz / stereo / stream` 等不同采样率/声道格式以及音频静音前/后填充（Pre-roll/Post-roll），但对 `0` 功率没有本质改善。
+2. **EX菜单命令参数猜测**：曾尝试通过 CAT 发送未经证实的 EX 菜单命令（如 `EX0104141;`）强改电台设置，经反馈无效，已去除。
+3. **强制模式重写**：曾强行重写电台发射前后的工作模式，后证实非必需，现已恢复为保留电台当前模式。
