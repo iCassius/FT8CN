@@ -25,6 +25,13 @@
 *   **状态**：⚠️ 待处理
 *   **作用**：收录并跟踪在当前高危稳定性修复中被有意延后的 lint 问题，如 AndroidManifest 的导入 intent-filter 警告，以及非主要语言区域（希腊语、日语、西班牙语）的缺失翻译。
 
+### 5. 📄 用户与使用手册 (由原根目录 PDF 转换而来)
+*   📄 [FT8CN 快速手册 0.88版 (FT8CN快速手册0.88版.md)](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/doc/FT8CN快速手册0.88版.md)
+*   📄 [FT8CN 英文快速手册 0.89版 (FT8CN_Quick_Guide_v0.89.md)](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/doc/FT8CN_Quick_Guide_v0.89.md)
+*   📄 [FT8CN 设计初衷与使用说明 0.88版 (FT8CN软件设计初衷及使用说明0.88版.md)](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/doc/FT8CN软件设计初衷及使用说明0.88版.md)
+*   **状态**：🟢 已完成转换
+*   **作用**：项目自带的用户操作指南和详细的软件设计理念文档。
+
 ---
 
 ## 🛠️ 下一步开发与测试指引
