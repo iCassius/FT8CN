@@ -65,8 +65,8 @@ android {
         applicationId "com.bg7yoz.ft8cn"
         minSdk 23
         targetSdk 34
-        versionCode 93003
-        versionName '0.93.3'
+        versionCode 93004
+        versionName '0.93.4'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
 
         externalNativeBuild {

@@ -1,5 +1,22 @@
 # Releases
 
+## v0.93.004 - Cloudlog/Wavelog and stability update
+
+This release packages the latest runtime hardening and logbook sync improvements for FT8CN.
+
+### Highlights
+
+- Added combined Cloudlog/Wavelog upload support with automatic endpoint selection.
+- Updated the Cloudlog test flow to validate logbook connectivity without writing a dummy QSO.
+- Hardened broadcast receiver registration for Android 13+ compatibility.
+- Preserved the existing exit flow while silencing the lint false positive in `onBackPressed`.
+- Switched GitHub release workflows to build and publish release APKs instead of debug APKs.
+
+### Notes
+
+- Known issues that are intentionally deferred are tracked in `KNOWN_ISSUES.md`.
+- Release APKs are now generated from the `release` build type and tagged GitHub release workflow.
+
 ## v0.93.001 draft - Android 14 compatibility and performance modernization
 
 This release is a major maintenance update for FT8CN. It focuses on runtime stability, lower power consumption, cleaner Android lifecycle handling, and improved radio compatibility while preserving the existing FT8 workflow.
