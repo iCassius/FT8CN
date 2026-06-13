@@ -32,6 +32,13 @@
 *   **状态**：🟢 已完成转换
 *   **作用**：项目自带的用户操作指南和详细的软件设计理念文档。
 
+### 6. 📄 编译构建与性能优化指南 (由原 ft8cn 目录移入)
+*   📄 [性能与内存优化指南 (OPTIMIZATION_GUIDE.md)](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/doc/OPTIMIZATION_GUIDE.md)
+*   📄 [Android Gradle 插件升级修复说明 (AGP_UPGRADE_FIX.md)](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/doc/AGP_UPGRADE_FIX.md)
+*   📄 [Release 编译签名说明 (RELEASE_SIGNING.md)](file:///C:/Users/cassi/Documents/Project/Github/FT8CN/doc/RELEASE_SIGNING.md)
+*   **状态**：🟢 已完成
+*   **作用**：面向开发者的编译、打包签名及应用性能和内存优化说明。
+
 ---
 
 ## 🛠️ 下一步开发与测试指引

@@ -21,7 +21,7 @@
 详细的维护文档、发布历史和技术分析请查阅：
 - 📂 [维护文档目录索引 (doc/README.md)](doc/README.md)
 - 📄 [项目已完成改动与变更历史 (doc/RELEASES.md)](doc/RELEASES.md)
-- 📄 [性能与内存优化指南 (ft8cn/OPTIMIZATION_GUIDE.md)](ft8cn/OPTIMIZATION_GUIDE.md)
+- 📄 [性能与内存优化指南 (doc/OPTIMIZATION_GUIDE.md)](doc/OPTIMIZATION_GUIDE.md)
 
 版本号采用 `主版本.次版本.构建号` 格式，从 `0.93.001` 开始。同一基础版本的后续发布，每次只将三位构建号加 1，例如 `0.93.002`、`0.93.003`，以此类推。
 
