@@ -482,6 +482,9 @@ t71	遥感数据，最多18位十六进制数字
      * @return boolean 是CQ返回true
      */
     public boolean checkIsCQ() {
+        if (callsignTo == null) {
+            return false;
+        }
         String s = callsignTo.trim().split(" ")[0];
         if (s == null) {
             return false;

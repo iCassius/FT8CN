@@ -9,6 +9,7 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.lifecycle.Observer;
 
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.MainViewModel;
@@ -25,6 +26,14 @@ public class SetVolumeDialog {
     private final MainViewModel mainViewModel;
     private TextView volumeValueMessage;
     private VolumeProgress volumeProgress;
+    private final Observer<Float> volumeObserver = new Observer<Float>() {
+        @Override
+        public void onChanged(Float aFloat) {
+            if (volumeValueMessage != null && volumeProgress != null) {
+                setVolumeText(aFloat);
+            }
+        }
+    };
 
     public SetVolumeDialog(@NonNull Context context, MainViewModel mainViewModel) {
         this.context = context;
@@ -44,7 +53,7 @@ public class SetVolumeDialog {
         setVolumeText(GeneralVariables.volumePercent);
         volumeSeekBar.setProgress((int) (GeneralVariables.volumePercent * 100));
 
-        GeneralVariables.mutableVolumePercent.observeForever(this::setVolumeText);
+        GeneralVariables.mutableVolumePercent.observeForever(volumeObserver);
 
         volumeSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
@@ -70,7 +79,9 @@ public class SetVolumeDialog {
                 .setTitle(R.string.volume_percent)
                 .setView(view)
                 .setPositiveButton(R.string.close, null)
-                .show();
+                .show()
+                .setOnDismissListener(dialog ->
+                        GeneralVariables.mutableVolumePercent.removeObserver(volumeObserver));
     }
 
     @SuppressLint("DefaultLocale")

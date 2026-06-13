@@ -1,10 +1,4 @@
 package com.bg7yoz.ft8cn.wave;
-/**
- * 使用Mic录音的操作。
- * @author BGY70Z
- * @date 2023-03-20
- * 已优化：使用可重用缓冲区减少GC压力。
- */
 
 import android.Manifest;
 import android.annotation.SuppressLint;
@@ -23,134 +17,184 @@ import com.bg7yoz.ft8cn.ui.ToastMessage;
 
 public class MicRecorder {
     private static final String TAG = "MicRecorder";
-    private int bufferSize = 0;//最小缓冲区大小
-    private static final int sampleRateInHz = 12000;//采样率
-    private static final int channelConfig = AudioFormat.CHANNEL_IN_MONO; //单声道
-    private static final int audioFormat = AudioFormat.ENCODING_PCM_16BIT; //量化位数
+    private int bufferSize = 0;
+    private static final int sampleRateInHz = 12000;
+    private static final int channelConfig = AudioFormat.CHANNEL_IN_MONO;
+    private static final int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
 
-    private AudioRecord audioRecord = null;//AudioRecord对象
-    private boolean isRunning = false;//是否处于录音的状态。
+    private AudioRecord audioRecord = null;
+    private volatile boolean isRunning = false;
     private OnDataListener onDataListener;
-    private float[] reusableFloatBuffer; // 优化：重用缓冲区
+    private float[] reusableFloatBuffer;
 
-    public interface OnDataListener{
-        void onDataReceived(float[] data,int len);
+    public interface OnDataListener {
+        void onDataReceived(float[] data, int len);
     }
 
-    @SuppressLint("MissingPermission")
-    public MicRecorder(){
-        //计算最小缓冲区
+    public MicRecorder() {
         bufferSize = AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat);
-        initAudioRecord();
+        if (bufferSize <= 0) {
+            bufferSize = sampleRateInHz;
+        }
     }
 
     @SuppressLint("MissingPermission")
-    private void initAudioRecord() {
-        if (audioRecord != null) {
-            try {
-                if (audioRecord.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
-                    audioRecord.stop();
-                }
-                audioRecord.release();
-            } catch (Exception ignored) {}
+    private synchronized boolean ensureAudioRecord() {
+        if (audioRecord != null && audioRecord.getState() == AudioRecord.STATE_INITIALIZED) {
+            return true;
         }
-        audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC, sampleRateInHz
-                , channelConfig, audioFormat, bufferSize);//创建AudioRecorder对象
+        releaseAudioRecord();
+        try {
+            audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC, sampleRateInHz,
+                    channelConfig, audioFormat, bufferSize);
+        } catch (Exception e) {
+            Log.d(TAG, "ensureAudioRecord: " + e.getMessage());
+            audioRecord = null;
+        }
+        return audioRecord != null && audioRecord.getState() == AudioRecord.STATE_INITIALIZED;
     }
 
-    public void start(){
-        if (isRunning) return;
-
-        Context context = GeneralVariables.getMainContext();
-        //未授予录音权限时不能启动 microphone 类型前台服务（Android 14+ 直接 SecurityException 闪退），
-        //等 MainActivity 授权回调里重启录音
-        if (context != null
-                && context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)
-                != PackageManager.PERMISSION_GRANTED) {
-            Log.w(TAG, "start: RECORD_AUDIO not granted, skip recording until permission granted.");
+    private synchronized void releaseAudioRecord() {
+        if (audioRecord == null) {
             return;
         }
-        if (context != null) {
+        try {
+            if (audioRecord.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
+                audioRecord.stop();
+            }
+        } catch (Exception e) {
+            Log.d(TAG, "releaseAudioRecord stop: " + e.getMessage());
+        }
+        try {
+            audioRecord.release();
+        } catch (Exception e) {
+            Log.d(TAG, "releaseAudioRecord release: " + e.getMessage());
+        }
+        audioRecord = null;
+    }
+
+    private boolean startAudioForegroundService() {
+        Context context = GeneralVariables.getMainContext();
+        if (context == null) {
+            return true;
+        }
+        if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "start: RECORD_AUDIO not granted, skip recording until permission granted.");
+            return false;
+        }
+        try {
             Intent intent = new Intent(context, AudioForegroundService.class);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent);
             } else {
                 context.startService(intent);
             }
+            Thread.sleep(100);
+            return true;
+        } catch (Exception e) {
+            Log.w(TAG, "startAudioForegroundService: " + e.getMessage());
+            return false;
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private boolean startRecordingInternal() {
+        if (!startAudioForegroundService() || !ensureAudioRecord()) {
+            return false;
         }
 
-        // Wait a small bit to ensure service is foreground on Android 14
         try {
-            Thread.sleep(100);
-        } catch (InterruptedException ignored) {}
+            audioRecord.startRecording();
+            if (audioRecord.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
+                return true;
+            }
+        } catch (Exception e) {
+            Log.d(TAG, "startRecord: " + e.getMessage());
+        }
 
-        // Always re-initialize AudioRecord when starting to ensure correct state on Android 14
-        initAudioRecord();
+        releaseAudioRecord();
+        if (!ensureAudioRecord()) {
+            return false;
+        }
 
-        final short[] buffer = new short[bufferSize / 2];
         try {
-            audioRecord.startRecording();//开始录音
-        }catch (Exception e){
+            audioRecord.startRecording();
+            return audioRecord.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING;
+        } catch (Exception e) {
+            Log.d(TAG, "startRecord retry: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public synchronized void start() {
+        if (isRunning) return;
+
+        if (!startRecordingInternal()) {
             ToastMessage.show(String.format(GeneralVariables.getStringFromResource(
-                    R.string.recorder_cannot_record),e.getMessage()));
-            Log.d(TAG, "startRecord: "+e.getMessage() );
+                    R.string.recorder_cannot_record), "AudioRecord is not initialized"));
+            Log.d(TAG, "startRecord: AudioRecord is not initialized");
+            return;
         }
 
         isRunning = true;
+        final short[] buffer = new short[Math.max(1, bufferSize / 2)];
 
         new Thread(new Runnable() {
             @Override
             public void run() {
                 while (isRunning) {
-                    //判断是否处于录音状态，state!=3，说明没有处于录音的状态
-                    if (audioRecord.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) {
+                    AudioRecord currentRecord = audioRecord;
+                    if (currentRecord == null
+                            || currentRecord.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) {
                         isRunning = false;
-                        Log.d(TAG, String.format("录音失败，状态码：%d", audioRecord.getRecordingState()));
+                        Log.d(TAG, String.format("record failed, state:%d",
+                                currentRecord == null ? -1 : currentRecord.getRecordingState()));
                         break;
                     }
 
-                    //读录音的数据
-                    int bufferReadResult = audioRecord.read(buffer, 0, buffer.length);
+                    int bufferReadResult = currentRecord.read(buffer, 0, buffer.length);
+                    if (bufferReadResult <= 0) {
+                        Log.d(TAG, "record loop read error: " + bufferReadResult);
+                        if (bufferReadResult == AudioRecord.ERROR_DEAD_OBJECT
+                                || bufferReadResult == AudioRecord.ERROR_INVALID_OPERATION
+                                || bufferReadResult == AudioRecord.ERROR_BAD_VALUE) {
+                            isRunning = false;
+                            break;
+                        }
+                        continue;
+                    }
 
-                    if (bufferReadResult > 0) {
-                        // 优化：仅在必要时扩容或初始化重用缓冲区
-                        if (reusableFloatBuffer == null || reusableFloatBuffer.length < bufferReadResult) {
-                            reusableFloatBuffer = new float[bufferReadResult];
-                        }
-                        
-                        float sum = 0;
-                        for (int i = 0; i < bufferReadResult; i++) {
-                            reusableFloatBuffer[i] = buffer[i] / 32768.0f;
-                            sum += Math.abs(reusableFloatBuffer[i]);
-                        }
+                    if (reusableFloatBuffer == null || reusableFloatBuffer.length < bufferReadResult) {
+                        reusableFloatBuffer = new float[bufferReadResult];
+                    }
 
-                        if (sum == 0) {
-                            Log.w(TAG, "run: Received SILENT data (all zeros)");
-                        }
+                    float sum = 0;
+                    for (int i = 0; i < bufferReadResult; i++) {
+                        reusableFloatBuffer[i] = buffer[i] / 32768.0f;
+                        sum += Math.abs(reusableFloatBuffer[i]);
+                    }
 
-                        if (onDataListener != null) {
-                            onDataListener.onDataReceived(reusableFloatBuffer, bufferReadResult);
-                        }
+                    if (sum == 0) {
+                        Log.w(TAG, "run: Received SILENT data (all zeros)");
+                    }
+
+                    if (onDataListener != null) {
+                        onDataListener.onDataReceived(reusableFloatBuffer, bufferReadResult);
                     }
                 }
-                try {
-                    if (audioRecord.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
-                        audioRecord.stop();
-                    }
-                } catch (Exception ignored) {}
+                releaseAudioRecord();
             }
-        }).start();
+        }, "FT8CN-MicRecorder").start();
     }
 
-    /**
-     * 停止录音。当录音停止后，监听列表中的监听器全部删除。
-     */
-    public void stopRecord() {
+    public synchronized void stopRecord() {
         isRunning = false;
         Context context = GeneralVariables.getMainContext();
         if (context != null) {
             context.stopService(new Intent(context, AudioForegroundService.class));
         }
+        releaseAudioRecord();
     }
 
     public OnDataListener getOnDataListener() {

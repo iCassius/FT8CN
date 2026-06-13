@@ -524,9 +524,17 @@ public class LogFragment extends Fragment {
                     , new OnQueryQSLCallsign() {
                         @Override
                         public void afterQuery(ArrayList<QSLCallsignRecord> records) {
+                            if (!isUiReady()) {
+                                loading = false;
+                                return;
+                            }
                             requireActivity().runOnUiThread(new Runnable() {
                                 @Override
                                 public void run() {
+                                    if (!isUiReady()) {
+                                        loading = false;
+                                        return;
+                                    }
                                     logCallsignAdapter.setQSLCallsignList(records);
                                     loading = false;
                                 }
@@ -541,9 +549,17 @@ public class LogFragment extends Fragment {
                     , new OnQueryQSLRecordCallsign() {
                         @Override
                         public void afterQuery(ArrayList<QSLRecordStr> records) {
+                            if (!isUiReady()) {
+                                loading = false;
+                                return;
+                            }
                             requireActivity().runOnUiThread(new Runnable() {
                                 @Override
                                 public void run() {
+                                    if (!isUiReady()) {
+                                        loading = false;
+                                        return;
+                                    }
                                     logQSLAdapter.setQSLList(records);
                                     loading = false;
                                 }
@@ -597,6 +613,16 @@ public class LogFragment extends Fragment {
         }
         return ((ipAddress & 0xff) + "." + (ipAddress >> 8 & 0xff) + "." + (ipAddress >> 16 & 0xff)
                 + "." + (ipAddress >> 24 & 0xff));
+    }
+
+    private boolean isUiReady() {
+        return isAdded() && binding != null && getActivity() != null;
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        binding = null;
     }
 
     @Override

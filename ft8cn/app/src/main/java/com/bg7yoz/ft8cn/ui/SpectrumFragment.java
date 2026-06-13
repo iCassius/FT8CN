@@ -144,15 +144,11 @@ public class SpectrumFragment extends Fragment {
                             (float) binding.waterfallView.getFreq_hz());
 
                     binding.rulerFrequencyView.setFreq(binding.waterfallView.getFreq_hz());
-
-                    requireActivity().runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            ToastMessage.show(String.format(
-                                    GeneralVariables.getStringFromResource(R.string.sound_frequency_is_set_to)
-                                    , binding.waterfallView.getFreq_hz()),true);
-                        }
-                    });
+                    if (isUiReady()) {
+                        ToastMessage.show(String.format(
+                                GeneralVariables.getStringFromResource(R.string.sound_frequency_is_set_to)
+                                , binding.waterfallView.getFreq_hz()), true);
+                    }
                 }
                 return false;
             }
@@ -167,6 +163,9 @@ public class SpectrumFragment extends Fragment {
 
 
     public void drawSpectrum(float[] buffer) {
+        if (!isUiReady()) {
+            return;
+        }
         if (buffer.length <= 0) {
             return;
         }
@@ -222,5 +221,15 @@ public class SpectrumFragment extends Fragment {
 
     public native void getFFTDataRaw(int[] data, int fftData[]);
     public native void getFFTDataRawFloat(float[] data,int fftData[]);
+
+    private boolean isUiReady() {
+        return isAdded() && binding != null;
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        binding = null;
+    }
 
 }
