@@ -31,6 +31,8 @@ import com.bg7yoz.ft8cn.serialport.UsbSerialPort;
 import com.bg7yoz.ft8cn.serialport.UsbSerialProber;
 import com.bg7yoz.ft8cn.serialport.util.SerialInputOutputManager;
 
+import androidx.core.content.ContextCompat;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -306,11 +308,8 @@ public class CableSerialPort {
         Log.d(TAG, "registerRigSerialPort: registered!");
         IntentFilter intentFilter = new IntentFilter(INTENT_ACTION_GRANT_USB);
         intentFilter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(broadcastReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            context.registerReceiver(broadcastReceiver, intentFilter);
-        }
+        ContextCompat.registerReceiver(context, broadcastReceiver, intentFilter,
+                ContextCompat.RECEIVER_NOT_EXPORTED);
         receiverRegistered = true;
     }
 

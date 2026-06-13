@@ -25,20 +25,20 @@ jobs:
           java-version: "17"
           cache: gradle
 
-      - name: Build debug APK
+      - name: Build release APK
         working-directory: ft8cn
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleRelease
 
       - name: Prepare APK
         id: apk
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          APK_NAME="FT8CN-v${VERSION}-debug.apk"
-          APK_PATH="ft8cn/app/build/outputs/apk/debug/${APK_NAME}"
-          cp ft8cn/app/build/outputs/apk/debug/app-debug.apk "${APK_PATH}"
+          APK_NAME="FT8CN-v${VERSION}-release.apk"
+          APK_PATH="ft8cn/app/build/outputs/apk/release/${APK_NAME}"
+          cp ft8cn/app/build/outputs/apk/release/app-release.apk "${APK_PATH}"
           echo "apk_path=${APK_PATH}" >> "${GITHUB_OUTPUT}"
           echo "apk_name=${APK_NAME}" >> "${GITHUB_OUTPUT}"
 

@@ -14,6 +14,7 @@ package com.bg7yoz.ft8cn;
 
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.animation.Animator;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
@@ -737,6 +738,7 @@ public class MainActivity extends AppCompatActivity {
 
 
     @Override
+    @SuppressLint("MissingSuperCall")
     public void onBackPressed() {
         if (navController.getGraph().getStartDestination() == navController.getCurrentDestination().getId()) {//说明是到最后一个页面了
             AlertDialog.Builder builder = new AlertDialog.Builder(this)
@@ -798,11 +800,7 @@ public class MainActivity extends AppCompatActivity {
         intentFilter.addAction(BluetoothAdapter.EXTRA_STATE);
         intentFilter.addAction("android.bluetooth.BluetoothAdapter.STATE_OFF");
         intentFilter.addAction("android.bluetooth.BluetoothAdapter.STATE_ON");
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(mReceive, intentFilter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            registerReceiver(mReceive, intentFilter);
-        }
+        ContextCompat.registerReceiver(this, mReceive, intentFilter, ContextCompat.RECEIVER_NOT_EXPORTED);
     }
 
     /**
