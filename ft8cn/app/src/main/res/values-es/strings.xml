@@ -529,8 +529,8 @@
     <string name="share_logs_been_read">Se han leído %d registros.</string>
     <string name="share_import_log_data">Importando datos de registro…</string>
 
-    <string name="cloudlog_settings">Cloudlog Settings</string>
-    <string name="config_enable_cloudlog">Enable Cloudlog sync</string>
+    <string name="cloudlog_settings">Cloudlog / Wavelog Settings</string>
+    <string name="config_enable_cloudlog">Enable Cloudlog / Wavelog sync</string>
     <string name="cloudlog_addr">Server address</string>
     <string name="cloudlog_api_key">Apikey</string>
     <string name="test_cloudlog_config">TEST</string>
