@@ -57,7 +57,6 @@ import com.bg7yoz.ft8cn.callsign.CallsignDatabase;
 import com.bg7yoz.ft8cn.connector.CableSerialPort;
 import com.bg7yoz.ft8cn.connector.ConnectMode;
 import com.bg7yoz.ft8cn.database.DatabaseOpr;
-import com.bg7yoz.ft8cn.database.OnAfterQueryConfig;
 import com.bg7yoz.ft8cn.database.OperationBand;
 import com.bg7yoz.ft8cn.databinding.MainActivityBinding;
 import com.bg7yoz.ft8cn.floatview.FloatView;
@@ -94,6 +93,8 @@ public class MainActivity extends AppCompatActivity {
     private FloatView floatView;
 
     private ShareLogsProgressDialog dialog = null;//生成共享log的对话框
+    private boolean configUiInitialized = false;
+    private boolean activityUiActive = false;
 
 
     String[] permissions = new String[]{Manifest.permission.RECORD_AUDIO
@@ -148,6 +149,9 @@ public class MainActivity extends AppCompatActivity {
                 .getLanguage().toUpperCase().startsWith("ZH"));
 
         mainViewModel = new ViewModelProvider(this).get(MainViewModel.class);
+        mainViewModel.configLoadComplete.observe(this, complete -> {
+            if (Boolean.TRUE.equals(complete)) consumeConfigLoadComplete();
+        });
         binding = MainActivityBinding.inflate(getLayoutInflater());
         binding.initDataLayout.setVisibility(View.VISIBLE);//显示LOG页面
         setContentView(binding.getRoot());
@@ -497,61 +501,14 @@ public class MainActivity extends AppCompatActivity {
      * 初始化一些数据
      */
     private void InitData() {
-        if (mainViewModel.configIsLoaded || mainViewModel.configIsLoading) return;
-        mainViewModel.configIsLoading = true;
-
         //读取波段数据
         if (mainViewModel.operationBand == null) {
             mainViewModel.operationBand = OperationBand.getInstance(getBaseContext());
         }
 
         mainViewModel.databaseOpr.getQslDxccToMap();
-
-        //获取所有的配置参数
-        mainViewModel.databaseOpr.getAllConfigParameter(new OnAfterQueryConfig() {
-            @Override
-            public void doOnBeforeQueryConfig(String KeyName) {
-
-            }
-
-            @Override
-            public void doOnAfterQueryConfig(String KeyName, String Value) {
-                // Individual rows are delivered for compatibility; startup actions belong
-                // to doOnConfigLoadComplete(), after all values are visible.
-            }
-
-            @Override
-            public void doOnConfigLoadComplete() {
-                mainViewModel.configIsLoaded = true;
-                mainViewModel.configIsLoading = false;
-                //此处梅登海德已经通过数据库得到了，但是如果GPS能获取到，还是用GPS的
-                String grid = MaidenheadGrid.getMyMaidenheadGrid(getApplicationContext());
-                if (!grid.equals("")) {//说明获取到了GPS数据
-                    GeneralVariables.setMyMaidenheadGrid(grid);
-                    //写到数据库中
-                    mainViewModel.databaseOpr.writeConfig("grid", grid, null);
-                }
-
-                mainViewModel.ft8TransmitSignal.setTimer_sec(GeneralVariables.transmitDelay);
-                //如果呼号、网格为空，就进入设置界面
-                if (GeneralVariables.getMyMaidenheadGrid().equals("")
-                        || GeneralVariables.myCallsign.equals("")) {
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {//导航到设置页面
-                            navController.navigate(R.id.menu_nav_config);
-                        }
-                    });
-                } else if (GeneralVariables.connectMode == ConnectMode.USB_CABLE) {
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            setSelectUsbDevice();
-                        }
-                    });
-                }
-            }
-        });
+        //获取所有的配置参数；数据加载归 MainViewModel，当前 Activity 只消费完成状态。
+        mainViewModel.loadConfigIfNeeded();
 
         //把历史中通联成功的呼号与网格的对应关系
         mainViewModel.databaseOpr.getCallsignMapGrid();
@@ -563,6 +520,56 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void consumeConfigLoadComplete() {
+        if (configUiInitialized || !activityUiActive || isFinishing()
+                || (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN_MR1
+                && isDestroyed())) {
+            return;
+        }
+        configUiInitialized = true;
+        //此处梅登海德已经通过数据库得到了，但是如果GPS能获取到，还是用GPS的
+        String grid = MaidenheadGrid.getMyMaidenheadGrid(getApplicationContext());
+        if (!grid.equals("")) {//说明获取到了GPS数据
+            GeneralVariables.setMyMaidenheadGrid(grid);
+            //写到数据库中
+            mainViewModel.databaseOpr.writeConfig("grid", grid, null);
+        }
+
+        mainViewModel.ft8TransmitSignal.setTimer_sec(GeneralVariables.transmitDelay);
+        //如果呼号、网格为空，就进入设置界面
+        if (GeneralVariables.getMyMaidenheadGrid().equals("")
+                || GeneralVariables.myCallsign.equals("")) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {//导航到设置页面
+                    if (activityUiActive && !isFinishing() && !isDestroyed()) {
+                        navController.navigate(R.id.menu_nav_config);
+                    }
+                }
+            });
+        } else if (GeneralVariables.connectMode == ConnectMode.USB_CABLE) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (activityUiActive && !isFinishing() && !isDestroyed()) {
+                        setSelectUsbDevice();
+                    }
+                }
+            });
+        }
+    }
+
+    @Override
+    protected void onStart() {
+        activityUiActive = true;
+        super.onStart();
+    }
+
+    @Override
+    protected void onStop() {
+        activityUiActive = false;
+        super.onStop();
+    }
 
     /**
      * 显示生成log的对话框
@@ -823,6 +830,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        activityUiActive = false;
         unregisterBluetoothReceiver();
         //保证屏幕方向切换后，不会因为对话框导致闪退
         if (Boolean.TRUE.equals(mainViewModel.mutableImportShareRunning.getValue())) {

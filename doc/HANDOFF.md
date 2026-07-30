@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-30　P0-1/P0-2 配置加载生命周期与损坏值修复
+
+### 1. 本次会话做了什么
+
+- 将配置数据加载移入 `MainViewModel.loadConfigIfNeeded()`，以 `MutableLiveData<Boolean>` 发布完成状态；`MainActivity` 每个实例独立观察并消费一次，旧实例停止/销毁后不再执行导航或 USB UI，新实例可从已完成状态重新消费。
+- 导航和 USB 延迟动作增加 Activity 活跃检查；同步调用由 ViewModel 内部串行门控，避免旋转/重建并发启动多次加载。
+- `DatabaseOpr` 为 Integer/Long/Float 配置增加字段级默认回退，拒绝 NaN/Infinity，并只记录字段名不记录值；查询、缓存和回调异常均进入可靠 `finally` 完成路径。
+- 新增/补充测试：Activity 重建新实例消费、损坏数值回退且完成一次；运行时权限测试规则避免全新 debug 包的权限对话框干扰生命周期测试。
+
+### 2. 当前状态
+
+- `AUTO_VERIFIED`：`Pixel_10_Pro_XL(AVD) - 17` 上 `:app:connectedDebugAndroidTest` 全套 9/9 通过（失败 0、错误 0、跳过 0）；`DatabaseConfigLoadTest` 3 个、`MainActivityConfigLifecycleTest` 1 个、既有 `CallsignDatabaseTest` 5 个。
+- `:app:assembleDebug` 成功；未使用真实设备，未做 HIL。
+- 首次 Activity 测试失败原因为新安装 debug 包仍显示运行时权限对话框，导致 Activity 处于 PAUSED；加入测试权限预授权后通过。一次增量构建还残留旧测试类，执行 clean 后全套结果稳定为 9/9，均属测试环境边界，不是代码失败。
+
+### 3. 下一步
+
+- 提交本分支新 commit，等待主会话审查/集成；不 push、不 tag。
+
+---
+
+---
+
 ## 2026-07-30　P0-C 模拟器 Instrumented 补充验收
 
 ### 1. 本次会话做了什么

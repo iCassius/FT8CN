@@ -87,6 +87,40 @@ public class DatabaseConfigLoadTest {
         assertEquals(1, completeCallbacks.get());
     }
 
+    @Test
+    public void damagedNumericConfigUsesDefaultsAndStillCompletesOnce() throws Exception {
+        Context context = ApplicationProvider.getApplicationContext();
+        DatabaseOpr database = new DatabaseOpr(context, "config_load_bad_numeric_test", null, 15);
+        database.getDb().delete("config", null, null);
+        insert(database, "transDelay", "not-a-number");
+        insert(database, "audioRate", "broken");
+        insert(database, "freq", "NaN");
+
+        AtomicInteger completeCallbacks = new AtomicInteger();
+        CountDownLatch complete = new CountDownLatch(1);
+        database.getAllConfigParameter(new OnAfterQueryConfig() {
+            @Override
+            public void doOnBeforeQueryConfig(String keyName) {
+            }
+
+            @Override
+            public void doOnAfterQueryConfig(String keyName, String value) {
+            }
+
+            @Override
+            public void doOnConfigLoadComplete() {
+                completeCallbacks.incrementAndGet();
+                assertEquals(500, GeneralVariables.transmitDelay);
+                assertEquals(12000, GeneralVariables.audioSampleRate);
+                assertEquals(1000f, GeneralVariables.getBaseFrequency(), 0.001f);
+                complete.countDown();
+            }
+        });
+
+        assertTrue("damaged config load did not complete", complete.await(10, TimeUnit.SECONDS));
+        assertEquals(1, completeCallbacks.get());
+    }
+
     private static void insert(DatabaseOpr database, String key, String value) {
         ContentValues values = new ContentValues();
         values.put("KeyName", key);
