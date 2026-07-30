@@ -35,10 +35,11 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 @RunWith(AndroidJUnit4.class)
 public class RadioNetworkClientTest {
     private static final int PACKET_COUNT = 128;
+    private static final InetAddress IPV4_LOOPBACK = ipv4Loopback();
 
     @Test
     public void radioUdpCopiesPayloadAndPreservesOrder() throws Exception {
-        DatagramSocket receiver = new DatagramSocket(0, InetAddress.getLoopbackAddress());
+        DatagramSocket receiver = new DatagramSocket(0, IPV4_LOOPBACK);
         receiver.setSoTimeout(3000);
         RadioUdpClient client = new RadioUdpClient(0);
         client.setActivated(true);
@@ -61,7 +62,7 @@ public class RadioNetworkClientTest {
 
     @Test
     public void icomUdpCopiesPayloadAndPreservesOrder() throws Exception {
-        DatagramSocket receiver = new DatagramSocket(0, InetAddress.getLoopbackAddress());
+        DatagramSocket receiver = new DatagramSocket(0, IPV4_LOOPBACK);
         receiver.setSoTimeout(3000);
         IcomUdpClient client = new IcomUdpClient();
         client.setActivated(true);
@@ -84,7 +85,7 @@ public class RadioNetworkClientTest {
 
     @Test
     public void radioTcpSendsSnapshotsInOrderAndNotifiesOnceOnEof() throws Exception {
-        ServerSocket server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+        ServerSocket server = new ServerSocket(0, 1, IPV4_LOOPBACK);
         server.setSoTimeout(3000);
         RadioTcpClient client = new RadioTcpClient();
         CountDownLatch connected = new CountDownLatch(1);
@@ -179,6 +180,14 @@ public class RadioNetworkClientTest {
 
     private static byte[] packet(int sequence) {
         return new byte[]{(byte) sequence, (byte) (sequence >>> 8), 0x55, (byte) 0xaa};
+    }
+
+    private static InetAddress ipv4Loopback() {
+        try {
+            return InetAddress.getByName("127.0.0.1");
+        } catch (IOException e) {
+            throw new AssertionError(e);
+        }
     }
 
     private static byte[] expectedTcpPayload() {
