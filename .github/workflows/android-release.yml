@@ -27,9 +27,14 @@ jobs:
       - name: Check release contract and sensitive-file hygiene
         run: python scripts/check_release_contract.py
 
+      - name: Test release certificate gates
+        run: python -m unittest scripts.test_release_gates
+
       - name: Resolve release tag and validate version
         id: version
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
@@ -37,7 +42,7 @@ jobs:
             exit 1
           fi
           tag_version="${GITHUB_REF_NAME#v}"
-          if [[ "${GITHUB_REF_NAME}" != v[0-9]*.[0-9]*.[0-9][0-9][0-9] ]]; then
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]{3}$ ]]; then
             echo "Tag must be vMAJOR.MINOR.BUILD with a three-digit build: ${GITHUB_REF_NAME}" >&2
             exit 1
           fi
@@ -46,14 +51,42 @@ jobs:
             echo "Tag ${tag_version} does not match canonical Gradle version ${gradle_version}" >&2
             exit 1
           fi
-          if git tag --list "${GITHUB_REF_NAME}" | grep -qx "${GITHUB_REF_NAME}" && [[ "${GITHUB_REF_NAME}" == "v0.93.004" ]]; then
-            echo "Existing v0.93.004 is immutable; refusing to rebuild/overwrite it." >&2
+          remote_tag_sha="$(git ls-remote --refs origin "refs/tags/${GITHUB_REF_NAME}" | awk '{print $1}')"
+          local_tag_sha="$(git rev-parse "${GITHUB_REF_NAME}")"
+          if [[ -z "${remote_tag_sha}" || "${remote_tag_sha}" != "${local_tag_sha}" ]]; then
+            echo "Remote tag ${GITHUB_REF_NAME} is missing or does not match the checked-out tag; refusing to move/overwrite it." >&2
+            exit 1
+          fi
+          notes_file="doc/release-notes/v${tag_version}.md"
+          test -f "${notes_file}"
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "GitHub Release ${GITHUB_REF_NAME} already exists; refusing to overwrite it." >&2
             exit 1
           fi
           echo "version=${tag_version}" >> "${GITHUB_OUTPUT}"
           echo "short_sha=${GITHUB_SHA:0:7}" >> "${GITHUB_OUTPUT}"
+          echo "notes_file=${notes_file}" >> "${GITHUB_OUTPUT}"
+
+      - name: Hold formal release until user approval and trusted certificate are configured
+        shell: bash
+        env:
+          FT8CN_FORMAL_RELEASE_APPROVED: ${{ secrets.FT8CN_FORMAL_RELEASE_APPROVED }}
+          FT8CN_RELEASE_CERT_SHA256: ${{ secrets.FT8CN_RELEASE_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          : "${FT8CN_FORMAL_RELEASE_APPROVED:?Missing secret FT8CN_FORMAL_RELEASE_APPROVED; formal release is blocked until the user explicitly approves signing migration}"
+          : "${FT8CN_RELEASE_CERT_SHA256:?Missing secret FT8CN_RELEASE_CERT_SHA256}"
+          if [[ "${FT8CN_FORMAL_RELEASE_APPROVED}" != "yes" ]]; then
+            echo "Formal release remains blocked; explicit user approval is required." >&2
+            exit 1
+          fi
+          if [[ ! "${FT8CN_RELEASE_CERT_SHA256}" =~ ^[0-9a-fA-F]{64}$ ]]; then
+            echo "FT8CN_RELEASE_CERT_SHA256 must be 64 hexadecimal characters." >&2
+            exit 1
+          fi
 
       - name: Materialize formal keystore
+        id: signing
         shell: bash
         env:
           FT8CN_RELEASE_STORE_FILE: ${{ secrets.FT8CN_RELEASE_STORE_FILE }}
@@ -61,6 +94,7 @@ jobs:
           FT8CN_RELEASE_KEY_ALIAS: ${{ secrets.FT8CN_RELEASE_KEY_ALIAS }}
           FT8CN_RELEASE_KEY_PASSWORD: ${{ secrets.FT8CN_RELEASE_KEY_PASSWORD }}
           FT8CN_RELEASE_KEYSTORE_B64: ${{ secrets.FT8CN_RELEASE_KEYSTORE_B64 }}
+          FT8CN_RELEASE_CERT_SHA256: ${{ secrets.FT8CN_RELEASE_CERT_SHA256 }}
         run: |
           set -euo pipefail
           : "${FT8CN_RELEASE_STORE_FILE:?Missing secret FT8CN_RELEASE_STORE_FILE}"
@@ -68,21 +102,26 @@ jobs:
           : "${FT8CN_RELEASE_KEY_ALIAS:?Missing secret FT8CN_RELEASE_KEY_ALIAS}"
           : "${FT8CN_RELEASE_KEY_PASSWORD:?Missing secret FT8CN_RELEASE_KEY_PASSWORD}"
           : "${FT8CN_RELEASE_KEYSTORE_B64:?Missing secret FT8CN_RELEASE_KEYSTORE_B64}"
-          if [[ "${FT8CN_RELEASE_STORE_FILE}" = /* || "${FT8CN_RELEASE_STORE_FILE}" == *..* || "${FT8CN_RELEASE_STORE_FILE}" == *\\* ]]; then
-            echo "FT8CN_RELEASE_STORE_FILE must be a safe relative filename under ft8cn/." >&2
+          : "${FT8CN_RELEASE_CERT_SHA256:?Missing secret FT8CN_RELEASE_CERT_SHA256}"
+          if [[ "${FT8CN_RELEASE_STORE_FILE}" == *[\\/]* || "${FT8CN_RELEASE_STORE_FILE}" == *..* || "${FT8CN_RELEASE_STORE_FILE}" == .* ]]; then
+            echo "FT8CN_RELEASE_STORE_FILE must be a plain filename, not a repository path." >&2
             exit 1
           fi
-          mkdir -p "ft8cn/$(dirname "${FT8CN_RELEASE_STORE_FILE}")"
-          printf '%s' "${FT8CN_RELEASE_KEYSTORE_B64}" | base64 --decode > "ft8cn/${FT8CN_RELEASE_STORE_FILE}"
-          test -s "ft8cn/${FT8CN_RELEASE_STORE_FILE}"
+          signing_dir="${RUNNER_TEMP}/ft8cn-release-signing"
+          mkdir -p "${signing_dir}"
+          signing_path="${signing_dir}/${FT8CN_RELEASE_STORE_FILE}"
+          printf '%s' "${FT8CN_RELEASE_KEYSTORE_B64}" | base64 --decode > "${signing_path}"
+          test -s "${signing_path}"
+          echo "store_path=${signing_path}" >> "${GITHUB_OUTPUT}"
 
       - name: Build release APK
         working-directory: ft8cn
         env:
-          FT8CN_RELEASE_STORE_FILE: ${{ secrets.FT8CN_RELEASE_STORE_FILE }}
+          FT8CN_RELEASE_STORE_FILE: ${{ steps.signing.outputs.store_path }}
           FT8CN_RELEASE_STORE_PASSWORD: ${{ secrets.FT8CN_RELEASE_STORE_PASSWORD }}
           FT8CN_RELEASE_KEY_ALIAS: ${{ secrets.FT8CN_RELEASE_KEY_ALIAS }}
           FT8CN_RELEASE_KEY_PASSWORD: ${{ secrets.FT8CN_RELEASE_KEY_PASSWORD }}
+          FT8CN_RELEASE_CERT_SHA256: ${{ secrets.FT8CN_RELEASE_CERT_SHA256 }}
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease
@@ -107,6 +146,8 @@ jobs:
           if-no-files-found: error
 
       - name: Verify formal APK signature
+        env:
+          FT8CN_RELEASE_CERT_SHA256: ${{ secrets.FT8CN_RELEASE_CERT_SHA256 }}
         run: python scripts/verify_apk_signature.py --apk "${{ steps.apk.outputs.apk_path }}" --expect release
 
       - name: Upload APK to GitHub Release
@@ -116,10 +157,18 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
           APK_PATH: ${{ steps.apk.outputs.apk_path }}
         run: |
-          test -f doc/RELEASES.md
-          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
-            echo "GitHub Release ${TAG_NAME} already exists; refusing to overwrite it." >&2
-            exit 1
-          fi
-          gh release create "${TAG_NAME}" --title "FT8CN ${TAG_NAME}" --notes-file doc/RELEASES.md
+          NOTES_FILE="${{ steps.version.outputs.notes_file }}"
+          test -f "${NOTES_FILE}"
+          gh release create "${TAG_NAME}" --title "FT8CN ${TAG_NAME}" --notes-file "${NOTES_FILE}"
           gh release upload "${TAG_NAME}" "${APK_PATH}"
+
+      - name: Cleanup formal keystore
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          signing_dir="${RUNNER_TEMP}/ft8cn-release-signing"
+          if [[ -d "${signing_dir}" ]]; then
+            find "${signing_dir}" -type f -exec shred -u {} + 2>/dev/null || true
+            rmdir "${signing_dir}" 2>/dev/null || true
+          fi

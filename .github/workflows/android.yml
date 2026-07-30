@@ -26,6 +26,9 @@ jobs:
     - name: Check release contract and sensitive-file hygiene
       run: python scripts/check_release_contract.py
 
+    - name: Test release certificate gates
+      run: python -m unittest scripts.test_release_gates
+
     - name: Build TEST/BETA APK
       working-directory: ft8cn
       run: ./gradlew :app:packageTestApk

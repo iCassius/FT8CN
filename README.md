@@ -40,7 +40,7 @@ git tag -a v0.93.005 -m "FT8CN v0.93.005"
 git push origin v0.93.005
 ```
 
-推送 `v*.*.*` 格式的 tag 后，GitHub Actions 会自动构建正式 APK，并上传到对应的 GitHub Release。当前 `v0.93.004` 已存在且不可覆盖；后续版本按三位构建号递增。
+推送 `v*.*.*` 格式的 tag 后会进入 GitHub Actions 发布门禁；在用户确认签名迁移、提供长期 keystore 和可信证书前，正式 workflow 会阻断，不创建 Release。当前 `v0.93.004` 已存在且不可覆盖；现阶段只分发 TEST/BETA APK。
 
 请前往 [Releases](https://github.com/iCassius/FT8CN/releases) 下载最新 APK 文件。
 

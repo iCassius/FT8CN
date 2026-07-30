@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-30　P0-E 第二轮独立发布审查：签名迁移与正式发布阻断
+
+### 做了什么
+
+- 保留已通过的 TEST/BETA APK：`ft8cn/.artifacts/FT8CN-v0.93.005-beta-d8f8c5d.apk`，命名、JDK 17 和 beta 包名不变。
+- 增加 `FT8CN_RELEASE_CERT_SHA256` 可信证书指纹门禁；Gradle 与 `verify_apk_signature.py` 都要求正式 APK 精确匹配，错误指纹必须失败。
+- 明确已公布 `v0.93.004` APK 使用 Android Debug 证书；不假设旧私钥可取回。正式发布默认要求用户批准一次性签名迁移、提供新长期 keystore 和证书指纹，否则 workflow fail-fast。
+- 泛化远端同名 tag/既有 GitHub Release 不可覆盖检查；增加版本专用 `doc/release-notes/v0.93.005.md`，不再把完整 `doc/RELEASES.md` 直接作为 body。
+- CI keystore 改写到固定 `${RUNNER_TEMP}/ft8cn-release-signing`，workflow 使用 `if: always()` 清理；Git 忽略规则递归覆盖 JKS、keystore、P12/PFX 和 APK。
+- 敏感扫描覆盖跟踪文件、staged diff 和可选历史 blob 扫描，覆盖 PEM/JKS/PKCS12/Base64/credential 模式并跳过自身规则文本和 placeholder。
+
+### 当前阻断与用户决策
+
+- 当前只允许生成/分发 TEST/BETA，不创建正式 Release 或 tag。
+- 若要发布 `v0.93.005`，用户必须明确接受一次性签名迁移的升级/卸载边界，并提供新的长期 keystore、`FT8CN_RELEASE_CERT_SHA256` 和 `FT8CN_FORMAL_RELEASE_APPROVED`；不能假装新证书可以覆盖 v0.93.004。
+- 如果旧私钥不可恢复，发布前必须指导用户备份 ADIF/QSO 和可导出的配置；项目没有自动迁移应用私有数据的实现，卸载重装可能清除旧包数据。
+- 仓库管理员还需设置 GitHub tag protection/ruleset，禁止 tag deletion、update/force-push，并限制 Release 权限。
+
+### 下一步
+
+1. 只运行 beta 构建、beta 正反证书测试和发布合同扫描；正式 release build 在无 keystore/批准时保持预期失败。
+2. 只有用户完成上述决策后，才在配置 secrets 的环境运行正式构建和证书指纹比对。
+3. 本分支不创建、不推送 tag，不 push。
+
 ## 2026-07-30　P0-E 发布、CI、签名、版本与可回退测试 APK
 
 ### 做了什么

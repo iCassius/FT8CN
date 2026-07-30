@@ -6,18 +6,21 @@
 
 ## 第一部分：版本发布历史与变更日志
 
-### v0.93.005 - P0-E 发布链与可回退测试包（准备中）
+### v0.93.005 - P0-E 发布链与可回退测试包（正式发布阻断）
 
 - **统一版本身份**：以 `ft8cn/gradle.properties` 为唯一来源，使用 `0.93.005` / `versionCode 93005` / `v0.93.005`；保留并禁止覆盖既有 `v0.93.004`。
 - **正式签名 fail-fast**：正式构建缺少任一正式签名配置或 keystore 文件时直接失败，禁止回退到 debug 证书。
+- **签名迁移阻断**：已公布的 `v0.93.004` APK 使用 Android Debug 证书；没有证据证明旧私钥可恢复，也不假设可以取回。若旧私钥不可恢复，`v0.93.005` 必须由用户明确选择为一次性签名迁移，并提供新的长期 keystore、可信证书 SHA-256 和批准；在此之前不创建正式 Release/tag。
 - **TEST/BETA 产物**：本机和普通 CI 生成 debug 签名、`com.bg7yoz.ft8cn.beta` 包名的独立 APK，文件名包含版本、beta 类型和短 commit，可与正式版共存。
-- **发布门禁**：普通 CI/tag workflow 统一使用 JDK 17；Release notes 使用实际存在的 `doc/RELEASES.md`；加入版本、敏感信息、APK 签名和产物路径检查。
-- **回退边界**：同包较低 `versionCode` 需要卸载，或在授权 adb 测试设备使用 `adb -d install -r -d`；BETA 通过独立包名共存，不冒充正式版。
+- **发布门禁**：普通 CI/tag workflow 统一使用 JDK 17；使用版本专用 [Release notes](release-notes/v0.93.005.md)；加入可信证书精确匹配、版本、敏感信息、APK 签名和产物路径检查。
+- **tag/Release 保护**：发布前检查远端同名 tag 与 GitHub Release，禁止移动或覆盖；仓库管理员还需配置 GitHub tag protection/ruleset。
+- **回退边界**：同包较低 `versionCode` 需要卸载，或在授权 adb 测试设备使用 `adb -s <serial> install -r -d`；BETA 通过独立包名共存，不冒充正式版。
 
 本项只修改构建、workflow、发布文档和校验脚本，不修改运行时功能代码；正式证书指纹和真机/HIL 仍需在发布环境单独确认。
 
 ### v0.93.004 - Cloudlog/Wavelog 扩展与工作流优化
 本版本打包了 FT8CN 最新的运行期健壮性改进和日志同步优化。
+- **签名事实**：已公布 APK 使用 Android Debug 证书；本仓库不声称其旧私钥可恢复，也不把新 formal key 当作可覆盖升级的旧证书。
 - **新增 Wavelog 日志同步支持**：支持与 Wavelog 平台无缝同步，并与现有的 Cloudlog 上传逻辑合并，支持自动匹配 Endpoint。
 - **优化日志连接测试**：更新了 Cloudlog/Wavelog 测试流程，无需写入虚拟 QSO 即可验证 API 连接是否正常。
 - **广播接收器注册安全强化**：针对 Android 13+ 的动态注册广播接收器要求进行适配，防止因缺少 Exported 标志而闪退。

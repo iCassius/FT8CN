@@ -43,18 +43,21 @@ def releaseStoreFile = envOrProperty("FT8CN_RELEASE_STORE_FILE", "storeFile")
 def releaseStorePassword = envOrProperty("FT8CN_RELEASE_STORE_PASSWORD", "storePassword")
 def releaseKeyAlias = envOrProperty("FT8CN_RELEASE_KEY_ALIAS", "keyAlias")
 def releaseKeyPassword = envOrProperty("FT8CN_RELEASE_KEY_PASSWORD", "keyPassword")
+def releaseCertSha256 = envOrProperty("FT8CN_RELEASE_CERT_SHA256", "releaseCertSha256")
 def hasReleaseSigning = [
         releaseStoreFile,
         releaseStorePassword,
         releaseKeyAlias,
-        releaseKeyPassword
-].every { it != null && !it.toString().trim().isEmpty() }
+        releaseKeyPassword,
+        releaseCertSha256
+].every { it != null && !it.toString().trim().isEmpty() } &&
+        releaseCertSha256.toString() ==~ /(?i)[0-9a-f]{64}/
 def releaseStorePath = hasReleaseSigning ? rootProject.file(releaseStoreFile.toString()) : null
 def releaseTaskRequested = gradle.startParameter.taskNames.any {
     it.toLowerCase(Locale.ROOT).contains("release")
 }
 if (releaseTaskRequested && !hasReleaseSigning) {
-    throw new GradleException("Release signing is required. Set FT8CN_RELEASE_STORE_FILE, FT8CN_RELEASE_STORE_PASSWORD, FT8CN_RELEASE_KEY_ALIAS, and FT8CN_RELEASE_KEY_PASSWORD, or provide a complete ft8cn/keystore.properties. Debug signing is never valid for release.")
+    throw new GradleException("Release signing is required. Set the four FT8CN_RELEASE_* signing values plus FT8CN_RELEASE_CERT_SHA256, or provide a complete ft8cn/keystore.properties. Debug signing or an untrusted certificate is never valid for release.")
 }
 if (releaseTaskRequested && !releaseStorePath.isFile()) {
     throw new GradleException("Release keystore does not exist: ${releaseStorePath.absolutePath}")
@@ -158,10 +161,14 @@ def verifyReleaseSigning = tasks.register("verifyReleaseSigning") {
                 "FT8CN_RELEASE_STORE_FILE/storeFile": releaseStoreFile,
                 "FT8CN_RELEASE_STORE_PASSWORD/storePassword": releaseStorePassword,
                 "FT8CN_RELEASE_KEY_ALIAS/keyAlias": releaseKeyAlias,
-                "FT8CN_RELEASE_KEY_PASSWORD/keyPassword": releaseKeyPassword
+                "FT8CN_RELEASE_KEY_PASSWORD/keyPassword": releaseKeyPassword,
+                "FT8CN_RELEASE_CERT_SHA256/releaseCertSha256": releaseCertSha256
         ].findAll { entry -> entry.value == null || entry.value.toString().trim().isEmpty() }.keySet()
         if (!missing.isEmpty()) {
             throw new GradleException("Missing release signing values: ${missing.join(', ')}. Formal release builds cannot use the debug certificate.")
+        }
+        if (!(releaseCertSha256.toString() ==~ /(?i)[0-9a-f]{64}/)) {
+            throw new GradleException("FT8CN_RELEASE_CERT_SHA256/releaseCertSha256 must be exactly 64 hexadecimal characters.")
         }
         def store = rootProject.file(releaseStoreFile.toString())
         if (!store.isFile()) {

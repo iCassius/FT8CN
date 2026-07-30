@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Check version, release workflow, and tracked-artifact hygiene before a build."""
+"""Check release identity, signing gates, and tracked/staged secret hygiene."""
 
 from __future__ import annotations
 
+import argparse
 import re
 import subprocess
 import sys
@@ -10,11 +11,34 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SELF = Path(__file__).resolve()
+SECRET_FILE_SUFFIXES = {".jks", ".keystore", ".p12", ".pfx", ".pem", ".key"}
+SECRET_FILE_NAMES = {
+    ".env",
+    "credentials.json",
+    "service-account.json",
+    "keystore.properties",
+}
+PLACEHOLDER_RE = re.compile(r"(?i)(replace-with|your[-_]|<secret>|<key_|example|changeme)")
+SECRET_LINE_PATTERNS = (
+    re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----"),
+    re.compile(r"(?i)\b(?:ghp|github_pat|xox[baprs])-[-_a-z0-9]{20,}\b"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"(?i)\b(?:bearer|authorization)\s*[:=]\s*(?!\$\{\{)[^\s]+"),
+    re.compile(
+        r"(?i)\b(?:password|passwd|secret|token|private[_-]?key|credential)\b\s*[:=]\s*([A-Za-z0-9+/]{32,}={0,2})"
+    ),
+)
 
 
 def fail(message: str) -> None:
     print(f"ERROR: {message}", file=sys.stderr)
     raise SystemExit(1)
+
+
+def run_git(*args: str) -> str:
+    result = subprocess.run(["git", *args], cwd=ROOT, check=True, capture_output=True)
+    return result.stdout.decode("utf-8", errors="replace")
 
 
 def read_properties(path: Path) -> dict[str, str]:
@@ -29,13 +53,82 @@ def read_properties(path: Path) -> dict[str, str]:
 
 
 def tracked_files() -> list[Path]:
-    result = subprocess.run(
-        ["git", "ls-files", "-z"], cwd=ROOT, check=True, capture_output=True
+    return [ROOT / item for item in run_git("ls-files", "-z").split("\0") if item]
+
+
+def scan_text(text: str, label: str) -> None:
+    for line in text.splitlines():
+        if PLACEHOLDER_RE.search(line):
+            continue
+        for pattern in SECRET_LINE_PATTERNS:
+            if pattern.search(line):
+                fail(f"possible secret material in {label}; value was not printed")
+
+
+def scan_tracked_files() -> None:
+    for path in tracked_files():
+        if path.resolve() == SELF:
+            continue
+        relative = path.relative_to(ROOT)
+        if path.suffix.lower() in SECRET_FILE_SUFFIXES or path.name in SECRET_FILE_NAMES:
+            fail(f"signing/credential file is tracked: {relative}")
+        if path.is_file() and path.stat().st_size < 2_000_000:
+            scan_text(path.read_text(encoding="utf-8", errors="ignore"), str(relative))
+
+
+def scan_staged_diff() -> None:
+    diff = run_git("diff", "--cached", "--unified=0", "--no-ext-diff")
+    current_path: str | None = None
+    added: list[str] = []
+    for line in diff.splitlines():
+        if line.startswith("+++ b/"):
+            current_path = line[6:]
+            added = []
+        elif line.startswith("+") and not line.startswith("+++") and current_path:
+            added.append(line[1:])
+        elif line.startswith("@@") and current_path and added:
+            if current_path not in {str(SELF.relative_to(ROOT)).replace("\\", "/")}:
+                scan_text("\n".join(added), f"staged diff {current_path}")
+            added = []
+    if current_path and added and current_path != str(SELF.relative_to(ROOT)).replace("\\", "/"):
+        scan_text("\n".join(added), f"staged diff {current_path}")
+
+
+def scan_history() -> None:
+    """Scan reachable historical text blobs when explicitly requested."""
+    entries = [line.partition(" ") for line in run_git("rev-list", "--objects", "--all").splitlines()]
+    object_ids = [object_id for object_id, _, path_hint in entries if Path(path_hint).name not in {"check_release_contract.py", "verify_apk_signature.py"}]
+    if not object_ids:
+        return
+    process = subprocess.Popen(
+        ["git", "cat-file", "--batch"], cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE
     )
-    return [ROOT / item for item in result.stdout.decode().split("\0") if item]
+    output, _ = process.communicate(("\n".join(object_ids) + "\n").encode())
+    cursor = 0
+    for object_id in object_ids:
+        header_end = output.find(b"\n", cursor)
+        if header_end < 0:
+            break
+        header = output[cursor:header_end].split()
+        cursor = header_end + 1
+        if len(header) < 3 or header[1] != b"blob":
+            continue
+        size = int(header[2])
+        body = output[cursor:cursor + size]
+        cursor += size + 1
+        if b"\x00" not in body and len(body) < 2_000_000:
+            scan_text(body.decode("utf-8", errors="ignore"), f"history blob {object_id[:12]}")
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--history",
+        action="store_true",
+        help="Also scan reachable historical text blobs; slower and intended for pre-release review.",
+    )
+    args = parser.parse_args()
+
     properties_path = ROOT / "ft8cn" / "gradle.properties"
     values = read_properties(properties_path)
     version = values.get("ft8cn.versionName", "")
@@ -52,38 +145,45 @@ def main() -> None:
         fail("app/build.gradle is not consuming the canonical gradle.properties version")
     if re.search(r"release\s*\{[^}]*signingConfig\s+signingConfigs\.debug", app_gradle, re.S):
         fail("release build type may not use the debug signing config")
+    if "FT8CN_RELEASE_CERT_SHA256" not in app_gradle or "releaseCertSha256" not in app_gradle:
+        fail("formal release signing must require the trusted certificate SHA-256")
 
     ci = (ROOT / ".github" / "workflows" / "android.yml").read_text(encoding="utf-8")
     release_ci = (ROOT / ".github" / "workflows" / "android-release.yml").read_text(encoding="utf-8")
+    root_ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+    for pattern in ("**/*.jks", "**/*.keystore", "**/*.p12", "**/*.pfx", "**/*.apk"):
+        if pattern not in root_ignore:
+            fail(f"root .gitignore must recursively ignore {pattern}")
     if "java-version: '17'" not in ci and 'java-version: "17"' not in ci:
         fail("ordinary CI must use JDK 17 for AGP 9")
     if "java-version: '17'" not in release_ci and 'java-version: "17"' not in release_ci:
         fail("tag release workflow must use JDK 17 for AGP 9")
-    if "doc/RELEASES.md" not in release_ci or "--notes-file RELEASES.md" in release_ci:
-        fail("release workflow must use the repository's actual doc/RELEASES.md notes file")
+    if "doc/release-notes/v${tag_version}.md" not in release_ci or "--notes-file RELEASES.md" in release_ci:
+        fail("release workflow must use the version-specific notes file")
+    for required in (
+        ROOT / "doc" / "RELEASES.md",
+        ROOT / "doc" / "RELEASE_SIGNING.md",
+        ROOT / "doc" / "release-notes" / f"v{version}.md",
+    ):
+        if not required.is_file():
+            fail(f"required release document is missing: {required.relative_to(ROOT)}")
+    notes = (ROOT / "doc" / "release-notes" / f"v{version}.md").read_text(encoding="utf-8")
+    if not re.search(rf"^# FT8CN v{re.escape(version)} Release Notes$", notes, re.M):
+        fail(f"version-specific notes do not have the exact v{version} heading")
+    if "FT8CN_FORMAL_RELEASE_APPROVED" not in release_ci:
+        fail("formal release workflow must remain blocked until explicit approval")
+    if "FT8CN_RELEASE_CERT_SHA256" not in release_ci:
+        fail("formal release workflow must pass the trusted certificate fingerprint")
+    if "if: ${{ always() }}" not in release_ci or "ft8cn-release-signing" not in release_ci:
+        fail("formal keystore cleanup must be an always-run step in a fixed temp directory")
+    if "git ls-remote" not in release_ci or "gh release view" not in release_ci:
+        fail("release workflow must check immutable remote tags and existing Releases")
 
-    required_docs = [ROOT / "doc" / "RELEASES.md", ROOT / "doc" / "RELEASE_SIGNING.md"]
-    for path in required_docs:
-        if not path.is_file():
-            fail(f"required release document is missing: {path.relative_to(ROOT)}")
-
-    forbidden_suffixes = {".apk", ".jks", ".keystore"}
-    for path in tracked_files():
-        if path.resolve() == Path(__file__).resolve():
-            continue
-        if path.suffix.lower() in forbidden_suffixes or path.name in {"keystore.properties"}:
-            fail(f"generated APK or signing material is tracked: {path.relative_to(ROOT)}")
-        if path.is_file() and path.stat().st_size < 2_000_000:
-            text = path.read_text(encoding="utf-8", errors="ignore")
-            if "-----BEGIN PRIVATE KEY-----" in text or "-----BEGIN RSA PRIVATE KEY-----" in text:
-                fail(f"private key material is present in tracked file: {path.relative_to(ROOT)}")
-            for line in text.splitlines():
-                if re.search(r"(?i)^(storePassword|keyPassword)\s*=", line) and not re.search(
-                    r"(?i)=(replace-with|your[-_])", line
-                ):
-                    fail(f"possible real signing password in tracked file: {path.relative_to(ROOT)}")
-
-    print(f"release contract OK: version={version}, versionCode={code}")
+    scan_tracked_files()
+    scan_staged_diff()
+    if args.history:
+        scan_history()
+    print(f"release contract OK: version={version}, versionCode={code}, notes=v{version}")
 
 
 if __name__ == "__main__":
