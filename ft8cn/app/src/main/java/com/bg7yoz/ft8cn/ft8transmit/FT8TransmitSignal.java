@@ -30,8 +30,10 @@ import com.bg7yoz.ft8cn.timer.UtcTimer;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
 
 import java.util.ArrayList;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.FutureTask;
 
 public class FT8TransmitSignal {
     private static final String TAG = "FT8TransmitSignal";
@@ -82,8 +84,19 @@ public class FT8TransmitSignal {
     public MutableLiveData<ArrayList<FunctionOfTransmit>> mutableFunctions = new MutableLiveData<>();
 
     private final OnDoTransmitted onDoTransmitted;//一般是用于打开关闭PTT
-    private final ExecutorService doTransmitThreadPool = AppExecutors.getInstance().decoding();
+    private final ExecutorService doTransmitThreadPool;
     private final DoTransmitRunnable doTransmitRunnable = new DoTransmitRunnable(this);
+    private final Object lifecycleLock = new Object();
+    private final Set<DoTransmitTask> doTransmitTasks = ConcurrentHashMap.newKeySet();
+    private final Observer<Float> volumeObserver = new Observer<Float>() {
+        @Override
+        public void onChanged(Float aFloat) {
+            if (audioTrack != null) {
+                audioTrack.setVolume(aFloat);
+            }
+        }
+    };
+    private volatile boolean stopped;
 
     static {
         System.loadLibrary("ft8cn");
@@ -98,23 +111,23 @@ public class FT8TransmitSignal {
      */
     public FT8TransmitSignal(DatabaseOpr databaseOpr
             , OnDoTransmitted doTransmitted, OnTransmitSuccess onTransmitSuccess) {
+        this(databaseOpr, doTransmitted, onTransmitSuccess, AppExecutors.getInstance().decoding());
+    }
+
+    FT8TransmitSignal(DatabaseOpr databaseOpr
+            , OnDoTransmitted doTransmitted, OnTransmitSuccess onTransmitSuccess
+            , ExecutorService doTransmitThreadPool) {
         this.onDoTransmitted = doTransmitted;//用于打开关闭PTT的事件
         this.onTransmitSuccess = onTransmitSuccess;//用于保存QSL的事件
         this.databaseOpr = databaseOpr;
+        this.doTransmitThreadPool = doTransmitThreadPool;
 
         setTransmitting(false);
         setActivated(false);
 
 
         //观察音量设置的变化
-        GeneralVariables.mutableVolumePercent.observeForever(new Observer<Float>() {
-            @Override
-            public void onChanged(Float aFloat) {
-                if (audioTrack != null) {
-                    audioTrack.setVolume(aFloat);
-                }
-            }
-        });
+        GeneralVariables.mutableVolumePercent.observeForever(volumeObserver);
 
         utcTimer = new UtcTimer(FT8Common.FT8_SLOT_TIME_M, false, new OnUtcTimer() {
             @Override
@@ -175,7 +188,7 @@ public class FT8TransmitSignal {
     //发射信号
     //@RequiresApi(api = Build.VERSION_CODES.N)
     public void doTransmit() {
-        if (!activated) {
+        if (!activated || stopped) {
             return;
         }
         //检测是不是黑名单频率，WSPR-2的频率，频率=电台频率+声音频率
@@ -187,7 +200,19 @@ public class FT8TransmitSignal {
             return;
         }
         Log.d(TAG, "doTransmit: 开始发射...");
-        doTransmitThreadPool.execute(doTransmitRunnable);
+        DoTransmitTask task = new DoTransmitTask();
+        synchronized (lifecycleLock) {
+            if (stopped) {
+                return;
+            }
+            doTransmitTasks.add(task);
+        }
+        try {
+            doTransmitThreadPool.execute(task);
+        } catch (RuntimeException e) {
+            doTransmitTasks.remove(task);
+            throw e;
+        }
 
         mutableFunctions.postValue(functionList);
     }
@@ -296,17 +321,36 @@ public class FT8TransmitSignal {
      * 生成指令序列
      */
     public void stop() {
+        synchronized (lifecycleLock) {
+            if (stopped) {
+                return;
+            }
+            stopped = true;
+            for (DoTransmitTask task : doTransmitTasks) {
+                task.cancel(true);
+            }
+            doTransmitTasks.clear();
+        }
         if (utcTimer != null) {
-            utcTimer.stop();
-            utcTimer.delete();
+            try {
+                utcTimer.stop();
+                utcTimer.delete();
+            } catch (Exception ignored) {}
         }
         if (audioTrack != null) {
             try {
                 audioTrack.stop();
             } catch (Exception ignored) {}
-            audioTrack.release();
+            try {
+                audioTrack.release();
+            } catch (Exception ignored) {}
+            audioTrack = null;
         }
-        doTransmitThreadPool.shutdown();
+        GeneralVariables.mutableVolumePercent.removeObserver(volumeObserver);
+    }
+
+    public void close() {
+        stop();
     }
 
     public void generateFun() {
@@ -365,7 +409,9 @@ public class FT8TransmitSignal {
                         break;
                     }
                 } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    Thread.currentThread().interrupt();
+                    isTransmitting = false;
+                    break;
                 }
             }
             Log.d(TAG, "playFT8Signal: 退出网络音频发送。");
@@ -392,7 +438,9 @@ public class FT8TransmitSignal {
                                 break;
                             }
                         } catch (InterruptedException e) {
-                            e.printStackTrace();
+                            Thread.currentThread().interrupt();
+                            isTransmitting = false;
+                            break;
                         }
                     }
                     Log.d(TAG, "playFT8Signal: transmitting over CAT is finished.");
@@ -1083,6 +1131,20 @@ public class FT8TransmitSignal {
         }
     }
 
+    private class DoTransmitTask extends FutureTask<Void> {
+        DoTransmitTask() {
+            super(() -> {
+                if (!stopped) {
+                    doTransmitRunnable.run();
+                }
+            }, null);
+        }
+
+        @Override
+        protected void done() {
+            doTransmitTasks.remove(this);
+        }
+    }
 
     private static class DoTransmitRunnable implements Runnable {
         FT8TransmitSignal transmitSignal;
@@ -1094,6 +1156,9 @@ public class FT8TransmitSignal {
         @SuppressLint("DefaultLocale")
         @Override
         public void run() {
+            if (transmitSignal.stopped) {
+                return;
+            }
             //todo 此处可能要修改，维护一个列表。把每个呼号，网格，时间，波段，记录下来
             if (transmitSignal.functionOrder == 1 || transmitSignal.functionOrder == 2) {//当消息处于1或2时，说明开始了通联
                 transmitSignal.messageStartTime = UtcTimer.getSystemTime();
@@ -1113,6 +1178,9 @@ public class FT8TransmitSignal {
             }
             msg.modifier = GeneralVariables.toModifier;
 
+            if (transmitSignal.stopped) {
+                return;
+            }
             if (transmitSignal.onDoTransmitted != null) {
                 //此处用于处理PTT等事件
                 transmitSignal.onDoTransmitted.onBeforeTransmit(msg, transmitSignal.functionOrder);
@@ -1135,7 +1203,11 @@ public class FT8TransmitSignal {
             try {//给电台一个100毫秒的响应时间
                 Thread.sleep(GeneralVariables.pttDelay);//给PTT指令后，电台一个响应时间，默认100毫秒
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                Thread.currentThread().interrupt();
+                return;
+            }
+            if (transmitSignal.stopped) {
+                return;
             }
 
 //            if (transmitSignal.onDoTransmitted != null) {//处理音频数据，可以给ICOM的网络模式发送

@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-30　P0-A：发射组件共享执行器与 Observer 生命周期修复
+
+### 1. 本次会话做了什么
+
+- `FT8TransmitSignal` 默认继续使用进程级 `AppExecutors.decoding()`，`stop()` 不再关闭共享执行器。
+- 发射任务改为按组件保存并取消自己的 `FutureTask`；组件停止后不再接受新的发射调度，并补充 `close()` 与 `stop()` 的幂等行为。
+- 保存音量 `observeForever` 的 Observer 实例，在 `stop()` 中可靠移除；新增 Android 回归测试覆盖组件销毁重建后仍可提交调度、共享执行器未被关闭、Observer 移除及重复 stop/close。
+
+### 2. 当前状态
+
+- 分支：`fix/p0-a-transmit-lifecycle`。
+- `AUTO_VERIFIED`：`compileDebugJavaWithJavac`、`compileDebugAndroidTestJavaWithJavac`、`assembleDebug`、`connectedDebugAndroidTest`；模拟器 Pixel_10_Pro_XL / Android 17 共 7 个测试通过。
+- 未做 HIL：未连接实体电台，未真实发射，未验证 CAT/PTT/音频链路和完整 QSO。
+
+### 3. 下一步
+
+- 将本分支提交后交由主会话按 P0-A 范围集成；不要把执行器关闭责任重新放回 `FT8TransmitSignal.stop()`。
+
+---
+
 ## 2026-06-12　测试版打包（.beta 并存安装）+ 两个全新安装闪退修复
 
 ### 1. 本次会话做了什么
