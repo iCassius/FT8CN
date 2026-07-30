@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-30　P0-B 第二轮：会话隔离、可重启音频与有界队列收口
+
+### 做了什么
+
+- 将 `BoundedSerialExecutor` 改为单消费者、有限容量、显式拒绝的执行器：默认提交不等待，提供可中断的限时提交、待执行任务取消、幂等 `shutdownNow` 和终止等待；客户端提交动作不在自身锁内等待队列。
+- 为 Radio TCP、Radio UDP 和 ICOM UDP 引入连接 generation 与 socket/session 快照。重连会先使旧 generation 失效并清空旧发送队列；旧读线程、旧发送任务和迟到回调不能关闭或写入新 socket。
+- Radio TCP EOF 保持一次通知并在 200ms 门限内退出；连接关闭回调在会话从客户端摘除后、客户端锁外执行，允许回调安全触发重连。
+- ICOM 发射音频改为每次提交持有不可变 PCM 快照的单消费者任务；停止时用 generation 使活动任务在下一个 20ms 边界退出，执行器保持可复用。
+- 协谷音频改为每次启动创建独立、可停止、可重启的会话；音频快照进入该会话的有界队列，旧会话不能读取新会话数据。
+- `MainViewModel` 为 QTH 和网络/CAT 发射增加 lifecycle/rig/QTH epoch 检查；`onCleared()` 先使旧任务失效、取消待执行任务并关闭两个组件私有执行器，且不在主线程等待任务退出。
+
+### 测试与验证
+
+- JVM 测试补充队列满显式拒绝、限时提交可中断、取消待执行任务、关闭后拒绝、重复关闭，以及 100 次执行器生命周期；`:app:testDebugUnitTest` 4/4 通过。
+- Android loopback 测试补充 UDP/ICOM UDP 100 次重连、旧 TCP 队列不能污染新连接、TCP 100 次重连、EOF 200ms/一次回调、ICOM/协谷音频快照和协谷重启；`:app:compileDebugAndroidTestJavaWithJavac` 通过。
+- `:app:assembleDebug` 通过，`git diff --check` 通过。
+- 当前 AVD 由 P0-C 恢复会话占用，本轮按协调要求未运行 `connectedDebugAndroidTest`。
+- 未连接或控制真实电台，未做 HIL。
+
+### 当前状态与下一步
+
+- 第二轮代码保存在 `codex/p0-b-snapshot-eof`；不 push、不 tag。
+- AVD 可用后应只在指定模拟器运行 `RadioNetworkClientTest`，重点确认新增的 100 次 TCP/UDP 重连、音频快照/重启和 EOF 时限用例。
+- 合入前仍需按项目门禁做 ICOM/协谷 Wi-Fi 网络模式、完整 QSO 与长时间挂机 HIL；自动化结果不能替代真实电台验证。
+
+---
+
 ## 2026-07-30　P0-B 不可变网络任务快照与 Radio TCP EOF
 
 ### 做了什么

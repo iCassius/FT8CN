@@ -1,200 +1,152 @@
 package com.bg7yoz.ft8cn.icom;
-/**
- * 处理协谷的音频流，继承至AudioUdp。
- *
- * @author BGY70Z
- * @date 2023-08-26
- */
+
+/** 协谷音频流发送器：每个发射会话由一个单消费者快照队列驱动。 */
 
 import android.util.Log;
 
 import com.bg7yoz.ft8cn.GeneralVariables;
+import com.bg7yoz.ft8cn.util.BoundedSerialExecutor;
 
 import java.net.DatagramPacket;
 import java.util.Arrays;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 
 public class XieGuAudioUdp extends AudioUdp {
     private static final String TAG = "XieGuAudioUdp";
-
-    private final ExecutorService doTXThreadPool = Executors.newCachedThreadPool();
-//    private final DoTXAudioRunnable doTXAudioRunnable = new DoTXAudioRunnable(this);
-
-
-    private final AudioRunnable audioRunnable = new AudioRunnable(this);
-    private boolean audioIsRunning = false;
-    //private DatagramPacket packet;
-    //private byte[] data;
+    private final BoundedSerialExecutor doTXThreadPool = new BoundedSerialExecutor(1);
+    private final Object sessionLock = new Object();
+    private AudioRunnable audioRunnable;
+    private long generation;
+    private volatile boolean audioIsRunning;
 
     @Override
     public void sendTxAudioData(float[] audioData) {
         if (audioData == null) return;
 
-        short[] temp = new short[audioData.length];//12000
-        //传递过来的音频是LPCM,32 float，12000Hz
-        //要做一下浮点到16位int的转换
+        byte[] snapshot = new byte[audioData.length * 2];
         for (int i = 0; i < audioData.length; i++) {
-            float x = audioData[i];
-            if (x > 0.999999f)
-                temp[i] = 32767;
-            else if (x < -0.999999f)
-                temp[i] = -32766;
-            else
-                temp[i] = (short) (x * 32767.0);
+            float x = Math.max(-0.999999f, Math.min(0.999999f, audioData[i]));
+            short sample = (short) (x * 32767.0f * GeneralVariables.volumePercent);
+            System.arraycopy(IComPacketTypes.shortToBigEndian(sample), 0,
+                    snapshot, i * 2, 2);
         }
 
-        audioRunnable.setAudioData(temp);
-        //doTXAudioRunnable.audioData = temp;
-        //doTXThreadPool.execute(doTXAudioRunnable);
+        AudioRunnable session;
+        synchronized (sessionLock) {
+            session = audioRunnable;
+            if (!audioIsRunning || session == null) {
+                throw new RejectedExecutionException("audio session is not running");
+            }
+        }
+        session.enqueue(snapshot);
     }
 
     @Override
     public void startTxAudio() {
-        if (!audioIsRunning) {
+        synchronized (sessionLock) {
+            if (audioIsRunning) return;
+            generation++;
+            AudioRunnable session = new AudioRunnable(this, generation);
+            audioRunnable = session;
             audioIsRunning = true;
-            doTXThreadPool.execute(audioRunnable);
-
+            doTXThreadPool.cancelPending();
+            doTXThreadPool.execute(session);
         }
     }
-
 
     @Override
     public void stopTXAudio() {
-        audioIsRunning = false;
-        audioRunnable.stop();
+        AudioRunnable session;
+        synchronized (sessionLock) {
+            if (!audioIsRunning && audioRunnable == null) return;
+            audioIsRunning = false;
+            generation++;
+            session = audioRunnable;
+            audioRunnable = null;
+        }
+        doTXThreadPool.cancelPending();
+        if (session != null) session.stop();
     }
 
+    private boolean isCurrentSession(AudioRunnable session, long sessionGeneration) {
+        synchronized (sessionLock) {
+            return audioIsRunning && audioRunnable == session && generation == sessionGeneration;
+        }
+    }
 
-    private static class AudioRunnable implements Runnable {
-        private final int partialLen = (int) (IComPacketTypes.AUDIO_SAMPLE_RATE * 0.02);//20ms的数据包的长度
-        private final byte[] audioPacket = new byte[partialLen * 2];
-        private final byte[] ft8Audio = new byte[15 * IComPacketTypes.AUDIO_SAMPLE_RATE * 2];//15秒，采样率*2（16位，所以2倍）
-        private int index = 0;
-        XieGuAudioUdp audioUdp;
-        private boolean isRunning = true;
+    static final class AudioRunnable implements Runnable {
+        private static final int QUEUE_CAPACITY = 8;
+        private final int partialLen = (int) (IComPacketTypes.AUDIO_SAMPLE_RATE * 0.02);
+        private final XieGuAudioUdp audioUdp;
+        private final long generation;
+        private final ArrayBlockingQueue<byte[]> snapshots = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
+        private volatile boolean running = true;
 
-        public AudioRunnable(XieGuAudioUdp audioUdp) {
-
+        AudioRunnable(XieGuAudioUdp audioUdp, long generation) {
             this.audioUdp = audioUdp;
-            Log.e(TAG, "AudioRunnable: create runnable");
+            this.generation = generation;
+            Log.d(TAG, "AudioRunnable: create session " + generation);
         }
 
-        public void setAudioData(short[] audioData) {
-            for (int i = 0; i < audioData.length; i++) {
-                System.arraycopy(IComPacketTypes.shortToBigEndian((short)
-                                (audioData[i]
-                                        * GeneralVariables.volumePercent))//乘以信号量的比率
-                        , 0, ft8Audio, i * 2, 2);
+        void enqueue(byte[] snapshot) {
+            if (!snapshots.offer(Arrays.copyOf(snapshot, snapshot.length))) {
+                throw new RejectedExecutionException("audio snapshot queue is full");
             }
-            index = 0;
-
         }
 
         @Override
         public void run() {
-            //此线程在整个连接期间常驻发包。原来用忙等控制20ms节拍，
-            //会让一个CPU核全程满载空转，导致整机发热降频，改为睡眠等待。
+            byte[] current = null;
+            int index = 0;
+            byte[] audioPacket = new byte[partialLen * 2];
             long nextSendTime = System.currentTimeMillis();
-            while (isRunning) {
-                if (audioUdp.isPttOn) {
-                    System.arraycopy(ft8Audio, index, audioPacket, 0, audioPacket.length);
-                    index = index + partialLen * 2;
-                    if (index >= ft8Audio.length) index = 0;
+            while (running && audioUdp.isCurrentSession(this, generation)) {
+                if (current == null || index >= current.length) {
+                    current = snapshots.poll();
+                    index = 0;
+                }
+                Arrays.fill(audioPacket, (byte) 0);
+                if (audioUdp.isPttOn && current != null) {
+                    int copyLength = Math.min(audioPacket.length, current.length - index);
+                    System.arraycopy(current, index, audioPacket, 0, copyLength);
+                    index += copyLength;
                 }
 
-
-                audioUdp.sendTrackedPacket(IComPacketTypes.AudioPacket.getTxAudioPacket(audioPacket
-                        , (short) 0, audioUdp.localId, audioUdp.remoteId, audioUdp.innerSeq));
+                audioUdp.sendTrackedPacket(IComPacketTypes.AudioPacket.getTxAudioPacket(
+                        audioPacket, (short) 0, audioUdp.localId, audioUdp.remoteId,
+                        audioUdp.innerSeq));
                 audioUdp.innerSeq++;
-                nextSendTime += 20;//20毫秒一个周期
+                nextSendTime += 20;
                 long sleepMs = nextSendTime - System.currentTimeMillis();
                 if (sleepMs > 0) {
                     try {
                         Thread.sleep(sleepMs);
                     } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
                         break;
                     }
                 } else if (sleepMs < -1000) {
-                    //长时间欠账（比如系统休眠后恢复），重置节拍基准，避免突发大量发包
                     nextSendTime = System.currentTimeMillis();
                 }
             }
         }
 
-        public void stop() {
-            isRunning = false;
+        void stop() {
+            running = false;
+            snapshots.clear();
         }
     }
-//
-//    private static class DoTXAudioRunnable implements Runnable {
-//        XieGuAudioUdp audioUdp;
-//        short[] audioData;//传递过来的音频是LPCM 16bit Int,12000hz
-//
-//        public DoTXAudioRunnable(XieGuAudioUdp audioUdp) {
-//            this.audioUdp = audioUdp;
-//        }
-//
-//        @Override
-//        public void run() {
-//            if (audioData == null) return;
-//
-//            final int partialLen = (int) (IComPacketTypes.AUDIO_SAMPLE_RATE * 0.02);//20ms的数据包的长度
-//
-//            //要转换一下到BYTE,小端模式
-//            //先播放，是给出空的声音，for i 循环，做了一个判断，是给前面的空声音，for j循环，做得判断，是让后面发送空声音
-//            byte[] audioPacket = new byte[partialLen * 2];
-//            for (int i = 0; i < (audioData.length / partialLen) + 8; i++) {//多出6个周期，前面3个，后面3个多
-//                if (!audioUdp.isPttOn) break;
-//                long now = System.currentTimeMillis() - 1;//获取当前时间
-//
-//                audioUdp.sendTrackedPacket(IComPacketTypes.AudioPacket.getTxAudioPacket(audioPacket
-//                        , (short) 0, audioUdp.localId, audioUdp.remoteId, audioUdp.innerSeq));
-//                audioUdp.innerSeq++;
-//
-//                Arrays.fill(audioPacket, (byte) 0x00);
-//                if (i >= 3) {//让前两个空数据发送出去
-//                    for (int j = 0; j < partialLen; j++) {
-//                        if ((i - 3) * partialLen + j < audioData.length) {
-//                            System.arraycopy(IComPacketTypes.shortToBigEndian((short)
-//                                            (audioData[(i - 3) * partialLen + j]
-//                                                    * GeneralVariables.volumePercent))//乘以信号量的比率
-//                                    , 0, audioPacket, j * 2, 2);
-//                        }
-//                    }
-//                }
-//                while (audioUdp.isPttOn) {
-//                    if (System.currentTimeMillis() - now >= 21) {//20毫秒一个周期
-//                        break;
-//                    }
-//                }
-//            }
-//            Log.d(TAG, "run: 音频发送完毕！！");
-//            Thread.currentThread().interrupt();
-//        }
-//
-//    }
 
-    /**
-     * 接收到电台发过来的音频数据
-     *
-     * @param packet 数据包
-     * @param data   数据
-     */
     @Override
     public void onDataReceived(DatagramPacket packet, byte[] data) {
         super.onDataReceived(packet, data);
-        if (IComPacketTypes.CONTROL_SIZE == data.length) {
-            if (IComPacketTypes.ControlPacket.getType(data) == IComPacketTypes.CMD_I_AM_READY) {
-                startTxAudio();
-            }
+        if (IComPacketTypes.CONTROL_SIZE == data.length
+                && IComPacketTypes.ControlPacket.getType(data) == IComPacketTypes.CMD_I_AM_READY) {
+            startTxAudio();
         }
         if (!IComPacketTypes.AudioPacket.isAudioPacket(data)) return;
         byte[] audioData = IComPacketTypes.AudioPacket.getAudioData(data);
-        if (onStreamEvents != null) {
-            onStreamEvents.OnReceivedAudioData(audioData);
-        }
+        if (onStreamEvents != null) onStreamEvents.OnReceivedAudioData(audioData);
     }
-
-
 }

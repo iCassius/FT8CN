@@ -74,7 +74,7 @@ public class IcomUdpBase {
     public short innerSeq = 0x30;
     public int rigToken;//电台提供的令牌
     public short localToken = (short) System.currentTimeMillis();//本地生成的令牌，可以是随机数
-    public boolean isPttOn = false;
+    public volatile boolean isPttOn = false;
 
 
     public IcomSeqBuffer txSeqBuffer = new IcomSeqBuffer();//发送命令的历史列表

@@ -23,17 +23,14 @@ import java.util.concurrent.Executors;
 
 public class IcomUdpClient {
     private static final String TAG = "RadioUdpSocket";
-
-
     private final int MAX_BUFFER_SIZE = 1024 * 2;
-    private DatagramSocket sendSocket;
-    //private int remotePort;
+    private volatile DatagramSocket sendSocket;
     private int localPort = -1;
-    private boolean activated = false;
+    private volatile boolean activated = false;
     private OnUdpEvents onUdpEvents = null;
     private final ExecutorService doReceiveThreadPool = Executors.newCachedThreadPool();
-    private DoReceiveRunnable doReceiveRunnable = new DoReceiveRunnable(this);
     private final BoundedSerialExecutor sendDataThreadPool = new BoundedSerialExecutor(256);
+    private long generation;
 
     public IcomUdpClient() {//本地端口随机
         localPort = -1;
@@ -43,38 +40,32 @@ public class IcomUdpClient {
         this.localPort = localPort;
     }
 
-    public synchronized void sendData(byte[] data, String ip, int port) throws UnknownHostException {
-        if (!activated) return;
-
+    public void sendData(byte[] data, String ip, int port) throws UnknownHostException {
+        if (data == null) return;
         InetAddress address = InetAddress.getByName(ip);
-        sendDataThreadPool.execute(new SendDataRunnable(this, address, data, port));
-//        new Thread(new Runnable() {
-//            @Override
-//            public void run() {
-//                DatagramPacket packet = new DatagramPacket(data, data.length, address, port);
-//                synchronized (this) {
-//                    try {
-//                        sendSocket.send(packet);
-//                    } catch (IOException e) {
-//                        e.printStackTrace();
-//                        Log.e(TAG, "IComUdpClient: " + e.getMessage());
-//                        if (onUdpEvents!=null){
-//                            onUdpEvents.OnUdpSendIOException(e);
-//                        }
-//                    }
-//                }
-//            }
-//        }).start();
+        DatagramSocket socket;
+        long session;
+        synchronized (this) {
+            if (!activated || sendSocket == null) return;
+            socket = sendSocket;
+            session = generation;
+        }
+        sendDataThreadPool.submit(new SendDataRunnable(this, socket, session, address, data, port));
     }
 
     private static class SendDataRunnable implements Runnable {
+        private final IcomUdpClient client;
+        private final DatagramSocket socket;
+        private final long generation;
         private final byte[] data;
         private final int port;
         private final InetAddress address;
-        private final IcomUdpClient client;
 
-        public SendDataRunnable(IcomUdpClient client, InetAddress address, byte[] data, int port) {
+        public SendDataRunnable(IcomUdpClient client, DatagramSocket socket, long generation,
+                                InetAddress address, byte[] data, int port) {
             this.client = client;
+            this.socket = socket;
+            this.generation = generation;
             this.address = address;
             this.data = Arrays.copyOf(data, data.length);
             this.port = port;
@@ -82,20 +73,14 @@ public class IcomUdpClient {
 
         @Override
         public void run() {
+            if (!client.isCurrentSession(socket, generation)) return;
             DatagramPacket packet = new DatagramPacket(data, data.length, address, port);
-            synchronized (this) {
-                try {
-                    DatagramSocket socket = client.sendSocket;
-                    if (socket != null && !socket.isClosed()) socket.send(packet);
-
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    Log.e(TAG, "IComUdpClient: " + e.getMessage());
-                    if (client != null) {
-                        if (client.onUdpEvents != null) {
-                            client.onUdpEvents.OnUdpSendIOException(e);
-                        }
-                    }
+            try {
+                socket.send(packet);
+            } catch (IOException e) {
+                if (client.isCurrentSession(socket, generation)
+                        && client.onUdpEvents != null) {
+                    client.onUdpEvents.OnUdpSendIOException(e);
                 }
             }
         }
@@ -106,93 +91,66 @@ public class IcomUdpClient {
     }
 
     public synchronized void setActivated(boolean activated) throws SocketException {
-        this.activated = activated;
-        if (activated) {//通过activated判断是否结束接收线程，并清空sendSocket指针
-            sendSocket = new DatagramSocket();
-            //new DatagramSocket(null);//绑定的端口号随机
-            sendSocket.setReuseAddress(true);
-            if (localPort != -1) {//绑定指定的本机端口
-                sendSocket.bind(new InetSocketAddress(localPort));
-            }
+        DatagramSocket oldSocket = sendSocket;
+        generation++;
+        this.activated = false;
+        sendSocket = null;
+        sendDataThreadPool.cancelPending();
+        if (oldSocket != null) {
+            oldSocket.close();
+        }
+        if (!activated) {
+            return;
+        }
 
-            //更新一下本地端口值
-            localPort = sendSocket.getLocalPort();
-            Log.e(TAG, "openUdpPort: " + sendSocket.getLocalPort());
-            //Log.e(TAG, "openUdpIp: " + sendSocket.getLocalAddress());
-
-
-            receiveData();
+        DatagramSocket socket = new DatagramSocket(null);
+        socket.setReuseAddress(true);
+        if (localPort != -1) {
+            socket.bind(new InetSocketAddress(localPort));
         } else {
-            if (sendSocket != null) {
-                sendSocket.close();
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
+            socket.bind(new InetSocketAddress(0));
+        }
+        localPort = socket.getLocalPort();
+        sendSocket = socket;
+        this.activated = true;
+        long session = generation;
+        Log.e(TAG, "openUdpPort: " + socket.getLocalPort());
+        doReceiveThreadPool.execute(new DoReceiveRunnable(this, socket, session));
+    }
+
+    private boolean isCurrentSession(DatagramSocket socket, long session) {
+        synchronized (this) {
+            return activated && generation == session && sendSocket == socket && !socket.isClosed();
         }
     }
 
-    private void receiveData() {
-        doReceiveThreadPool.execute(doReceiveRunnable);
-//        new Thread(new Runnable() {
-//            @Override
-//            public void run() {
-//                while (activated) {
-//                    byte[] data = new byte[MAX_BUFFER_SIZE];
-//                    DatagramPacket packet = new DatagramPacket(data, data.length);
-//                    try {
-//                        sendSocket.receive(packet);
-//                        if (onUdpEvents != null) {
-//                            byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength());
-//                            onUdpEvents.OnReceiveData(sendSocket, packet, temp);
-//                        }
-//                        //Log.d(TAG, "receiveData:host ip: " + packet.getAddress().getHostName());
-//                    } catch (IOException e) {
-//                        e.printStackTrace();
-//                        Log.e(TAG, "receiveData: error:" + e.getMessage());
-//                    }
-//
-//                }
-//                Log.e(TAG, "udpClient: is exit!");
-//                sendSocket.close();
-//                sendSocket = null;
-//            }
-//        }).start();
-
+    private void endReceive(DatagramSocket socket, long session) {
+        synchronized (this) {
+            if (sendSocket == socket && generation == session) {
+                activated = false;
+                sendSocket = null;
+                generation++;
+            }
+        }
     }
 
     public void setOnUdpEvents(OnUdpEvents onUdpEvents) {
         this.onUdpEvents = onUdpEvents;
     }
 
-    public interface OnUdpEvents {
-        void OnReceiveData(DatagramSocket socket, DatagramPacket packet, byte[] data);
-
-        void OnUdpSendIOException(IOException e);
-    }
-
     public int getLocalPort() {
-        if (sendSocket != null) {
-            return sendSocket.getLocalPort();
-        } else {
-            return 0;
-        }
+        DatagramSocket socket = sendSocket;
+        return socket == null ? 0 : socket.getLocalPort();
     }
 
     public String getLocalIp() {
-        if (sendSocket != null) {
-            return sendSocket.getLocalAddress().toString();
-        } else {
-            return "127.0.0.1";
-        }
+        DatagramSocket socket = sendSocket;
+        return socket == null ? "127.0.0.1" : socket.getLocalAddress().toString();
     }
 
     public DatagramSocket getSendSocket() {
         return sendSocket;
     }
-
 
     public static String byteToStr(byte[] data) {
         StringBuilder s = new StringBuilder();
@@ -203,34 +161,47 @@ public class IcomUdpClient {
     }
 
     private static class DoReceiveRunnable implements Runnable {
-        IcomUdpClient icomUdpClient;
+        private final IcomUdpClient client;
+        private final DatagramSocket socket;
+        private final long generation;
 
-        public DoReceiveRunnable(IcomUdpClient icomUdpClient) {
-            this.icomUdpClient = icomUdpClient;
+        public DoReceiveRunnable(IcomUdpClient client, DatagramSocket socket, long generation) {
+            this.client = client;
+            this.socket = socket;
+            this.generation = generation;
         }
 
         @Override
         public void run() {
-            while (icomUdpClient.activated) {
-                byte[] data = new byte[icomUdpClient.MAX_BUFFER_SIZE];
-                DatagramPacket packet = new DatagramPacket(data, data.length);
-                try {
-                    icomUdpClient.sendSocket.receive(packet);
-                    if (icomUdpClient.onUdpEvents != null) {
-                        byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength());
-                        icomUdpClient.onUdpEvents.OnReceiveData(icomUdpClient.sendSocket, packet, temp);
+            try {
+                while (client.isCurrentSession(socket, generation)) {
+                    byte[] data = new byte[client.MAX_BUFFER_SIZE];
+                    DatagramPacket packet = new DatagramPacket(data, data.length);
+                    try {
+                        socket.receive(packet);
+                        if (!client.isCurrentSession(socket, generation)) break;
+                        if (client.onUdpEvents != null) {
+                            byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength());
+                            client.onUdpEvents.OnReceiveData(socket, packet, temp);
+                        }
+                    } catch (IOException e) {
+                        if (client.isCurrentSession(socket, generation)) {
+                            Log.e(TAG, "receiveData: error:" + e.getMessage());
+                        }
+                        break;
                     }
-                    //Log.d(TAG, "receiveData:host ip: " + packet.getAddress().getHostName());
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    Log.e(TAG, "receiveData: error:" + e.getMessage());
                 }
-
+            } finally {
+                socket.close();
+                client.endReceive(socket, generation);
             }
             Log.e(TAG, "udpClient: is exit!");
-            icomUdpClient.sendSocket.close();
-            icomUdpClient.sendSocket = null;
         }
     }
 
+    public interface OnUdpEvents {
+        void OnReceiveData(DatagramSocket socket, DatagramPacket packet, byte[] data);
+
+        void OnUdpSendIOException(IOException e);
+    }
 }

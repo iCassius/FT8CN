@@ -16,6 +16,8 @@ import java.net.InetAddress;
 import java.net.Socket;
 import java.net.SocketException;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class RadioTcpClient {
     private static final String TAG = "RadioTcpClient";
@@ -25,6 +27,7 @@ public class RadioTcpClient {
     public static final int MAX_BUFFER_SIZE=1024 * 32;
 
     private final BoundedSerialExecutor sendByteThreadPool = new BoundedSerialExecutor(256);
+    private final AtomicLong generation = new AtomicLong();
 
     public static RadioTcpClient getInstance() {
         if (radioTcpClient == null) {
@@ -37,179 +40,183 @@ public class RadioTcpClient {
         return radioTcpClient;
     }
 
-    private volatile Socket mSocket;
-    private volatile OutputStream mOutputStream;
-    private volatile InputStream mInputStream;
-
     private SocketThread mSocketThread;
-    private volatile boolean isStop = false;//thread flag
-
     private OnDataReceiveListener onDataReceiveListener = null;
 
     public boolean isConnect() {
-        Socket socket = mSocket;
-        return socket != null && socket.isConnected() && !socket.isClosed();
+        SocketThread session = mSocketThread;
+        return session != null && session.isConnected() && isCurrent(session);
     }
 
     public synchronized void connect(String ip, int port) {
         disconnect();
         this.ip = ip;
         this.port = port;
-        isStop = false;
-        mSocketThread = new SocketThread(ip, port);
-        mSocketThread.start();
+        SocketThread session = new SocketThread(ip, port, generation.incrementAndGet());
+        mSocketThread = session;
+        session.start();
     }
 
     public synchronized void disconnect() {
-        isStop = true;
-        closeResources(mSocket, mInputStream, mOutputStream);
-        mSocket = null;
-        mInputStream = null;
-        mOutputStream = null;
-        if (mSocketThread != null) {
-            mSocketThread.interrupt();//not intime destory thread,so need a flag
+        SocketThread session = mSocketThread;
+        mSocketThread = null;
+        generation.incrementAndGet();
+        sendByteThreadPool.cancelPending();
+        if (session != null) {
+            session.stopSession();
+        }
+    }
+
+    private boolean isCurrent(SocketThread session) {
+        synchronized (this) {
+            return mSocketThread == session
+                    && generation.get() == session.generation
+                    && !session.stopRequested;
+        }
+    }
+
+    private void notifyConnectSuccess(SocketThread session) {
+        OnDataReceiveListener listener;
+        synchronized (this) {
+            if (!isCurrent(session)) return;
+            listener = onDataReceiveListener;
+        }
+        if (listener != null) listener.onConnectSuccess();
+    }
+
+    private void notifyConnectFail(SocketThread session) {
+        OnDataReceiveListener listener;
+        synchronized (this) {
+            if (!isCurrent(session)) return;
+            listener = onDataReceiveListener;
+        }
+        if (listener != null) listener.onConnectFail();
+    }
+
+    private void notifyData(SocketThread session, byte[] data) {
+        OnDataReceiveListener listener;
+        synchronized (this) {
+            if (!isCurrent(session)) return;
+            listener = onDataReceiveListener;
+        }
+        if (listener != null) listener.onDataReceive(data);
+    }
+
+    private class SocketThread extends Thread {
+        private final String targetIp;
+        private final int targetPort;
+        private final long generation;
+        private final AtomicBoolean closeNotified = new AtomicBoolean();
+        private volatile boolean stopRequested;
+        private volatile Socket socket;
+        private volatile InputStream inputStream;
+        private volatile OutputStream outputStream;
+
+        private SocketThread(String targetIp, int targetPort, long generation) {
+            this.targetIp = targetIp;
+            this.targetPort = targetPort;
+            this.generation = generation;
+        }
+
+        private boolean isConnected() {
+            Socket currentSocket = socket;
+            return currentSocket != null && currentSocket.isConnected() && !currentSocket.isClosed();
+        }
+
+        @Override
+        public void run() {
+            Log.d(TAG, "TcpSocketThread start...");
+            try {
+                Socket connectedSocket = new Socket(InetAddress.getByName(targetIp), targetPort);
+                synchronized (RadioTcpClient.this) {
+                    if (!isCurrent(this)) {
+                        closeResources(connectedSocket, null, null);
+                        return;
+                    }
+                    socket = connectedSocket;
+                    outputStream = connectedSocket.getOutputStream();
+                    inputStream = connectedSocket.getInputStream();
+                }
+                notifyConnectSuccess(this);
+            } catch (SocketException e) {
+                Log.e(TAG,"TCP Connection exception:"+e.getMessage());
+                notifyConnectFail(this);
+                finishConnection(false);
+                return;
+            } catch (IOException e) {
+                Log.e(TAG, "SocketThread connect io exception = " + e.getMessage());
+                notifyConnectFail(this);
+                finishConnection(false);
+                return;
+            }
+
+            try {
+                while (isCurrent(this) && !isInterrupted()) {
+                    byte[] buffer = new byte[MAX_BUFFER_SIZE];
+                    InputStream input = inputStream;
+                    if (input == null) return;
+                    int size = input.read(buffer);
+                    if (size > 0) {
+                        notifyData(this, Arrays.copyOf(buffer, size));
+                    } else if (size == -1) {
+                        finishConnection(true);
+                        return;
+                    }
+                }
+            } catch (SocketException e) {
+                Log.e(TAG,"TCP Connection exception:"+e.getMessage());
+                finishConnection(!stopRequested);
+            } catch (IOException e) {
+                Log.e(TAG, "SocketThread read io exception = " + e.getMessage());
+                finishConnection(!stopRequested);
+            } finally {
+                closeResources(socket, inputStream, outputStream);
+            }
+        }
+
+        private void stopSession() {
+            stopRequested = true;
+            closeResources(socket, inputStream, outputStream);
+            interrupt();
+        }
+
+        private void finishConnection(boolean notify) {
+            if (!closeNotified.compareAndSet(false, true)) return;
+            stopRequested = true;
+            Socket oldSocket = socket;
+            InputStream oldInput = inputStream;
+            OutputStream oldOutput = outputStream;
+            closeResources(oldSocket, oldInput, oldOutput);
+            OnDataReceiveListener listener = null;
+            synchronized (RadioTcpClient.this) {
+                boolean current = mSocketThread == this
+                        && RadioTcpClient.this.generation.get() == generation;
+                if (current) {
+                    if (notify) listener = onDataReceiveListener;
+                    mSocketThread = null;
+                    RadioTcpClient.this.generation.incrementAndGet();
+                }
+            }
+            if (listener != null) listener.onConnectionClosed();
         }
     }
 
     private void closeResources(Socket socket, InputStream inputStream,
                                 OutputStream outputStream) {
         try {
-            if (outputStream != null) {
-                outputStream.close();
-            }
+            if (outputStream != null) outputStream.close();
         } catch (IOException e) {
             Log.d(TAG, "TCP output close exception: " + e.getMessage());
         }
         try {
-            if (inputStream != null) {
-                inputStream.close();
-            }
+            if (inputStream != null) inputStream.close();
         } catch (IOException e) {
             Log.d(TAG, "TCP input close exception: " + e.getMessage());
         }
         try {
-            if (socket != null) {
-                socket.close();
-            }
+            if (socket != null) socket.close();
         } catch (IOException e) {
             Log.d(TAG, "TCP socket close exception: " + e.getMessage());
-        }
-    }
-
-    private class SocketThread extends Thread {
-        private final String targetIp;
-        private final int targetPort;
-        private boolean closeNotified;
-
-        private SocketThread(String targetIp, int targetPort) {
-            this.targetIp = targetIp;
-            this.targetPort = targetPort;
-        }
-
-        @Override
-        public void run() {
-            Log.d(TAG, "TcpSocketThread start...");
-            Socket socket = null;
-            OutputStream outputStream = null;
-            InputStream inputStream = null;
-            try {
-                InetAddress ipAddress = InetAddress.getByName(targetIp);
-                socket = new Socket(ipAddress, targetPort);
-                synchronized (RadioTcpClient.this) {
-                    if (isStop || mSocketThread != this) {
-                        closeResources(socket, inputStream, outputStream);
-                        return;
-                    }
-                    mSocket = socket;
-                }
-                if (!isStop && isConnect()) {
-                    outputStream = socket.getOutputStream();
-                    inputStream = socket.getInputStream();
-                    synchronized (RadioTcpClient.this) {
-                        mOutputStream = outputStream;
-                        mInputStream = inputStream;
-                    }
-                    connectSuccess();
-                } else {
-                    connectFail();
-                    closeResources(socket, inputStream, outputStream);
-                    return;
-                }
-            } catch (SocketException e) {
-                Log.e(TAG,"TCP Connection exception:"+e.getMessage());
-                closeResources(socket, inputStream, outputStream);
-                return;
-            } catch (IOException e) {
-                connectFail();
-                Log.e(TAG, "SocketThread connect io exception = " + e.getMessage());
-                closeResources(socket, inputStream, outputStream);
-                return;
-            }
-
-            while (isConnect() && !isStop && !isInterrupted()) {
-                try {
-                    byte[] buffer = new byte[MAX_BUFFER_SIZE];
-                    if (inputStream == null) {
-                        return;
-                    }
-                    int size = inputStream.read(buffer);//null data -1 ,
-                    if (size > 0) {
-                        if (onDataReceiveListener != null) {
-                            byte[] temp = Arrays.copyOf(buffer, size);
-                            onDataReceiveListener.onDataReceive(temp);
-                        }
-                    } else if (size == -1) {
-                        finishConnection(socket, inputStream, outputStream, true);
-                        return;
-                    }
-                } catch (SocketException e) {
-                    Log.e(TAG,"Tcp Connection exception:"+e.getMessage());
-                    finishConnection(socket, inputStream, outputStream, !isStop);
-                    return;
-                } catch (IOException e) {
-                    Log.e(TAG, "SocketThread read io exception = " + e.getMessage());
-                    finishConnection(socket, inputStream, outputStream, !isStop);
-                    return;
-                }
-            }
-            closeResources(socket, inputStream, outputStream);
-        }
-
-        private void finishConnection(Socket socket, InputStream inputStream,
-                                       OutputStream outputStream, boolean notify) {
-            synchronized (this) {
-                if (notify && closeNotified) {
-                    return;
-                }
-                if (notify) {
-                    closeNotified = true;
-                }
-            }
-            closeResources(socket, inputStream, outputStream);
-            boolean currentSession;
-            synchronized (RadioTcpClient.this) {
-                currentSession = mSocketThread == this;
-                if (mSocket == socket) {
-                    mSocket = null;
-                    mInputStream = null;
-                    mOutputStream = null;
-                }
-            }
-            if (notify && currentSession && onDataReceiveListener != null) {
-                onDataReceiveListener.onConnectionClosed();
-            }
-        }
-    }
-
-    private void connectFail() {
-        if (onDataReceiveListener != null) {
-            onDataReceiveListener.onConnectFail();
-        }
-    }
-
-    private void connectSuccess() {
-        if (onDataReceiveListener != null) {
-            onDataReceiveListener.onConnectSuccess();
         }
     }
 
@@ -217,55 +224,58 @@ public class RadioTcpClient {
      * send byte[] cmd
      * Exception : android.os.NetworkOnMainThreadException
      */
-    public synchronized void sendByte(final byte[] mBuffer) {
-        if (mBuffer == null) {
-            return;
+    public void sendByte(final byte[] mBuffer) {
+        if (mBuffer == null) return;
+        SocketThread session;
+        synchronized (this) {
+            session = mSocketThread;
+            if (session == null || !session.isConnected() || !isCurrent(session)) return;
         }
-        sendByteThreadPool.execute(new SendByteRunnable(this, mBuffer));
+        // The session is captured before enqueueing; a later reconnect cannot
+        // redirect this command to the new OutputStream.
+        sendByteThreadPool.submit(new SendByteRunnable(this, session, mBuffer));
     }
 
     private static class SendByteRunnable implements Runnable{
         private final RadioTcpClient client;
+        private final SocketThread session;
         private final byte[] mBuffer;
 
-        public SendByteRunnable(RadioTcpClient client, byte[] mBuffer) {
+        public SendByteRunnable(RadioTcpClient client, SocketThread session, byte[] mBuffer) {
             this.client = client;
+            this.session = session;
             this.mBuffer = Arrays.copyOf(mBuffer, mBuffer.length);
         }
 
         @Override
         public void run() {
+            if (!client.isCurrent(session)) return;
             try {
-                OutputStream outputStream = client.mOutputStream;
+                OutputStream outputStream = session.outputStream;
                 if (outputStream != null) {
                     outputStream.write(mBuffer);
                     outputStream.flush();
                 }
             } catch (IOException e) {
-                Log.e(TAG, "TCP send exception: " + e.getMessage());
+                if (client.isCurrent(session)) {
+                    Log.e(TAG, "TCP send exception: " + e.getMessage());
+                    session.finishConnection(true);
+                }
             }
         }
     }
 
     public interface OnDataReceiveListener {
         void onConnectSuccess();
-
         void onConnectFail();
-
         void onDataReceive(byte[] buffer);
         void onConnectionClosed();
     }
 
-    public void setOnDataReceiveListener(
-            OnDataReceiveListener dataReceiveListener) {
+    public void setOnDataReceiveListener(OnDataReceiveListener dataReceiveListener) {
         onDataReceiveListener = dataReceiveListener;
     }
 
-    public String getIp() {
-        return ip;
-    }
-
-    public int getPort() {
-        return port;
-    }
+    public String getIp() { return ip; }
+    public int getPort() { return port; }
 }

@@ -104,6 +104,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Objects;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class MainViewModel extends ViewModel {
     String TAG = "ft8cn MainViewModel";
@@ -134,6 +136,10 @@ public class MainViewModel extends ViewModel {
 
     private final BoundedSerialExecutor getQTHThreadPool = new BoundedSerialExecutor(32);
     private final BoundedSerialExecutor sendWaveDataThreadPool = new BoundedSerialExecutor(8);
+    private final AtomicLong lifecycleGeneration = new AtomicLong();
+    private final AtomicLong rigGeneration = new AtomicLong();
+    private final AtomicLong qthGeneration = new AtomicLong();
+    private volatile boolean cleared;
 
 
     //用于显示生成共享日志过程的变量
@@ -243,6 +249,15 @@ public class MainViewModel extends ViewModel {
 
     @Override
     protected void onCleared() {
+        if (cleared) return;
+        cleared = true;
+        lifecycleGeneration.incrementAndGet();
+        rigGeneration.incrementAndGet();
+        qthGeneration.incrementAndGet();
+        getQTHThreadPool.cancelPending();
+        sendWaveDataThreadPool.cancelPending();
+        getQTHThreadPool.shutdown();
+        sendWaveDataThreadPool.shutdown();
         super.onCleared();
         Log.i(TAG, "onCleared: MainViewModel is cleared, cleaning up resources...");
         if (utcTimer != null) {
@@ -362,7 +377,9 @@ public class MainViewModel extends ViewModel {
                 mutableIsDecoding.postValue(false);//解码的状态，会触发频谱图中的标记动作
 
 
-                getQTHThreadPool.execute(new GetQTHRunnable(MainViewModel.this, messages));//用线程池的方式查询归属地
+                long lifecycle = lifecycleGeneration.get();
+                long qth = qthGeneration.get();
+                submitQthTask(new GetQTHRunnable(MainViewModel.this, messages, lifecycle, qth));//用线程池的方式查询归属地
 
                 //此变量也是告诉消息列表变化的
                 mutable_Decoded_Counter.postValue(
@@ -441,7 +458,9 @@ public class MainViewModel extends ViewModel {
                     if (baseRig != null) {
                         if (baseRig.isConnected()) {
                             //每次提交都捕获当前电台和消息快照，避免排队任务互相覆盖
-                            sendWaveDataThreadPool.execute(new SendWaveDataRunnable(baseRig, msg));
+                            BaseRig targetRig = baseRig;
+                            submitWaveTask(new SendWaveDataRunnable(MainViewModel.this, targetRig, msg,
+                                    lifecycleGeneration.get(), rigGeneration.get()));
                         }
                     }
                 }
@@ -467,7 +486,9 @@ public class MainViewModel extends ViewModel {
                 if (!supportTransmitOverCAT()) {
                     return;
                 }
-                sendWaveDataThreadPool.execute(new SendWaveDataRunnable(baseRig, msg));
+                BaseRig targetRig = baseRig;
+                submitWaveTask(new SendWaveDataRunnable(MainViewModel.this, targetRig, msg,
+                        lifecycleGeneration.get(), rigGeneration.get()));
             }
 
         }, new OnTransmitSuccess() {//当通联成功时
@@ -866,6 +887,7 @@ public class MainViewModel extends ViewModel {
      * 根据指令集创建不同型号的电台
      */
     public void connectRig() {
+        rigGeneration.incrementAndGet();
         if (baseRig != null && baseRig.isConnected()) {
             baseRig.disconnect();
         }
@@ -969,6 +991,24 @@ public class MainViewModel extends ViewModel {
         mutableIsFlexRadio.postValue(GeneralVariables.instructionSet == InstructionSet.FLEX_NETWORK);
         mutableIsXieguRadio.postValue(GeneralVariables.instructionSet == InstructionSet.XIEGU_6100_FT8CNS);
 
+    }
+
+    private void submitQthTask(GetQTHRunnable task) {
+        if (cleared) return;
+        try {
+            getQTHThreadPool.submit(task);
+        } catch (RejectedExecutionException ignored) {
+            Log.d(TAG, "QTH task rejected after lifecycle close");
+        }
+    }
+
+    private void submitWaveTask(SendWaveDataRunnable task) {
+        if (cleared) return;
+        try {
+            sendWaveDataThreadPool.submit(task);
+        } catch (RejectedExecutionException ignored) {
+            Log.d(TAG, "wave task rejected by bounded executor");
+        }
     }
 
 
@@ -1119,17 +1159,24 @@ public class MainViewModel extends ViewModel {
     static final class GetQTHRunnable implements Runnable {
         private final MainViewModel mainViewModel;
         private final ArrayList<Ft8Message> messages;
+        private final long lifecycleGeneration;
+        private final long qthGeneration;
 
-        GetQTHRunnable(MainViewModel mainViewModel, ArrayList<Ft8Message> messages) {
+        GetQTHRunnable(MainViewModel mainViewModel, ArrayList<Ft8Message> messages,
+                       long lifecycleGeneration, long qthGeneration) {
             this.mainViewModel = mainViewModel;
             this.messages = new ArrayList<>(messages);
+            this.lifecycleGeneration = lifecycleGeneration;
+            this.qthGeneration = qthGeneration;
         }
 
 
         @Override
         public void run() {
+            if (!mainViewModel.isCurrentQth(lifecycleGeneration, qthGeneration)) return;
             CallsignDatabase.getMessagesLocation(
                     GeneralVariables.callsignDatabase.getDb(), messages);
+            if (!mainViewModel.isCurrentQth(lifecycleGeneration, qthGeneration)) return;
             synchronized (mainViewModel.ft8Messages) {
                 mainViewModel.mutableFt8MessageList.postValue(new ArrayList<>(mainViewModel.ft8Messages));
             }
@@ -1139,20 +1186,43 @@ public class MainViewModel extends ViewModel {
     }
 
     static final class SendWaveDataRunnable implements Runnable {
+        private final MainViewModel mainViewModel;
         private final BaseRig baseRig;
         private final Ft8Message message;
+        private final long lifecycleGeneration;
+        private final long rigGeneration;
 
-        SendWaveDataRunnable(BaseRig baseRig, Ft8Message message) {
+        SendWaveDataRunnable(MainViewModel mainViewModel, BaseRig baseRig, Ft8Message message,
+                             long lifecycleGeneration, long rigGeneration) {
+            this.mainViewModel = mainViewModel;
             this.baseRig = baseRig;
             this.message = message == null ? null : new Ft8Message(message);
+            this.lifecycleGeneration = lifecycleGeneration;
+            this.rigGeneration = rigGeneration;
+        }
+
+        // Kept package-private for the deterministic task snapshot test; real
+        // production submissions always use the lifecycle-fenced constructor.
+        SendWaveDataRunnable(BaseRig baseRig, Ft8Message message) {
+            this(null, baseRig, message, 0, 0);
         }
 
         @Override
         public void run() {
-            if (baseRig != null && message != null) {
+            if ((mainViewModel == null
+                    || mainViewModel.isCurrentWave(lifecycleGeneration, rigGeneration))
+                    && baseRig != null && message != null) {
                 baseRig.sendWaveData(message);//实际生成的数据是12.64+0.04,0.04是生成的0数据
             }
         }
+    }
+
+    private boolean isCurrentQth(long lifecycle, long qth) {
+        return !cleared && lifecycleGeneration.get() == lifecycle && qthGeneration.get() == qth;
+    }
+
+    private boolean isCurrentWave(long lifecycle, long rig) {
+        return !cleared && lifecycleGeneration.get() == lifecycle && rigGeneration.get() == rig;
     }
 
 }
