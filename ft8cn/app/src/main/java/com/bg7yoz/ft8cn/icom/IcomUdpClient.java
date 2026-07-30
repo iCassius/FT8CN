@@ -8,6 +8,8 @@ package com.bg7yoz.ft8cn.icom;
 
 import android.util.Log;
 
+import com.bg7yoz.ft8cn.util.BoundedSerialExecutor;
+
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -31,8 +33,7 @@ public class IcomUdpClient {
     private OnUdpEvents onUdpEvents = null;
     private final ExecutorService doReceiveThreadPool = Executors.newCachedThreadPool();
     private DoReceiveRunnable doReceiveRunnable = new DoReceiveRunnable(this);
-    private final ExecutorService sendDataThreadPool = Executors.newCachedThreadPool();
-    private SendDataRunnable sendDataRunnable = new SendDataRunnable(this);
+    private final BoundedSerialExecutor sendDataThreadPool = new BoundedSerialExecutor(256);
 
     public IcomUdpClient() {//本地端口随机
         localPort = -1;
@@ -42,14 +43,11 @@ public class IcomUdpClient {
         this.localPort = localPort;
     }
 
-    public void sendData(byte[] data, String ip, int port) throws UnknownHostException {
+    public synchronized void sendData(byte[] data, String ip, int port) throws UnknownHostException {
         if (!activated) return;
 
         InetAddress address = InetAddress.getByName(ip);
-        sendDataRunnable.address = address;
-        sendDataRunnable.data = data;
-        sendDataRunnable.port = port;
-        sendDataThreadPool.execute(sendDataRunnable);
+        sendDataThreadPool.execute(new SendDataRunnable(this, address, data, port));
 //        new Thread(new Runnable() {
 //            @Override
 //            public void run() {
@@ -70,13 +68,16 @@ public class IcomUdpClient {
     }
 
     private static class SendDataRunnable implements Runnable {
-        byte[] data;
-        int port;
-        InetAddress address;
-        IcomUdpClient client;
+        private final byte[] data;
+        private final int port;
+        private final InetAddress address;
+        private final IcomUdpClient client;
 
-        public SendDataRunnable(IcomUdpClient client) {
+        public SendDataRunnable(IcomUdpClient client, InetAddress address, byte[] data, int port) {
             this.client = client;
+            this.address = address;
+            this.data = Arrays.copyOf(data, data.length);
+            this.port = port;
         }
 
         @Override
@@ -84,7 +85,8 @@ public class IcomUdpClient {
             DatagramPacket packet = new DatagramPacket(data, data.length, address, port);
             synchronized (this) {
                 try {
-                    if (client.sendSocket != null) client.sendSocket.send(packet);
+                    DatagramSocket socket = client.sendSocket;
+                    if (socket != null && !socket.isClosed()) socket.send(packet);
 
                 } catch (IOException e) {
                     e.printStackTrace();

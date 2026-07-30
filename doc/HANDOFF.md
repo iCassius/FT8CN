@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-07-30　P0-B 不可变网络任务快照与 Radio TCP EOF
+
+### 做了什么
+
+- 在独立分支 `codex/p0-b-snapshot-eof` 修复 `RadioUdpClient`、`IcomUdpClient`、`RadioTcpClient` 的共享可变发送 Runnable：每次提交复制字节数据、目标地址和端口，使用单消费者有界队列保持协议发送顺序。
+- 修复 `MainViewModel` 的 QTH 查询和网络/CAT 发射任务：每次提交创建任务快照；QTH 复制消息列表，发射任务复制 `Ft8Message` 和捕获当前 `BaseRig`，避免后续提交覆盖前一任务。
+- 修复 Radio TCP 远端 EOF：`read() == -1` 立即关闭输入/输出/Socket、只回调一次并退出读取线程；主动断开和读异常走幂等关闭路径。
+- 新增有界执行器单元测试，以及仅使用 loopback UDP/TCP 和 fake rig 的 Android 回归测试，覆盖数据复制、目标/消息、发送顺序和 EOF 单回调。
+
+### 关键决策
+
+- 发送队列采用单线程 + `ArrayBlockingQueue(256)`；队列满时阻塞提交线程形成有界背压，不使用 `cachedThreadPool` 或无界队列。增加的数组/消息复制是为确定性换取的少量分配成本。
+- 不改真实电台协议格式、时序或 PTT 逻辑；只固定任务提交时的输入快照和发送顺序。
+- `Ft8Message` 发射快照使用现有复制构造函数；QTH 保留原消息对象引用，以便归属地结果仍能更新界面对象。
+
+### 当前状态
+
+- 代码、测试已提交到本分支；未 push、未 tag。
+- `AUTO_VERIFIED`：`:app:testDebugUnitTest` 通过（1 个 JVM 用例）；`:app:compileDebugAndroidTestJavaWithJavac` 通过；`:app:assembleDebug` 通过；`git diff --check` 通过。
+- Android loopback 回归测试仅完成编译，未运行：当前 `adb devices` 无设备。未连接、未控制真实电台，未做 HIL。
+- 本工作树中的 `doc/PROJECT_OVERVIEW.md`、`doc/ROADMAP_TODO.md` 缺失；已从 `release@e5ca3b2` 阅读对应版本，未擅自补入本次功能改动。
+
+### 风险与下一步
+
+- 队列持续满载时发送调用会同步等待，属于有界背压；高频流量需在模拟器 loopback 和后续真机网络模式复测吞吐与延迟。
+- 本次未证明真实电台连接、网络音频、完整 QSO、长时间挂机或硬件 EOF 行为；合入前应在无真实发射风险的 loopback/模拟器测试后，再由用户按 HIL 门禁验证。
+
+---
+
 ## 2026-06-12　测试版打包（.beta 并存安装）+ 两个全新安装闪退修复
 
 ### 1. 本次会话做了什么

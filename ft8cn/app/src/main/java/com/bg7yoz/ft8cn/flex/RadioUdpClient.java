@@ -7,6 +7,8 @@ package com.bg7yoz.ft8cn.flex;
 
 import android.util.Log;
 
+import com.bg7yoz.ft8cn.util.BoundedSerialExecutor;
+
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -25,9 +27,8 @@ public class RadioUdpClient {
     private int port;
     private boolean activated = false;
     private OnUdpEvents onUdpEvents = null;
-    private final ExecutorService sendDataThreadPool = Executors.newCachedThreadPool();
+    private final BoundedSerialExecutor sendDataThreadPool = new BoundedSerialExecutor(256);
     private final ExecutorService receiveThreadPool = Executors.newCachedThreadPool();
-    private final SendDataRunnable sendDataRunnable=new SendDataRunnable(this);
     private final ReceiveRunnable receiveRunnable=new ReceiveRunnable(this);
 
     public RadioUdpClient(int port) {
@@ -39,27 +40,30 @@ public class RadioUdpClient {
         //Log.e(TAG, "sendData: "+byteToStr(data) );
         //Log.e(TAG, String.format("sendData: ip: %s,port:%d ",ip,port) );
         InetAddress address = InetAddress.getByName(ip);
-        sendDataRunnable.data=data;
-        sendDataRunnable.address=address;
-        sendDataRunnable.port=port;
-        sendDataThreadPool.execute(sendDataRunnable);
+        sendDataThreadPool.execute(new SendDataRunnable(this, address, data, port));
     }
 
     private static class SendDataRunnable implements Runnable{
-        byte[] data;
-        InetAddress address;
-        int port;
-        RadioUdpClient client;
+        private final byte[] data;
+        private final InetAddress address;
+        private final int port;
+        private final RadioUdpClient client;
 
-        public SendDataRunnable(RadioUdpClient client) {
+        public SendDataRunnable(RadioUdpClient client, InetAddress address, byte[] data, int port) {
             this.client = client;
+            this.address = address;
+            this.data = Arrays.copyOf(data, data.length);
+            this.port = port;
         }
 
         @Override
         public void run() {
             DatagramPacket packet = new DatagramPacket(data, data.length, address,port);
             try {
-                client.sendSocket.send(packet);
+                DatagramSocket socket = client.sendSocket;
+                if (socket != null && !socket.isClosed()) {
+                    socket.send(packet);
+                }
             } catch (IOException e) {
                 e.printStackTrace();
                 Log.e(TAG, "run: " + e.getMessage());

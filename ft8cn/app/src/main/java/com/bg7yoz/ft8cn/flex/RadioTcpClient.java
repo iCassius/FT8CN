@@ -7,6 +7,8 @@ package com.bg7yoz.ft8cn.flex;
 
 import android.util.Log;
 
+import com.bg7yoz.ft8cn.util.BoundedSerialExecutor;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -14,148 +16,187 @@ import java.net.InetAddress;
 import java.net.Socket;
 import java.net.SocketException;
 import java.util.Arrays;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class RadioTcpClient {
     private static final String TAG = "RadioTcpClient";
     private static RadioTcpClient radioTcpClient = null;
-    private String ip;
-    private int port;
+    private volatile String ip;
+    private volatile int port;
     public static final int MAX_BUFFER_SIZE=1024 * 32;
 
-    private final ExecutorService sendByteThreadPool = Executors.newCachedThreadPool();
-    private final SendByteRunnable sendByteRunnable=new SendByteRunnable(this);
+    private final BoundedSerialExecutor sendByteThreadPool = new BoundedSerialExecutor(256);
 
     public static RadioTcpClient getInstance() {
         if (radioTcpClient == null) {
             synchronized (RadioTcpClient.class) {
-                radioTcpClient = new RadioTcpClient();
+                if (radioTcpClient == null) {
+                    radioTcpClient = new RadioTcpClient();
+                }
             }
         }
         return radioTcpClient;
     }
 
-    private Socket mSocket;
-    private OutputStream mOutputStream;
-    private InputStream mInputStream;
+    private volatile Socket mSocket;
+    private volatile OutputStream mOutputStream;
+    private volatile InputStream mInputStream;
 
     private SocketThread mSocketThread;
-    private boolean isStop = false;//thread flag
+    private volatile boolean isStop = false;//thread flag
 
     private OnDataReceiveListener onDataReceiveListener = null;
 
     public boolean isConnect() {
-        boolean flag = false;
-        if (mSocket != null) {
-            flag = mSocket.isConnected();
-        }
-        return flag;
+        Socket socket = mSocket;
+        return socket != null && socket.isConnected() && !socket.isClosed();
     }
 
-    public void connect(String ip, int port) {
+    public synchronized void connect(String ip, int port) {
+        disconnect();
         this.ip = ip;
         this.port = port;
-        //mSocketThread = new SocketThread(ip, port);
-        mSocketThread = new SocketThread();
+        isStop = false;
+        mSocketThread = new SocketThread(ip, port);
         mSocketThread.start();
     }
 
-    public void disconnect() {
+    public synchronized void disconnect() {
         isStop = true;
-        try {
-            if (mOutputStream != null) {
-                mOutputStream.close();
-            }
-
-            if (mInputStream != null) {
-                mInputStream.close();
-            }
-
-            if (mSocket != null) {
-                mSocket.close();
-                mSocket = null;
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        closeResources(mSocket, mInputStream, mOutputStream);
+        mSocket = null;
+        mInputStream = null;
+        mOutputStream = null;
         if (mSocketThread != null) {
             mSocketThread.interrupt();//not intime destory thread,so need a flag
         }
     }
 
+    private void closeResources(Socket socket, InputStream inputStream,
+                                OutputStream outputStream) {
+        try {
+            if (outputStream != null) {
+                outputStream.close();
+            }
+        } catch (IOException e) {
+            Log.d(TAG, "TCP output close exception: " + e.getMessage());
+        }
+        try {
+            if (inputStream != null) {
+                inputStream.close();
+            }
+        } catch (IOException e) {
+            Log.d(TAG, "TCP input close exception: " + e.getMessage());
+        }
+        try {
+            if (socket != null) {
+                socket.close();
+            }
+        } catch (IOException e) {
+            Log.d(TAG, "TCP socket close exception: " + e.getMessage());
+        }
+    }
 
     private class SocketThread extends Thread {
+        private final String targetIp;
+        private final int targetPort;
+        private boolean closeNotified;
+
+        private SocketThread(String targetIp, int targetPort) {
+            this.targetIp = targetIp;
+            this.targetPort = targetPort;
+        }
+
         @Override
         public void run() {
             Log.d(TAG, "TcpSocketThread start...");
-            super.run();
+            Socket socket = null;
+            OutputStream outputStream = null;
+            InputStream inputStream = null;
             try {
-                if (mSocket != null) {
-                    mSocket.close();
-                    mSocket = null;
+                InetAddress ipAddress = InetAddress.getByName(targetIp);
+                socket = new Socket(ipAddress, targetPort);
+                synchronized (RadioTcpClient.this) {
+                    if (isStop || mSocketThread != this) {
+                        closeResources(socket, inputStream, outputStream);
+                        return;
+                    }
+                    mSocket = socket;
                 }
-                InetAddress ipAddress = InetAddress.getByName(ip);
-                mSocket = new Socket(ipAddress, port);
-                //设置不延时发送
-                //mSocket.setTcpNoDelay(true);
-                //设置输入输出缓冲流大小
-                //mSocket.setSendBufferSize(8*1024);
-                //mSocket.setReceiveBufferSize(8*1024);
-                if (isConnect()) {
-                    mOutputStream = mSocket.getOutputStream();
-                    mInputStream = mSocket.getInputStream();
-
-
-                    isStop = false;
+                if (!isStop && isConnect()) {
+                    outputStream = socket.getOutputStream();
+                    inputStream = socket.getInputStream();
+                    synchronized (RadioTcpClient.this) {
+                        mOutputStream = outputStream;
+                        mInputStream = inputStream;
+                    }
                     connectSuccess();
-                }
-                /* 此处这样做没什么意义不大，真正的socket未连接还是靠心跳发送，等待服务端回应比较好，一段时间内未回应，则socket未连接成功 */
-                else {
+                } else {
                     connectFail();
+                    closeResources(socket, inputStream, outputStream);
                     return;
                 }
-
-            }catch (SocketException e){
+            } catch (SocketException e) {
                 Log.e(TAG,"TCP Connection exception:"+e.getMessage());
-            }
-            catch (IOException e) {
+                closeResources(socket, inputStream, outputStream);
+                return;
+            } catch (IOException e) {
                 connectFail();
                 Log.e(TAG, "SocketThread connect io exception = " + e.getMessage());
-                e.printStackTrace();
+                closeResources(socket, inputStream, outputStream);
                 return;
             }
-            int errorCount=0;
-            //read ...
+
             while (isConnect() && !isStop && !isInterrupted()) {
-                int size;
                 try {
                     byte[] buffer = new byte[MAX_BUFFER_SIZE];
-                    if (mInputStream == null) return;
-                    size = mInputStream.read(buffer);//null data -1 ,
+                    if (inputStream == null) {
+                        return;
+                    }
+                    int size = inputStream.read(buffer);//null data -1 ,
                     if (size > 0) {
                         if (onDataReceiveListener != null) {
                             byte[] temp = Arrays.copyOf(buffer, size);
                             onDataReceiveListener.onDataReceive(temp);
                         }
-                        errorCount =0;
-                    }else {
-                        errorCount ++;
-                        if (errorCount > 10){
-                            if (onDataReceiveListener!=null){
-                                onDataReceiveListener.onConnectionClosed();
-                            }
-                        }
+                    } else if (size == -1) {
+                        finishConnection(socket, inputStream, outputStream, true);
+                        return;
                     }
-
-                } catch (SocketException e){
+                } catch (SocketException e) {
                     Log.e(TAG,"Tcp Connection exception:"+e.getMessage());
+                    finishConnection(socket, inputStream, outputStream, !isStop);
+                    return;
                 } catch (IOException e) {
-                    //uiHandler.sendEmptyMessage(-1);
                     Log.e(TAG, "SocketThread read io exception = " + e.getMessage());
-                    e.printStackTrace();
+                    finishConnection(socket, inputStream, outputStream, !isStop);
                     return;
                 }
+            }
+            closeResources(socket, inputStream, outputStream);
+        }
+
+        private void finishConnection(Socket socket, InputStream inputStream,
+                                       OutputStream outputStream, boolean notify) {
+            synchronized (this) {
+                if (notify && closeNotified) {
+                    return;
+                }
+                if (notify) {
+                    closeNotified = true;
+                }
+            }
+            closeResources(socket, inputStream, outputStream);
+            boolean currentSession;
+            synchronized (RadioTcpClient.this) {
+                currentSession = mSocketThread == this;
+                if (mSocket == socket) {
+                    mSocket = null;
+                    mInputStream = null;
+                    mOutputStream = null;
+                }
+            }
+            if (notify && currentSession && onDataReceiveListener != null) {
+                onDataReceiveListener.onConnectionClosed();
             }
         }
     }
@@ -177,40 +218,31 @@ public class RadioTcpClient {
      * Exception : android.os.NetworkOnMainThreadException
      */
     public synchronized void sendByte(final byte[] mBuffer) {
-        sendByteRunnable.mBuffer=mBuffer;
-        sendByteThreadPool.execute(sendByteRunnable);
-//        new Thread(new Runnable() {
-//            @Override
-//            public void run() {
-//                try {
-//                    if (mOutputStream != null) {
-//                        mOutputStream.write(mBuffer);
-//                        mOutputStream.flush();
-//                    }
-//                } catch (IOException e) {
-//                    e.printStackTrace();
-//                }
-//            }
-//        }).start();
+        if (mBuffer == null) {
+            return;
+        }
+        sendByteThreadPool.execute(new SendByteRunnable(this, mBuffer));
     }
 
     private static class SendByteRunnable implements Runnable{
-        RadioTcpClient client;
-        byte[] mBuffer;
-        public SendByteRunnable(RadioTcpClient client) {
+        private final RadioTcpClient client;
+        private final byte[] mBuffer;
+
+        public SendByteRunnable(RadioTcpClient client, byte[] mBuffer) {
             this.client = client;
+            this.mBuffer = Arrays.copyOf(mBuffer, mBuffer.length);
         }
 
         @Override
         public void run() {
             try {
-                if (mBuffer==null) return;
-                if (client.mOutputStream != null) {
-                    client.mOutputStream.write(mBuffer);
-                    client.mOutputStream.flush();
+                OutputStream outputStream = client.mOutputStream;
+                if (outputStream != null) {
+                    outputStream.write(mBuffer);
+                    outputStream.flush();
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                Log.e(TAG, "TCP send exception: " + e.getMessage());
             }
         }
     }

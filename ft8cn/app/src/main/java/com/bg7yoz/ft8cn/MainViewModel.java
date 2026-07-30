@@ -95,6 +95,7 @@ import com.bg7yoz.ft8cn.spectrum.SpectrumListener;
 import com.bg7yoz.ft8cn.timer.OnUtcTimer;
 import com.bg7yoz.ft8cn.timer.UtcTimer;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
+import com.bg7yoz.ft8cn.util.BoundedSerialExecutor;
 import com.bg7yoz.ft8cn.wave.HamRecorder;
 import com.bg7yoz.ft8cn.wave.OnGetVoiceDataDone;
 import com.bg7yoz.ft8cn.x6100.X6100Radio;
@@ -103,7 +104,6 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Objects;
-import java.util.concurrent.ExecutorService;
 
 public class MainViewModel extends ViewModel {
     String TAG = "ft8cn MainViewModel";
@@ -132,10 +132,8 @@ public class MainViewModel extends ViewModel {
     public MutableLiveData<Boolean> mutableIsFlexRadio = new MutableLiveData<>();//是不是flex电台
     public MutableLiveData<Boolean> mutableIsXieguRadio = new MutableLiveData<>();//是不是flex电台
 
-    private final ExecutorService getQTHThreadPool = AppExecutors.getInstance().diskIO();
-    private final ExecutorService sendWaveDataThreadPool = AppExecutors.getInstance().networkIO();
-    private final GetQTHRunnable getQTHRunnable = new GetQTHRunnable(this);
-    private final SendWaveDataRunnable sendWaveDataRunnable = new SendWaveDataRunnable();
+    private final BoundedSerialExecutor getQTHThreadPool = new BoundedSerialExecutor(32);
+    private final BoundedSerialExecutor sendWaveDataThreadPool = new BoundedSerialExecutor(8);
 
 
     //用于显示生成共享日志过程的变量
@@ -364,8 +362,7 @@ public class MainViewModel extends ViewModel {
                 mutableIsDecoding.postValue(false);//解码的状态，会触发频谱图中的标记动作
 
 
-                getQTHRunnable.messages = messages;
-                getQTHThreadPool.execute(getQTHRunnable);//用线程池的方式查询归属地
+                getQTHThreadPool.execute(new GetQTHRunnable(MainViewModel.this, messages));//用线程池的方式查询归属地
 
                 //此变量也是告诉消息列表变化的
                 mutable_Decoded_Counter.postValue(
@@ -443,10 +440,8 @@ public class MainViewModel extends ViewModel {
                 if (GeneralVariables.connectMode == ConnectMode.NETWORK) {
                     if (baseRig != null) {
                         if (baseRig.isConnected()) {
-                            sendWaveDataRunnable.baseRig = baseRig;
-                            sendWaveDataRunnable.message = msg;
-                            //以线程池的方式执行网络数据包发送
-                            sendWaveDataThreadPool.execute(sendWaveDataRunnable);
+                            //每次提交都捕获当前电台和消息快照，避免排队任务互相覆盖
+                            sendWaveDataThreadPool.execute(new SendWaveDataRunnable(baseRig, msg));
                         }
                     }
                 }
@@ -472,9 +467,7 @@ public class MainViewModel extends ViewModel {
                 if (!supportTransmitOverCAT()) {
                     return;
                 }
-                sendWaveDataRunnable.baseRig = baseRig;
-                sendWaveDataRunnable.message = msg;
-                sendWaveDataThreadPool.execute(sendWaveDataRunnable);
+                sendWaveDataThreadPool.execute(new SendWaveDataRunnable(baseRig, msg));
             }
 
         }, new OnTransmitSuccess() {//当通联成功时
@@ -1123,12 +1116,13 @@ public class MainViewModel extends ViewModel {
         return headset == BluetoothAdapter.STATE_CONNECTED || a2dp == BluetoothAdapter.STATE_CONNECTED;
     }
 
-    private static class GetQTHRunnable implements Runnable {
-        MainViewModel mainViewModel;
-        ArrayList<Ft8Message> messages;
+    static final class GetQTHRunnable implements Runnable {
+        private final MainViewModel mainViewModel;
+        private final ArrayList<Ft8Message> messages;
 
-        public GetQTHRunnable(MainViewModel mainViewModel) {
+        GetQTHRunnable(MainViewModel mainViewModel, ArrayList<Ft8Message> messages) {
             this.mainViewModel = mainViewModel;
+            this.messages = new ArrayList<>(messages);
         }
 
 
@@ -1144,10 +1138,14 @@ public class MainViewModel extends ViewModel {
         }
     }
 
-    private static class SendWaveDataRunnable implements Runnable {
-        BaseRig baseRig;
-        //float[] data;
-        Ft8Message message;
+    static final class SendWaveDataRunnable implements Runnable {
+        private final BaseRig baseRig;
+        private final Ft8Message message;
+
+        SendWaveDataRunnable(BaseRig baseRig, Ft8Message message) {
+            this.baseRig = baseRig;
+            this.message = message == null ? null : new Ft8Message(message);
+        }
 
         @Override
         public void run() {
