@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-07-30　P0-E 发布、CI、签名、版本与可回退测试 APK
+
+### 做了什么
+
+- 基于干净的 `origin/release@d8f8c5d` 审计现有 Gradle、AGP 9.2.1、Gradle 9.4.1、workflow、tag 和签名配置。
+- 将 `ft8cn/gradle.properties` 设为版本唯一来源：`0.93.005` / `93005`，对应未来 tag `v0.93.005`；不创建或推送 tag，不覆盖已有 `v0.93.004`。
+- 普通 CI 和 tag workflow 统一切换 JDK 17；正式 Release 使用实际存在的 `doc/RELEASES.md`，同名 Release 或资产不覆盖。
+- 增加正式签名 fail-fast、`verifyReleaseSigning`、版本/敏感信息校验脚本，以及 `:app:packageTestApk`；TEST/BETA 输出到被 Git 忽略的 `.artifacts/FT8CN-v0.93.005-beta-<短commit>.apk`。
+- 发布文档补充正式 Secrets 变量名、证书检查、敏感信息检查、Android 同包 downgrade 和 BETA 共存边界。
+
+### 关键决策
+
+- `versionName` 采用仓库要求的三位构建号 `0.93.005`，`versionCode=93005`；`v0.93.004` 视为不可变历史发布。
+- 普通 CI 不构建正式版，因为它不应持有正式签名 Secrets；它构建 debug 签名的 BETA 包。正式版只由 tag workflow 在 Secrets 和 keystore 均完整时构建。
+- BETA 保持 `.beta` 包名、`-beta` 版本后缀和测试标签，不把 debug APK 重命名成 release。
+
+### 当前状态
+
+- 已完成构建配置、workflow、校验脚本和文档修改，未生成或提交 APK、keystore、tag，也未 push。
+- 正式证书值和指纹不在本机 worktree；正式签名构建必须在配置 Secrets/keystore 的环境验证。
+- `doc/PROJECT_OVERVIEW.md`、`doc/ROADMAP_TODO.md` 在本 worktree 的 `origin/release@d8f8c5d` 尚不存在；本轮依据现有 `PROJECT_RULES.md`、`doc/HANDOFF.md`、`doc/RELEASES.md`、`doc/RELEASE_SIGNING.md` 和实际 Gradle/workflow 审计，不伪造缺失文档内容。
+
+### 下一步
+
+1. 在有正式 Secrets 的 CI 或维护者本机运行 `:app:verifyReleaseSigning`、正式 APK 构建和证书指纹人工比对。
+2. 由发布负责人在确认 `v0.93.005` 尚未存在后创建并推送 tag；本分支不代执行该动作。
+3. 用模拟器或明确授权的测试设备分别安装 BETA/正式 APK；同包回退按 `RELEASE_SIGNING.md` 的卸载或 `adb -d install -r -d` 边界执行。
+
 ## 2026-06-12　测试版打包（.beta 并存安装）+ 两个全新安装闪退修复
 
 ### 1. 本次会话做了什么

@@ -4,7 +4,6 @@ on:
   push:
     tags:
       - "v*.*.*"
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -25,8 +24,65 @@ jobs:
           java-version: "17"
           cache: gradle
 
+      - name: Check release contract and sensitive-file hygiene
+        run: python scripts/check_release_contract.py
+
+      - name: Resolve release tag and validate version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+            echo "This workflow is a formal tag release and must run from a tag." >&2
+            exit 1
+          fi
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [[ "${GITHUB_REF_NAME}" != v[0-9]*.[0-9]*.[0-9][0-9][0-9] ]]; then
+            echo "Tag must be vMAJOR.MINOR.BUILD with a three-digit build: ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+          gradle_version="$(./ft8cn/gradlew -q :app:printVersion)"
+          if [[ "${gradle_version%%:*}" != "${tag_version}" ]]; then
+            echo "Tag ${tag_version} does not match canonical Gradle version ${gradle_version}" >&2
+            exit 1
+          fi
+          if git tag --list "${GITHUB_REF_NAME}" | grep -qx "${GITHUB_REF_NAME}" && [[ "${GITHUB_REF_NAME}" == "v0.93.004" ]]; then
+            echo "Existing v0.93.004 is immutable; refusing to rebuild/overwrite it." >&2
+            exit 1
+          fi
+          echo "version=${tag_version}" >> "${GITHUB_OUTPUT}"
+          echo "short_sha=${GITHUB_SHA:0:7}" >> "${GITHUB_OUTPUT}"
+
+      - name: Materialize formal keystore
+        shell: bash
+        env:
+          FT8CN_RELEASE_STORE_FILE: ${{ secrets.FT8CN_RELEASE_STORE_FILE }}
+          FT8CN_RELEASE_STORE_PASSWORD: ${{ secrets.FT8CN_RELEASE_STORE_PASSWORD }}
+          FT8CN_RELEASE_KEY_ALIAS: ${{ secrets.FT8CN_RELEASE_KEY_ALIAS }}
+          FT8CN_RELEASE_KEY_PASSWORD: ${{ secrets.FT8CN_RELEASE_KEY_PASSWORD }}
+          FT8CN_RELEASE_KEYSTORE_B64: ${{ secrets.FT8CN_RELEASE_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          : "${FT8CN_RELEASE_STORE_FILE:?Missing secret FT8CN_RELEASE_STORE_FILE}"
+          : "${FT8CN_RELEASE_STORE_PASSWORD:?Missing secret FT8CN_RELEASE_STORE_PASSWORD}"
+          : "${FT8CN_RELEASE_KEY_ALIAS:?Missing secret FT8CN_RELEASE_KEY_ALIAS}"
+          : "${FT8CN_RELEASE_KEY_PASSWORD:?Missing secret FT8CN_RELEASE_KEY_PASSWORD}"
+          : "${FT8CN_RELEASE_KEYSTORE_B64:?Missing secret FT8CN_RELEASE_KEYSTORE_B64}"
+          if [[ "${FT8CN_RELEASE_STORE_FILE}" = /* || "${FT8CN_RELEASE_STORE_FILE}" == *..* || "${FT8CN_RELEASE_STORE_FILE}" == *\\* ]]; then
+            echo "FT8CN_RELEASE_STORE_FILE must be a safe relative filename under ft8cn/." >&2
+            exit 1
+          fi
+          mkdir -p "ft8cn/$(dirname "${FT8CN_RELEASE_STORE_FILE}")"
+          printf '%s' "${FT8CN_RELEASE_KEYSTORE_B64}" | base64 --decode > "ft8cn/${FT8CN_RELEASE_STORE_FILE}"
+          test -s "ft8cn/${FT8CN_RELEASE_STORE_FILE}"
+
       - name: Build release APK
         working-directory: ft8cn
+        env:
+          FT8CN_RELEASE_STORE_FILE: ${{ secrets.FT8CN_RELEASE_STORE_FILE }}
+          FT8CN_RELEASE_STORE_PASSWORD: ${{ secrets.FT8CN_RELEASE_STORE_PASSWORD }}
+          FT8CN_RELEASE_KEY_ALIAS: ${{ secrets.FT8CN_RELEASE_KEY_ALIAS }}
+          FT8CN_RELEASE_KEY_PASSWORD: ${{ secrets.FT8CN_RELEASE_KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease
@@ -36,8 +92,9 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          APK_NAME="FT8CN-v${VERSION}-release.apk"
-          APK_PATH="ft8cn/app/build/outputs/apk/release/${APK_NAME}"
+          APK_NAME="FT8CN-v${VERSION}-release-${GITHUB_SHA:0:7}.apk"
+          APK_PATH="ft8cn/.artifacts/${APK_NAME}"
+          mkdir -p ft8cn/.artifacts
           cp ft8cn/app/build/outputs/apk/release/app-release.apk "${APK_PATH}"
           echo "apk_path=${APK_PATH}" >> "${GITHUB_OUTPUT}"
           echo "apk_name=${APK_NAME}" >> "${GITHUB_OUTPUT}"
@@ -49,6 +106,9 @@ jobs:
           path: ${{ steps.apk.outputs.apk_path }}
           if-no-files-found: error
 
+      - name: Verify formal APK signature
+        run: python scripts/verify_apk_signature.py --apk "${{ steps.apk.outputs.apk_path }}" --expect release
+
       - name: Upload APK to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         env:
@@ -56,7 +116,10 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
           APK_PATH: ${{ steps.apk.outputs.apk_path }}
         run: |
-          if ! gh release view "${TAG_NAME}" >/dev/null 2>&1; then
-            gh release create "${TAG_NAME}" --title "FT8CN ${TAG_NAME}" --notes-file RELEASES.md
+          test -f doc/RELEASES.md
+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            echo "GitHub Release ${TAG_NAME} already exists; refusing to overwrite it." >&2
+            exit 1
           fi
-          gh release upload "${TAG_NAME}" "${APK_PATH}" --clobber
+          gh release create "${TAG_NAME}" --title "FT8CN ${TAG_NAME}" --notes-file doc/RELEASES.md
+          gh release upload "${TAG_NAME}" "${APK_PATH}"
