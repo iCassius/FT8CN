@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-07-30　P0-B 最终 AVD 回归验证
+
+### 验证结果
+
+- 在代码基线 `fe07b13`、模拟器 `emulator-5554`（`Pixel_10_Pro_XL(AVD) - 17`）上定向运行 `RadioNetworkClientTest`，9/9 通过；覆盖 100 次 TCP/UDP/ICOM UDP 重连、旧会话隔离、音频不可变快照与协谷音频重启，以及 TCP EOF 在 200ms 内只回调一次。
+- 随后使用 `--rerun-tasks` 完整运行 `:app:connectedDebugAndroidTest`，14/14 通过；本次验证没有因 Gradle 增量状态跳过测试。
+- 本轮 AVD 验证未发现需要继续修改的功能、稳定性或性能问题，因此代码保持不变，仅补充此交接记录。
+- 未连接或控制真实电台，未做 HIL；自动化 loopback/模拟器结果不能替代真实电台验证。
+
+### 当前状态与下一步
+
+- `codex/p0-b-snapshot-eof` 已完成 JVM 4/4、定向 Android 9/9、完整 Android 14/14 与 Debug APK 构建门禁。
+- 分支不 push、不 tag；后续合入前仍需按项目门禁安排真实设备网络模式、完整 QSO 与长时间挂机 HIL。
+
+---
+
 ## 2026-07-30　P0-B 第二轮：会话隔离、可重启音频与有界队列收口
 
 ### 做了什么
