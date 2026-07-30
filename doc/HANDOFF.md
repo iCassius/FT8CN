@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-07-30　完整产品与架构审计文档
+
+### 做了什么
+
+- 只修改文档，没有修改功能代码，也没有提交 Git。
+- 新增 `doc/PROJECT_OVERVIEW.md`，记录产品定位、用户流程、功能、架构、数据流、线程模型、近期变化、成熟度和验证边界。
+- 新增 `doc/ROADMAP_TODO.md`，把确认缺陷、较高概率风险、性能与省电工作按 P0/P1/P2 整理为可派发任务。
+- 更新 `doc/README.md` 索引和当前审计状态。
+
+### 关键决策
+
+- 发版前先处理共享执行器/Observer、任务快照与 EOF、配置完成事件、解码单飞与终态、Release 签名/CI/版本以及真机门禁。
+- 将 JTDX priority 首次自动候选遗漏、Wavelog station ID 包含式误匹配、FT-710 无响应轮询与 Timer 未取消列为确认缺陷；修复 FT-710 生命周期时保留已有现场 A/B 支持的 USB CAT write-only 核心。
+- 不把构建成功、历史模拟器结果或代码正向变化写成 HIL。
+- 性能任务先建立基线，再使用相对改善和不退化目标；`MainViewModel` 与 `GeneralVariables` 只允许小步拆分。
+
+### 当前状态
+
+- 审计基线：`release@d8f8c5d`；功能代码审计开始前工作树干净，当前仅本次文档有未提交变化。
+- `assembleDebug` 成功；JVM 单测 `NO-SOURCE`；Instrumented 仅 1 个类 5 个用例，本轮未运行；`lintDebug` 为 5 errors / 343 warnings；`assembleRelease` 成功，但当前 APK 为 Android Debug 证书。
+- 本轮无设备、模拟器、性能 profile 或 HIL。
+
+### 下一步
+
+按 `doc/ROADMAP_TODO.md` 从 P0-C、P0-A/P0-B、P0-D、P0-E 开始小步修复和补测试，完成 P0 后再进入真机稳定版门禁。
+
+---
+
 ## 2026-06-12　测试版打包（.beta 并存安装）+ 两个全新安装闪退修复
 
 ### 1. 本次会话做了什么
