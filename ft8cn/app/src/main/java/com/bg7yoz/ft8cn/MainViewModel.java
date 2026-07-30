@@ -108,6 +108,7 @@ import java.util.concurrent.ExecutorService;
 public class MainViewModel extends ViewModel {
     String TAG = "ft8cn MainViewModel";
     public boolean configIsLoaded = false;
+    public boolean configIsLoading = false;
 
 
     //public int decoded_counter = 0;//解码的总条数

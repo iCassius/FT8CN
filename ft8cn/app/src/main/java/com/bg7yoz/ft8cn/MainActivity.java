@@ -497,7 +497,8 @@ public class MainActivity extends AppCompatActivity {
      * 初始化一些数据
      */
     private void InitData() {
-        if (mainViewModel.configIsLoaded) return;//如果数据已经读取一遍了，就不用再读取了。
+        if (mainViewModel.configIsLoaded || mainViewModel.configIsLoading) return;
+        mainViewModel.configIsLoading = true;
 
         //读取波段数据
         if (mainViewModel.operationBand == null) {
@@ -515,7 +516,14 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void doOnAfterQueryConfig(String KeyName, String Value) {
+                // Individual rows are delivered for compatibility; startup actions belong
+                // to doOnConfigLoadComplete(), after all values are visible.
+            }
+
+            @Override
+            public void doOnConfigLoadComplete() {
                 mainViewModel.configIsLoaded = true;
+                mainViewModel.configIsLoading = false;
                 //此处梅登海德已经通过数据库得到了，但是如果GPS能获取到，还是用GPS的
                 String grid = MaidenheadGrid.getMyMaidenheadGrid(getApplicationContext());
                 if (!grid.equals("")) {//说明获取到了GPS数据

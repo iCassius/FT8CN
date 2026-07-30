@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-07-30　P0-C 配置加载完成事件修复
+
+### 1. 本次会话做了什么
+
+- `DatabaseOpr.getAllConfigParameter` 保留逐项配置回调，新增兼容性的 `doOnConfigLoadComplete()`，在所有配置值及 QSL 缓存读取完成后通过主线程只回调一次；不再用 `(null, null)` 伪装完成事件。
+- `MainActivity` 将 GPS、`configIsLoaded`、时隙设置、首次导航和 USB 恢复动作移到完成回调；`MainViewModel.configIsLoading` 防止旋转/重建期间重复启动加载。
+- 新增 `DatabaseConfigLoadTest`：覆盖已有配置和空配置，验证逐项回调不触发完成动作、配置值完整可见、完成回调恰好一次。
+
+### 2. 关键决策与原因
+
+- 接口新增默认方法，已有只消费逐项配置的调用方无需修改；逐项回调语义不变，完成语义独立且不会因配置项数量变化而提前触发。
+- `configIsLoading` 与 `configIsLoaded` 分离，避免异步读取尚未完成时 Activity 重建再次注册加载任务。
+
+### 3. 当前状态
+
+- 分支：`fix/config-load-complete`；改动仅限配置回调、MainActivity/MainViewModel 与对应 Android 测试。
+- `AUTO_VERIFIED`：`testDebugUnitTest`（无 JVM 测试源，任务成功但为 `NO-SOURCE`）、`assembleDebug` 成功；Android 测试代码编译成功。
+- `connectedDebugAndroidTest` 未执行测试：本机无连接设备（`DeviceException: No connected devices!`）。未接触真实设备，未做 HIL。
+
+### 4. 下一步
+
+- 在仅模拟器环境运行 `DatabaseConfigLoadTest` 两个用例，再合入目标分支；真实设备/HIL 仍需单独授权与安排。
+
+---
+
 ## 2026-06-12　测试版打包（.beta 并存安装）+ 两个全新安装闪退修复
 
 ### 1. 本次会话做了什么

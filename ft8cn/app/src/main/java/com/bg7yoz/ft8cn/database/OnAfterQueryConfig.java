@@ -8,4 +8,9 @@ package com.bg7yoz.ft8cn.database;
 public interface OnAfterQueryConfig {
     void doOnBeforeQueryConfig(String KeyName);
     void doOnAfterQueryConfig(String KeyName,String Value);
+
+    /** Called once after every config row and related cached data have been loaded. */
+    default void doOnConfigLoadComplete() {
+        // Optional for existing callers that only consume individual config rows.
+    }
 }

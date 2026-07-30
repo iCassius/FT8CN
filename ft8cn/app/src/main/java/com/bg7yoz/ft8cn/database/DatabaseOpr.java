@@ -504,7 +504,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             }
             getAllQSLCallsignsSync();
             mainHandler.post(() -> {
-                if (onAfterQueryConfig != null) onAfterQueryConfig.doOnAfterQueryConfig(null, null);
+                if (onAfterQueryConfig != null) onAfterQueryConfig.doOnConfigLoadComplete();
             });
         });
     }
