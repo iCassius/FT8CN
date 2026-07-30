@@ -1,14 +1,18 @@
 package com.bg7yoz.ft8cn.database;
 
+import android.Manifest;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.ContextWrapper;
+import android.content.pm.PackageManager;
 
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.core.content.ContextCompat;
 
 import com.bg7yoz.ft8cn.GeneralVariables;
 
@@ -119,6 +123,43 @@ public class DatabaseConfigLoadTest {
 
         assertTrue("damaged config load did not complete", complete.await(10, TimeUnit.SECONDS));
         assertEquals(1, completeCallbacks.get());
+    }
+
+    @Test
+    public void configLoadCompletesWithoutRuntimePermission() throws Exception {
+        Context context = ApplicationProvider.getApplicationContext();
+        Context noAudioPermissionContext = new ContextWrapper(context) {
+            @Override
+            public int checkPermission(String permission, int pid, int uid) {
+                if (Manifest.permission.RECORD_AUDIO.equals(permission)) {
+                    return PackageManager.PERMISSION_DENIED;
+                }
+                return super.checkPermission(permission, pid, uid);
+            }
+        };
+        assertEquals(PackageManager.PERMISSION_DENIED,
+                ContextCompat.checkSelfPermission(noAudioPermissionContext, Manifest.permission.RECORD_AUDIO));
+
+        DatabaseOpr database = new DatabaseOpr(noAudioPermissionContext,
+                "config_load_without_permission_test", null, 15);
+        database.getDb().delete("config", null, null);
+        CountDownLatch complete = new CountDownLatch(1);
+        database.getAllConfigParameter(new OnAfterQueryConfig() {
+            @Override
+            public void doOnBeforeQueryConfig(String keyName) {
+            }
+
+            @Override
+            public void doOnAfterQueryConfig(String keyName, String value) {
+            }
+
+            @Override
+            public void doOnConfigLoadComplete() {
+                complete.countDown();
+            }
+        });
+        assertTrue("config completion was lost without runtime permission",
+                complete.await(10, TimeUnit.SECONDS));
     }
 
     private static void insert(DatabaseOpr database, String key, String value) {

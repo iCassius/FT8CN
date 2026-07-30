@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-30　P0-C 加载中重建与未授权完成状态验收
+
+### 1. 本次会话做了什么
+
+- 恢复并审查 `fix/config-load-complete` 上 `cc30a67` 之后保留的未提交改动。发现 `MainActivity.onStart()` 无条件调用完成消费，即使 `configLoadComplete` 仍为 `false` 也会执行 GPS、导航或 USB 初始化；现改为仅在共享完成状态确为 `true` 时消费。
+- 完成 Activity 重建回归：用数据库串行队列阻塞加载，重建后断言旧实例本轮完成动作 0 次、新实例 1 次；同时修正测试的 JUnit 静态导入和主线程 `LiveData` 注册方式。
+- 完成无录音权限的确定性数据层回归：使用仅对 `RECORD_AUDIO` 返回拒绝的 `ContextWrapper`，验证配置加载仍会回调完成。测试不再在运行中的 instrumentation 进程撤销自身权限（该操作会被 Android 终止进程，不能作为稳定断言）。
+
+### 2. 当前状态
+
+- `AUTO_VERIFIED`：仅使用 `emulator-5554`（`Pixel_10_Pro_XL(AVD) - 17`）。目标重建用例 1/1 通过；无录音权限完成用例 1/1 通过；`:app:connectedDebugAndroidTest` 全套 11/11 通过（失败 0、错误 0、跳过 0）。
+- `:app:assembleDebug` 成功。未使用真实设备，未做 HIL；未验证真实设备上的权限弹窗、录音、解码、电台连接或发射流程。
+
+### 3. 下一步
+
+- 提交本分支最小修复与测试/交接记录，等待主会话审查或集成；不 push、不 tag。
+
+---
+
 ## 2026-07-30　P0-1/P0-2 配置加载生命周期与损坏值修复
 
 ### 1. 本次会话做了什么

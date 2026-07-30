@@ -94,6 +94,7 @@ public class MainActivity extends AppCompatActivity {
 
     private ShareLogsProgressDialog dialog = null;//生成共享log的对话框
     private boolean configUiInitialized = false;
+    private int configUiCompletionActionCount = 0;
     private boolean activityUiActive = false;
 
 
@@ -521,12 +522,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void consumeConfigLoadComplete() {
-        if (configUiInitialized || !activityUiActive || isFinishing()
+        if (!Boolean.TRUE.equals(mainViewModel.configLoadComplete.getValue())
+                || configUiInitialized || !activityUiActive || isFinishing()
                 || (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN_MR1
                 && isDestroyed())) {
             return;
         }
         configUiInitialized = true;
+        configUiCompletionActionCount++;
         //此处梅登海德已经通过数据库得到了，但是如果GPS能获取到，还是用GPS的
         String grid = MaidenheadGrid.getMyMaidenheadGrid(getApplicationContext());
         if (!grid.equals("")) {//说明获取到了GPS数据
@@ -563,6 +566,9 @@ public class MainActivity extends AppCompatActivity {
     protected void onStart() {
         activityUiActive = true;
         super.onStart();
+        // A sticky completion value can be delivered during onCreate, before this
+        // Activity is allowed to perform UI work. Consume it after the view is active.
+        consumeConfigLoadComplete();
     }
 
     @Override
