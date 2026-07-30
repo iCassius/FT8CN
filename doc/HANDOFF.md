@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-30　P0-A 最终 AVD 验证
+
+### 1. 本次会话做了什么
+
+- 在独占的 Pixel_10_Pro_XL（Android 17，`emulator-5554`）上先定向运行 `FT8TransmitSignalLifecycleTest`，随后运行全套 `:app:connectedDebugAndroidTest`。
+
+### 2. 当前状态
+
+- `FT8TransmitSignalLifecycleTest`：6/6 通过。
+- 全套 connected：11/11 通过，0 failures、0 errors、0 skipped（含 `FT8TransmitSignalLifecycleTest` 6 个和既有 `CallsignDatabaseTest` 5 个）。
+- JVM `TransmitPttCoordinatorTest` 保持 4/4 通过；此前的编译与 `assembleDebug` 结果仍有效。
+- 未做 HIL：仅使用 AVD 测试，未连接实体电台，未真实发射，未验证实体 CAT/PTT、蓝牙 SCO 或完整 QSO。
+
+### 3. 下一步
+
+- P0-A 自动验证完成，可按既定范围进入集成评审；HIL 仍需另行明确授权和实体设备条件。
+
+---
+
 ## 2026-07-30　P0-A 第二轮审查：PTT 所属目标、终止兜底与调度栅栏
 
 ### 1. 本次会话做了什么
