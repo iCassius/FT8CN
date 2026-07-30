@@ -99,6 +99,7 @@ public class FT8TransmitSignalLifecycleTest {
         RecordingCallbacks callbacks = new RecordingCallbacks();
         final FT8TransmitSignal[] signal = new FT8TransmitSignal[1];
         Thread worker = null;
+        long oldGeneration = -1;
         try {
             onMain(() -> {
                 GeneralVariables.connectMode = com.bg7yoz.ft8cn.connector.ConnectMode.NETWORK;
@@ -109,8 +110,10 @@ public class FT8TransmitSignalLifecycleTest {
             });
             worker = executor.startNext();
             assertTrue(callbacks.networkStarted.await(2, TimeUnit.SECONDS));
+            oldGeneration = signal[0].lifecycleGenerationForTest();
 
             onMain(() -> signal[0].stop());
+            signal[0].onAudioMarkerForTest(oldGeneration);
             worker.join(2000);
 
             assertEquals(1, callbacks.beforeCount.get());
@@ -184,6 +187,44 @@ public class FT8TransmitSignalLifecycleTest {
                 assertFalse(executor.isShutdown());
             });
         } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void timerScheduleAndRigDisconnectRaceCannotStartAfterDeactivation() throws Throwable {
+        RecordingExecutor executor = new RecordingExecutor();
+        RecordingCallbacks callbacks = new RecordingCallbacks();
+        final FT8TransmitSignal[] signal = new FT8TransmitSignal[1];
+        Thread timerSchedule = null;
+        try {
+            onMain(() -> {
+                signal[0] = newSignal(executor, callbacks);
+                signal[0].setActivated(true);
+            });
+            timerSchedule = new Thread(() -> signal[0].doTransmit());
+            timerSchedule.start();
+            onMain(() -> signal[0].stopCurrentTransmission());
+            timerSchedule.join(2000);
+            executor.runAll();
+            assertEquals(0, callbacks.beforeCount.get());
+
+            onMain(() -> {
+                signal[0].setActivated(true);
+                signal[0].doTransmit();
+                signal[0].stopCurrentTransmission();
+            });
+            executor.runAll();
+            assertEquals(0, callbacks.beforeCount.get());
+        } finally {
+            if (timerSchedule != null) {
+                timerSchedule.join(2000);
+            }
+            onMain(() -> {
+                if (signal[0] != null) {
+                    signal[0].close();
+                }
+            });
             executor.shutdownNow();
         }
     }
@@ -293,6 +334,19 @@ public class FT8TransmitSignalLifecycleTest {
             Thread worker = new Thread(command);
             worker.start();
             return worker;
+        }
+
+        void runAll() {
+            while (true) {
+                Runnable command;
+                synchronized (submitted) {
+                    if (nextRunnable >= submitted.size()) {
+                        return;
+                    }
+                    command = submitted.get(nextRunnable++);
+                }
+                command.run();
+            }
         }
     }
 }

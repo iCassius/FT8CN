@@ -47,7 +47,7 @@ public class FT8TransmitSignal {
 
     private int functionOrder = 6;
     public MutableLiveData<Integer> mutableFunctionOrder = new MutableLiveData<>();//指令的顺序变化
-    private boolean activated = false;//是否处于可以发射的模式
+    private volatile boolean activated = false;//是否处于可以发射的模式
     public MutableLiveData<Boolean> mutableIsActivated = new MutableLiveData<>();
     public int sequential;//发射的时序
     public MutableLiveData<Integer> mutableSequential = new MutableLiveData<>();
@@ -190,26 +190,31 @@ public class FT8TransmitSignal {
     //发射信号
     //@RequiresApi(api = Build.VERSION_CODES.N)
     public void doTransmit() {
-        if (!activated || stopped) {
-            return;
+        DoTransmitTask task = null;
+        boolean blockedFrequency = false;
+        synchronized (lifecycleLock) {
+            if (stopped || !activated) {
+                return;
+            }
+            //检测是不是黑名单频率，WSPR-2的频率，频率=电台频率+声音频率
+            if (BaseRigOperation.checkIsWSPR2(
+                    GeneralVariables.band + Math.round(GeneralVariables.getBaseFrequency()))) {
+                activated = false;
+                lifecycleGeneration++;
+                blockedFrequency = true;
+            } else {
+                task = new DoTransmitTask(lifecycleGeneration);
+                doTransmitTasks.add(task);
+            }
         }
-        //检测是不是黑名单频率，WSPR-2的频率，频率=电台频率+声音频率
-        if (BaseRigOperation.checkIsWSPR2(
-                GeneralVariables.band + Math.round(GeneralVariables.getBaseFrequency()))) {
+        if (blockedFrequency) {
             ToastMessage.show(String.format(GeneralVariables.getStringFromResource(R.string.use_wspr2_error)
                     , BaseRigOperation.getFrequencyAllInfo(GeneralVariables.band)));
-            setActivated(false);
+            terminateActiveTransmissions();
+            mutableIsActivated.postValue(false);
             return;
         }
         Log.d(TAG, "doTransmit: 开始发射...");
-        DoTransmitTask task;
-        synchronized (lifecycleLock) {
-            if (stopped) {
-                return;
-            }
-            task = new DoTransmitTask(lifecycleGeneration);
-            doTransmitTasks.add(task);
-        }
         try {
             doTransmitThreadPool.execute(task);
         } catch (RuntimeException e) {
@@ -557,7 +562,7 @@ public class FT8TransmitSignal {
         RuntimeException callbackFailure = null;
         boolean mustTerminate;
         synchronized (lifecycleLock) {
-            if (stopped || lifecycleGeneration != generation || !activeTransmissions.isEmpty()) {
+            if (stopped || !activated || lifecycleGeneration != generation || !activeTransmissions.isEmpty()) {
                 return null;
             }
             activeTransmissions.add(transmission);
@@ -599,6 +604,29 @@ public class FT8TransmitSignal {
                     && !transmission.terminated
                     && activeTransmissions.contains(transmission);
         }
+    }
+
+    private boolean isSchedulableGeneration(long generation) {
+        synchronized (lifecycleLock) {
+            return !stopped && activated && lifecycleGeneration == generation;
+        }
+    }
+
+    long lifecycleGenerationForTest() {
+        return lifecycleGeneration;
+    }
+
+    void onAudioMarkerForTest(long generation) {
+        TransmissionContext transmission = null;
+        synchronized (lifecycleLock) {
+            for (TransmissionContext candidate : activeTransmissions) {
+                if (candidate.generation == generation) {
+                    transmission = candidate;
+                    break;
+                }
+            }
+        }
+        afterPlayAudio(transmission);
     }
 
     private void afterPlayAudio(TransmissionContext transmission) {
@@ -1164,12 +1192,22 @@ public class FT8TransmitSignal {
     }
 
     public void setActivated(boolean activated) {
-        this.activated = activated;
-        if (!this.activated) {//强制关闭发射
-            stopCurrentTransmission();
+        if (activated) {
+            synchronized (lifecycleLock) {
+                if (stopped) {
+                    return;
+                }
+                this.activated = true;
+            }
+            mutableIsActivated.postValue(true);
             return;
         }
-        mutableIsActivated.postValue(activated);
+        synchronized (lifecycleLock) {
+            this.activated = false;
+            lifecycleGeneration++;
+        }
+        terminateActiveTransmissions();
+        mutableIsActivated.postValue(false);
     }
 
     public boolean isTransmitting() {
@@ -1177,9 +1215,7 @@ public class FT8TransmitSignal {
     }
 
     public void stopCurrentTransmission() {
-        activated = false;
-        setTransmitting(false);
-        mutableIsActivated.postValue(false);
+        setActivated(false);
     }
 
     public void setTransmitting(boolean transmitting) {
@@ -1280,7 +1316,7 @@ public class FT8TransmitSignal {
     private class DoTransmitTask extends FutureTask<Void> {
         DoTransmitTask(long generation) {
             super(() -> {
-                if (!stopped && lifecycleGeneration == generation) {
+                if (isSchedulableGeneration(generation)) {
                     doTransmitRunnable.run(generation);
                 }
             }, null);
@@ -1301,7 +1337,7 @@ public class FT8TransmitSignal {
 
         @SuppressLint("DefaultLocale")
         public void run(long generation) {
-            if (transmitSignal.stopped) {
+            if (!transmitSignal.isSchedulableGeneration(generation)) {
                 return;
             }
             //todo 此处可能要修改，维护一个列表。把每个呼号，网格，时间，波段，记录下来

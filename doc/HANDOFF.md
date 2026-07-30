@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-07-30　P0-A 第二轮审查：PTT 所属目标、终止兜底与调度栅栏
+
+### 1. 本次会话做了什么
+
+- 恢复并保留提交 `d661b2c` 之后的未提交 P0-A 改动；未执行 reset、checkout 或丢弃操作。
+- `MainViewModel` 的发射回调和 `onCleared()` 统一交由 `TransmitPttCoordinator` 管理：活跃发射只对实际接受 PTT ON 的原电台目标发送一次 PTT OFF；成功 OFF 后清除所属权，`onCleared()` 的安全兜底不会重复 OFF。PTT OFF 异常仍保留所属权，供 finally 路径再尝试；SCO 仅在 PTT OFF 成功后恢复。
+- `FT8TransmitSignal` 的 `activated`、generation 和任务调度在同一生命周期锁下判定；停用/断开后不能再创建 `TransmissionContext` 或触发 PTT ON。迟到的 AudioTrack marker 继续携带原 `TransmissionContext`，经 generation/活跃集合 fence 后不会终止新会话。
+- 将无 Android 依赖的 PTT 协调器测试放到 JVM，新增原电台被替换时 PTT OFF 仍回到原目标的回归用例。
+
+### 2. 当前状态
+
+- `AUTO_VERIFIED`：`:app:compileDebugJavaWithJavac`、`:app:compileDebugAndroidTestJavaWithJavac`、`:app:testDebugUnitTest`（`TransmitPttCoordinatorTest` 4/4）、`:app:assembleDebug` 均通过。
+- 未跑 connected：AVD 当前由 P0-C 恢复会话占用。待空闲后运行 `:app:connectedDebugAndroidTest`，应覆盖 6 个 `FT8TransmitSignalLifecycleTest` 和 5 个既有 `CallsignDatabaseTest`（合计 11）。
+- 未做 HIL：未连接实体电台，未真实发射，未验证实体 CAT/PTT、蓝牙 SCO 或完整 QSO。
+
+### 3. 下一步
+
+- connected 通过后再按 P0-A 范围集成；保持 PTT OFF 只从协调器的所属目标发出，勿恢复为 `onCleared()` 对当前 `baseRig` 的无条件直接写入。
+
+---
+
 ## 2026-07-30　P0-A 独立审查修复：活跃发射安全终止与迟到回调隔离
 
 ### 1. 本次会话做了什么
