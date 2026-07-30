@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-30　P0-C 模拟器 Instrumented 补充验收
+
+### 1. 本次会话做了什么
+
+- 复用本机已启动的 `Pixel_10_Pro_XL(AVD) - 17`（`emulator-5554`），未启动或接触真实设备。
+- 实际运行 `:app:connectedDebugAndroidTest`，新增的 `DatabaseConfigLoadTest` 2 个用例全部通过；全套 Android Instrumented 共 7/7 通过，失败 0、错误 0、跳过 0。
+
+### 2. 当前状态
+
+- 代码无需修复；上次提交 `71c699b` 在模拟器上验收通过。
+- `AUTO_VERIFIED`：模拟器测试结果已落盘于 `app/build/outputs/androidTest-results/connected/debug/`；未做 HIL，未使用真实设备。
+
+### 3. 下一步
+
+- 保持本分支提交历史清晰；等待主会话按集成计划合入。未 push、未 tag。
+
+---
+
+---
+
 ## 2026-07-30　P0-C 配置加载完成事件修复
 
 ### 1. 本次会话做了什么
