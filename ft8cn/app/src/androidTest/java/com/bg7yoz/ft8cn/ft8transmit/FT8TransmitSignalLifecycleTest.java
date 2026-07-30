@@ -7,7 +7,10 @@ import static org.junit.Assert.assertTrue;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
+import com.bg7yoz.ft8cn.Ft8Message;
 import com.bg7yoz.ft8cn.GeneralVariables;
+
+import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -15,12 +18,23 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @RunWith(AndroidJUnit4.class)
 public class FT8TransmitSignalLifecycleTest {
+    @After
+    public void resetRadioMode() throws Throwable {
+        onMain(() -> {
+            GeneralVariables.connectMode = com.bg7yoz.ft8cn.connector.ConnectMode.USB_CABLE;
+            GeneralVariables.controlMode = com.bg7yoz.ft8cn.database.ControlMode.RTS;
+            GeneralVariables.pttDelay = 100;
+        });
+    }
+
     @Test
     public void stopDoesNotShutdownSharedExecutorAndRecreatedComponentCanSubmit() throws Throwable {
         RecordingExecutor executor = new RecordingExecutor();
@@ -79,6 +93,101 @@ public class FT8TransmitSignalLifecycleTest {
         }
     }
 
+    @Test
+    public void stopTerminatesActiveNetworkTaskExactlyOnceAndFencesLateCallback() throws Throwable {
+        RecordingExecutor executor = new RecordingExecutor();
+        RecordingCallbacks callbacks = new RecordingCallbacks();
+        final FT8TransmitSignal[] signal = new FT8TransmitSignal[1];
+        Thread worker = null;
+        try {
+            onMain(() -> {
+                GeneralVariables.connectMode = com.bg7yoz.ft8cn.connector.ConnectMode.NETWORK;
+                GeneralVariables.pttDelay = 0;
+                signal[0] = newSignal(executor, callbacks);
+                signal[0].setActivated(true);
+                signal[0].doTransmit();
+            });
+            worker = executor.startNext();
+            assertTrue(callbacks.networkStarted.await(2, TimeUnit.SECONDS));
+
+            onMain(() -> signal[0].stop());
+            worker.join(2000);
+
+            assertEquals(1, callbacks.beforeCount.get());
+            assertEquals(1, callbacks.afterCount.get());
+            assertFalse(signal[0].isTransmitting());
+            onMain(() -> assertEquals(Boolean.FALSE, signal[0].mutableIsTransmitting.getValue()));
+            assertFalse("late network completion must not call PTT OFF again", worker.isAlive());
+            assertEquals(1, callbacks.afterCount.get());
+        } finally {
+            if (worker != null) {
+                worker.join(2000);
+            }
+            onMain(() -> {
+                if (signal[0] != null) {
+                    signal[0].close();
+                }
+            });
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void stopTerminatesActiveCatTaskExactlyOnce() throws Throwable {
+        RecordingExecutor executor = new RecordingExecutor();
+        RecordingCallbacks callbacks = new RecordingCallbacks();
+        final FT8TransmitSignal[] signal = new FT8TransmitSignal[1];
+        Thread worker = null;
+        try {
+            onMain(() -> {
+                GeneralVariables.connectMode = com.bg7yoz.ft8cn.connector.ConnectMode.USB_CABLE;
+                GeneralVariables.controlMode = com.bg7yoz.ft8cn.database.ControlMode.CAT;
+                GeneralVariables.pttDelay = 0;
+                signal[0] = newSignal(executor, callbacks);
+                signal[0].setActivated(true);
+                signal[0].doTransmit();
+            });
+            worker = executor.startNext();
+            assertTrue(callbacks.catStarted.await(2, TimeUnit.SECONDS));
+
+            onMain(() -> signal[0].stop());
+            worker.join(2000);
+
+            assertEquals(1, callbacks.beforeCount.get());
+            assertEquals(1, callbacks.afterCount.get());
+            assertFalse(signal[0].isTransmitting());
+            assertFalse(worker.isAlive());
+        } finally {
+            if (worker != null) {
+                worker.join(2000);
+            }
+            onMain(() -> {
+                if (signal[0] != null) {
+                    signal[0].close();
+                }
+            });
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void oneHundredCreateStopCyclesLeaveNoObserversOrShutdownExecutor() throws Throwable {
+        RecordingExecutor executor = new RecordingExecutor();
+        try {
+            onMain(() -> {
+                for (int i = 0; i < 100; i++) {
+                    FT8TransmitSignal signal = newSignal(executor);
+                    signal.stop();
+                    signal.close();
+                }
+                assertFalse(GeneralVariables.mutableVolumePercent.hasObservers());
+                assertFalse(executor.isShutdown());
+            });
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     private static void onMain(Runnable action) throws Throwable {
         AtomicReference<Throwable> failure = new AtomicReference<>();
         InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
@@ -97,9 +206,46 @@ public class FT8TransmitSignalLifecycleTest {
         return new FT8TransmitSignal(null, null, null, executor);
     }
 
+    private static FT8TransmitSignal newSignal(ExecutorService executor, OnDoTransmitted callbacks) {
+        return new FT8TransmitSignal(null, callbacks, null, executor);
+    }
+
+    private static class RecordingCallbacks implements OnDoTransmitted {
+        private final AtomicInteger beforeCount = new AtomicInteger();
+        private final AtomicInteger afterCount = new AtomicInteger();
+        private final CountDownLatch networkStarted = new CountDownLatch(1);
+        private final CountDownLatch catStarted = new CountDownLatch(1);
+
+        @Override
+        public void onBeforeTransmit(Ft8Message message, int functionOder) {
+            beforeCount.incrementAndGet();
+        }
+
+        @Override
+        public void onAfterTransmit(Ft8Message message, int functionOder) {
+            afterCount.incrementAndGet();
+        }
+
+        @Override
+        public void onTransmitByWifi(Ft8Message message) {
+            networkStarted.countDown();
+        }
+
+        @Override
+        public boolean supportTransmitOverCAT() {
+            return true;
+        }
+
+        @Override
+        public void onTransmitOverCAT(Ft8Message message) {
+            catStarted.countDown();
+        }
+    }
+
     private static class RecordingExecutor extends AbstractExecutorService {
         private final List<Runnable> submitted = Collections.synchronizedList(new ArrayList<>());
         private volatile boolean shutdown;
+        private int nextRunnable;
 
         @Override
         public void execute(Runnable command) {
@@ -137,6 +283,16 @@ public class FT8TransmitSignalLifecycleTest {
 
         int submittedCount() {
             return submitted.size();
+        }
+
+        Thread startNext() {
+            Runnable command;
+            synchronized (submitted) {
+                command = submitted.get(nextRunnable++);
+            }
+            Thread worker = new Thread(command);
+            worker.start();
+            return worker;
         }
     }
 }

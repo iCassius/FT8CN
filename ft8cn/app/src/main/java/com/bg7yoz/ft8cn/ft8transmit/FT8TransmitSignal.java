@@ -51,7 +51,7 @@ public class FT8TransmitSignal {
     public MutableLiveData<Boolean> mutableIsActivated = new MutableLiveData<>();
     public int sequential;//发射的时序
     public MutableLiveData<Integer> mutableSequential = new MutableLiveData<>();
-    private boolean isTransmitting = false;
+    private volatile boolean isTransmitting = false;
     public MutableLiveData<Boolean> mutableIsTransmitting = new MutableLiveData<>();//是否处于发射状态
     public MutableLiveData<String> mutableTransmittingMessage = new MutableLiveData<>();//当前消息的内容
 
@@ -75,7 +75,7 @@ public class FT8TransmitSignal {
     //防止播放中止，变量不能放在方法中
     private AudioAttributes attributes = null;
     private AudioFormat myFormat = null;
-    private AudioTrack audioTrack = null;
+    private volatile AudioTrack audioTrack = null;
 
     public UtcTimer utcTimer;
 
@@ -96,6 +96,8 @@ public class FT8TransmitSignal {
             }
         }
     };
+    private final Set<TransmissionContext> activeTransmissions = ConcurrentHashMap.newKeySet();
+    private volatile long lifecycleGeneration;
     private volatile boolean stopped;
 
     static {
@@ -200,11 +202,12 @@ public class FT8TransmitSignal {
             return;
         }
         Log.d(TAG, "doTransmit: 开始发射...");
-        DoTransmitTask task = new DoTransmitTask();
+        DoTransmitTask task;
         synchronized (lifecycleLock) {
             if (stopped) {
                 return;
             }
+            task = new DoTransmitTask(lifecycleGeneration);
             doTransmitTasks.add(task);
         }
         try {
@@ -321,30 +324,34 @@ public class FT8TransmitSignal {
      * 生成指令序列
      */
     public void stop() {
+        ArrayList<TransmissionContext> transmissions;
         synchronized (lifecycleLock) {
             if (stopped) {
                 return;
             }
             stopped = true;
+            activated = false;
+            lifecycleGeneration++;
             for (DoTransmitTask task : doTransmitTasks) {
                 task.cancel(true);
             }
             doTransmitTasks.clear();
+            transmissions = new ArrayList<>(activeTransmissions);
         }
+        for (TransmissionContext transmission : transmissions) {
+            terminateTransmission(transmission);
+        }
+        mutableIsActivated.postValue(false);
         if (utcTimer != null) {
             try {
                 utcTimer.stop();
                 utcTimer.delete();
             } catch (Exception ignored) {}
         }
-        if (audioTrack != null) {
-            try {
-                audioTrack.stop();
-            } catch (Exception ignored) {}
-            try {
-                audioTrack.release();
-            } catch (Exception ignored) {}
-            audioTrack = null;
+        if (transmissions.isEmpty()) {
+            terminateAudioTrack();
+            isTransmitting = false;
+            mutableIsTransmitting.postValue(false);
         }
         GeneralVariables.mutableVolumePercent.removeObserver(volumeObserver);
     }
@@ -388,7 +395,10 @@ public class FT8TransmitSignal {
         return temp;
     }
 
-    private void playFT8Signal(Ft8Message msg) {
+    private void playFT8Signal(Ft8Message msg, TransmissionContext transmission) {
+        if (!isCurrentTransmission(transmission)) {
+            return;
+        }
 
         if (GeneralVariables.connectMode == ConnectMode.NETWORK) {//网络方式就不播放音频了
             Log.d(TAG, "playFT8Signal: 进入网络发射程序，等待音频发送。");
@@ -397,25 +407,29 @@ public class FT8TransmitSignal {
             if (onDoTransmitted != null) {//处理音频数据，可以给ICOM的网络模式发送
                 onDoTransmitted.onTransmitByWifi(msg);
             }
+            if (!isCurrentTransmission(transmission)) {
+                return;
+            }
 
 
             long now = System.currentTimeMillis();
-            while (isTransmitting) {//等待音频数据包发送完毕再退出，以触发afterTransmitting
+            while (isCurrentTransmission(transmission)) {//等待音频数据包发送完毕再退出，以触发afterTransmitting
                 try {
                     Thread.sleep(10);
                     long current = System.currentTimeMillis() - now;
                     if (current > 13100) {//实际发射的时长
-                        isTransmitting = false;
                         break;
                     }
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    isTransmitting = false;
-                    break;
+                    return;
                 }
             }
+            if (!isCurrentTransmission(transmission)) {
+                return;
+            }
             Log.d(TAG, "playFT8Signal: 退出网络音频发送。");
-            afterPlayAudio();
+            afterPlayAudio(transmission);
             return;
         }
 
@@ -427,24 +441,28 @@ public class FT8TransmitSignal {
             if (onDoTransmitted != null) {//处理音频数据，可以给truSDX的CAT模式发送
                 if (onDoTransmitted.supportTransmitOverCAT()) {
                     onDoTransmitted.onTransmitOverCAT(msg);
+                    if (!isCurrentTransmission(transmission)) {
+                        return;
+                    }
 
                     long now = System.currentTimeMillis();
-                    while (isTransmitting) {//等待音频数据包发送完毕再退出，以触发afterTransmitting
+                    while (isCurrentTransmission(transmission)) {//等待音频数据包发送完毕再退出，以触发afterTransmitting
                         try {
                             Thread.sleep(10);
                             long current = System.currentTimeMillis() - now;
                             if (current > 13000) {//实际发射的时长
-                                isTransmitting = false;
                                 break;
                             }
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
-                            isTransmitting = false;
-                            break;
+                            return;
                         }
                     }
+                    if (!isCurrentTransmission(transmission)) {
+                        return;
+                    }
                     Log.d(TAG, "playFT8Signal: transmitting over CAT is finished.");
-                    afterPlayAudio();
+                    afterPlayAudio(transmission);
                     return;
                 }
             }
@@ -456,13 +474,21 @@ public class FT8TransmitSignal {
         buffer = GenerateFT8.generateFt8(msg, GeneralVariables.getBaseFrequency()
                 , GeneralVariables.audioSampleRate);
         if (buffer == null) {
-            afterPlayAudio();
+            afterPlayAudio(transmission);
+            return;
+        }
+        if (!isCurrentTransmission(transmission)) {
             return;
         }
 
         Log.d(TAG, String.format("playFT8Signal: 准备声卡播放....位数：%s,采样率：%d"
                 , GeneralVariables.audioOutput32Bit ? "Float32" : "Int16"
                 , GeneralVariables.audioSampleRate));
+        synchronized (lifecycleLock) {
+            if (stopped || lifecycleGeneration != transmission.generation
+                    || transmission.terminated || !activeTransmissions.contains(transmission)) {
+                return;
+            }
         attributes = new AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_MEDIA)
                 .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
@@ -502,14 +528,14 @@ public class FT8TransmitSignal {
                 || writeResult == AudioTrack.ERROR) {
             //出异常情况
             Log.e(TAG, String.format("播放出错：%d", writeResult));
-            afterPlayAudio();
+            afterPlayAudio(transmission);
             return;
         }
         audioTrack.setNotificationMarkerPosition(buffer.length);
         audioTrack.setPlaybackPositionUpdateListener(new AudioTrack.OnPlaybackPositionUpdateListener() {
             @Override
             public void onMarkerReached(AudioTrack audioTrack) {
-                afterPlayAudio();
+                afterPlayAudio(transmission);
             }
 
             @Override
@@ -523,21 +549,148 @@ public class FT8TransmitSignal {
                 , msg.getMessageText()));
             audioTrack.setVolume(GeneralVariables.volumePercent);//设置播放的音量
         }
+        }
+    }
+
+    private TransmissionContext beginTransmission(long generation, Ft8Message msg) {
+        TransmissionContext transmission = new TransmissionContext(generation);
+        RuntimeException callbackFailure = null;
+        boolean mustTerminate;
+        synchronized (lifecycleLock) {
+            if (stopped || lifecycleGeneration != generation || !activeTransmissions.isEmpty()) {
+                return null;
+            }
+            activeTransmissions.add(transmission);
+            transmission.beforeInProgress = true;
+            try {
+                if (onDoTransmitted != null) {
+                    onDoTransmitted.onBeforeTransmit(msg, functionOrder);
+                    transmission.beforeCalled = true;
+                }
+            } catch (RuntimeException e) {
+                callbackFailure = e;
+                transmission.beforeCalled = onDoTransmitted != null;
+            } finally {
+                transmission.beforeInProgress = false;
+            }
+            mustTerminate = callbackFailure != null
+                    || stopped || lifecycleGeneration != generation
+                    || transmission.terminationRequested;
+            if (!mustTerminate) {
+                isTransmitting = true;
+                mutableIsTransmitting.postValue(true);
+            }
+        }
+        if (mustTerminate) {
+            terminateTransmission(transmission);
+            if (callbackFailure != null) {
+                throw callbackFailure;
+            }
+            return null;
+        }
+        return transmission;
+    }
+
+    private boolean isCurrentTransmission(TransmissionContext transmission) {
+        synchronized (lifecycleLock) {
+            return transmission != null
+                    && !stopped
+                    && lifecycleGeneration == transmission.generation
+                    && !transmission.terminated
+                    && activeTransmissions.contains(transmission);
+        }
+    }
+
+    private void afterPlayAudio(TransmissionContext transmission) {
+        if (!isCurrentTransmission(transmission)) {
+            return;
+        }
+        terminateTransmission(transmission);
+    }
+
+    private void terminateActiveTransmissions() {
+        ArrayList<TransmissionContext> transmissions;
+        synchronized (lifecycleLock) {
+            transmissions = new ArrayList<>(activeTransmissions);
+        }
+        for (TransmissionContext transmission : transmissions) {
+            terminateTransmission(transmission);
+        }
+        if (transmissions.isEmpty()) {
+            terminateAudioTrack();
+            isTransmitting = false;
+            mutableIsTransmitting.postValue(false);
+        }
     }
 
     /**
-     * 播放完声音后的处理动作。包括回调onAfterTransmit,用于关闭PTT
+     * 组件自身唯一的发射终止路径：PTT OFF/SCO 恢复、状态复位和音频资源释放均在此完成。
      */
-    private void afterPlayAudio() {
-        if (onDoTransmitted != null) {
-            onDoTransmitted.onAfterTransmit(getFunctionCommand(functionOrder), functionOrder);
+    private void terminateTransmission(TransmissionContext transmission) {
+        Ft8Message message = null;
+        AudioTrack track = null;
+        boolean notifyAfter;
+        synchronized (lifecycleLock) {
+            if (transmission.terminated) {
+                return;
+            }
+            if (transmission.beforeInProgress) {
+                transmission.terminationRequested = true;
+                return;
+            }
+            transmission.terminated = true;
+            activeTransmissions.remove(transmission);
+            notifyAfter = transmission.beforeCalled && onDoTransmitted != null;
+            if (activeTransmissions.isEmpty()) {
+                isTransmitting = false;
+                track = audioTrack;
+                audioTrack = null;
+            }
+            if (notifyAfter) {
+                message = getTransmitOffMessage();
+            }
         }
-        isTransmitting = false;
-        mutableIsTransmitting.postValue(false);
-        if (audioTrack != null) {
-            audioTrack.release();
+        releaseAudioTrack(track);
+        if (notifyAfter) {
+            try {
+                onDoTransmitted.onAfterTransmit(message, functionOrder);
+            } catch (RuntimeException e) {
+                Log.e(TAG, "onAfterTransmit failed while terminating", e);
+            }
+        }
+        if (activeTransmissions.isEmpty()) {
+            mutableIsTransmitting.postValue(false);
+        }
+    }
+
+    private Ft8Message getTransmitOffMessage() {
+        try {
+            return getFunctionCommand(functionOrder);
+        } catch (RuntimeException e) {
+            return new Ft8Message("CQ", GeneralVariables.myCallsign
+                    , GeneralVariables.getMyMaidenhead4Grid());
+        }
+    }
+
+    private void terminateAudioTrack() {
+        AudioTrack track;
+        synchronized (lifecycleLock) {
+            track = audioTrack;
             audioTrack = null;
         }
+        releaseAudioTrack(track);
+    }
+
+    private void releaseAudioTrack(AudioTrack track) {
+        if (track == null) {
+            return;
+        }
+        try {
+            track.stop();
+        } catch (Exception ignored) {}
+        try {
+            track.release();
+        } catch (Exception ignored) {}
     }
 
     //当通联成功时的动作
@@ -1036,27 +1189,8 @@ public class FT8TransmitSignal {
         }
 
         if (!transmitting) {//停止发射
-            boolean hadActiveTransmission = isTransmitting || audioTrack != null;
-            if (audioTrack != null) {
-                try {
-                    if (audioTrack.getState() != AudioTrack.STATE_UNINITIALIZED) {
-                        audioTrack.pause();
-                    }
-                } catch (Exception e) {
-                    Log.d(TAG, "setTransmitting pause: " + e.getMessage());
-                }
-            }
-            if (hadActiveTransmission && onDoTransmitted != null) {//通知一下，已经不发射了
-                onDoTransmitted.onAfterTransmit(getFunctionCommand(functionOrder), functionOrder);
-            }
-            if (audioTrack != null) {
-                try {
-                    audioTrack.release();
-                } catch (Exception e) {
-                    Log.d(TAG, "setTransmitting release: " + e.getMessage());
-                }
-                audioTrack = null;
-            }
+            terminateActiveTransmissions();
+            return;
         }
 
         mutableIsTransmitting.postValue(transmitting);
@@ -1131,11 +1265,23 @@ public class FT8TransmitSignal {
         }
     }
 
+    private final class TransmissionContext {
+        final long generation;
+        boolean beforeInProgress;
+        boolean beforeCalled;
+        boolean terminationRequested;
+        boolean terminated;
+
+        TransmissionContext(long generation) {
+            this.generation = generation;
+        }
+    }
+
     private class DoTransmitTask extends FutureTask<Void> {
-        DoTransmitTask() {
+        DoTransmitTask(long generation) {
             super(() -> {
-                if (!stopped) {
-                    doTransmitRunnable.run();
+                if (!stopped && lifecycleGeneration == generation) {
+                    doTransmitRunnable.run(generation);
                 }
             }, null);
         }
@@ -1146,7 +1292,7 @@ public class FT8TransmitSignal {
         }
     }
 
-    private static class DoTransmitRunnable implements Runnable {
+    private class DoTransmitRunnable {
         FT8TransmitSignal transmitSignal;
 
         public DoTransmitRunnable(FT8TransmitSignal transmitSignal) {
@@ -1154,8 +1300,7 @@ public class FT8TransmitSignal {
         }
 
         @SuppressLint("DefaultLocale")
-        @Override
-        public void run() {
+        public void run(long generation) {
             if (transmitSignal.stopped) {
                 return;
             }
@@ -1178,16 +1323,10 @@ public class FT8TransmitSignal {
             }
             msg.modifier = GeneralVariables.toModifier;
 
-            if (transmitSignal.stopped) {
+            TransmissionContext transmission = transmitSignal.beginTransmission(generation, msg);
+            if (transmission == null) {
                 return;
             }
-            if (transmitSignal.onDoTransmitted != null) {
-                //此处用于处理PTT等事件
-                transmitSignal.onDoTransmitted.onBeforeTransmit(msg, transmitSignal.functionOrder);
-            }
-
-            transmitSignal.isTransmitting = true;
-            transmitSignal.mutableIsTransmitting.postValue(true);
 
 
             transmitSignal.mutableTransmittingMessage.postValue(String.format(" (%.0fHz) %s"
@@ -1206,7 +1345,7 @@ public class FT8TransmitSignal {
                 Thread.currentThread().interrupt();
                 return;
             }
-            if (transmitSignal.stopped) {
+            if (!transmitSignal.isCurrentTransmission(transmission)) {
                 return;
             }
 
@@ -1215,7 +1354,7 @@ public class FT8TransmitSignal {
 //            }
             //播放音频
             //transmitSignal.playFT8Signal(buffer);
-            transmitSignal.playFT8Signal(msg);
+            transmitSignal.playFT8Signal(msg, transmission);
         }
     }
 }

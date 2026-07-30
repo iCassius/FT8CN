@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-07-30　P0-A 独立审查修复：活跃发射安全终止与迟到回调隔离
+
+### 1. 本次会话做了什么
+
+- 在原提交基础上补充 `TransmissionContext` 和生命周期 generation fence。
+- `stop()/close()` 现在通过组件自身唯一终止路径完成 PTT OFF/SCO 恢复回调、`isTransmitting=false`、LiveData 状态复位和音频释放；终止操作幂等，`onAfterTransmit` 每次活跃发射最多一次。
+- CAT/网络等待循环在 interrupt 或旧 generation 下直接退出，不再调用迟到的 `afterPlayAudio`；声卡创建/写入/播放增加停止边界保护。
+- 回归测试补足活跃网络/CAT 任务中断、PTT OFF 单次回调、状态复位、迟到回调隔离和 100 次创建销毁循环。
+
+### 2. 当前状态
+
+- 分支：`fix/p0-a-transmit-lifecycle`，基于上一提交追加新 commit，未 amend。
+- `AUTO_VERIFIED`：目标生命周期测试 5/5、全套 instrumented 10/10（含既有 5 个 callsign 测试）、`assembleDebug`；运行于 Pixel_10_Pro_XL AVD / Android 17。
+- 未做 HIL：未连接实体电台，未真实发射，未验证实体 CAT/PTT、蓝牙 SCO 硬件和完整 QSO。
+
+### 3. 下一步
+
+- 主会话集成时保留 generation fence 和唯一终止路径；不要以 `MainViewModel.onCleared` 的 `baseRig.setPTT(false)` 替代组件自身清理。
+
+---
+
 ## 2026-07-30　P0-A：发射组件共享执行器与 Observer 生命周期修复
 
 ### 1. 本次会话做了什么
