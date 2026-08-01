@@ -8,7 +8,7 @@
 
 ### 做了什么
 
-- 已在独立集成分支合入 P0-C 配置加载完成状态修复；P0-A、P0-B 与 P0-E 将在同一集成分支继续受控合入。
+- 已在独立集成分支受控合入 P0-C 配置加载完成状态、P0-A 发射 PTT/SCO 生命周期、P0-B 网络/音频快照与 EOF 隔离、P0-E 版本和发布门禁。
 - 交接日志以 `release` 文档为基线，不合并各子会话的过程日志；最终只保留这一条统一集成记录。
 
 ### 关键决策
@@ -17,11 +17,12 @@
 
 ### 当前状态
 
-- 集成进行中；尚未完成全量 JVM、构建、Android 测试编译及发布门禁，也未进行真实设备/HIL 验证。
+- `:app:testDebugUnitTest`、`:app:assembleDebug`、`:app:compileDebugAndroidTestJavaWithJavac` 以及 Release gate 直接脚本、模块 unittest、contract 和 `--history` 扫描均已通过。
+- 完整 `connectedDebugAndroidTest` 留给独立验收会话执行；未进行真实设备/HIL 验证，未生成正式 Release、tag 或 GitHub Release。
 
 ### 下一步
 
-- 完成余下 P0 分支合入、统一版本与发布说明、自动化门禁和独立验收；仅在全部通过后生成集成测试 APK。
+- 在独立会话运行完整 `connectedDebugAndroidTest`，通过后生成和验签集成 TEST/BETA APK；正式签名发布仍需提供长期 keystore、可信证书 SHA-256 和发布批准。
 
 ---
 
