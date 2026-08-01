@@ -61,6 +61,7 @@ import com.bg7yoz.ft8cn.ft8listener.OnFt8Listen;
 import com.bg7yoz.ft8cn.ft8transmit.FT8TransmitSignal;
 import com.bg7yoz.ft8cn.ft8transmit.OnDoTransmitted;
 import com.bg7yoz.ft8cn.ft8transmit.OnTransmitSuccess;
+import com.bg7yoz.ft8cn.ft8transmit.TransmitPttCoordinator;
 import com.bg7yoz.ft8cn.html.LogHttpServer;
 import com.bg7yoz.ft8cn.icom.WifiRig;
 import com.bg7yoz.ft8cn.log.QSLCallsignRecord;
@@ -167,11 +168,21 @@ public class MainViewModel extends ViewModel {
     private ArrayList<CableSerialPort.SerialPort> serialPorts;//串口列表
     private CableSerialPort.SerialPort lastCableSerialPort = null;
     public BaseRig baseRig;//电台
+    private final TransmitPttCoordinator transmitPttCoordinator = new TransmitPttCoordinator();
     private void stopTransmitForRigDisconnect() {
         if (ft8TransmitSignal != null) {
             ft8TransmitSignal.stopCurrentTransmission();
         }
     }
+
+    private TransmitPttCoordinator.PttTarget currentPttTarget() {
+        BaseRig rig = baseRig;
+        if (rig == null) {
+            return null;
+        }
+        return rig::setPTT;
+    }
+
     private final OnRigStateChanged onRigStateChanged = new OnRigStateChanged() {
         @Override
         public void onDisconnected() {
@@ -260,15 +271,22 @@ public class MainViewModel extends ViewModel {
         if (ft8SignalListener != null) {
             ft8SignalListener.stopListen();
         }
-        if (ft8TransmitSignal != null) {
-            ft8TransmitSignal.stop();
+        try {
+            if (ft8TransmitSignal != null) {
+                ft8TransmitSignal.stop();
+            }
+        } finally {
+            try {
+                transmitPttCoordinator.safeOff(this::startSco);
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Failed to restore transmit PTT/SCO state", e);
+            }
         }
         if (httpServer != null) {
             httpServer.stop();
         }
 
         if (baseRig != null) {
-            baseRig.setPTT(false);
             baseRig.disconnect();
         }
     }
@@ -440,11 +458,8 @@ public class MainViewModel extends ViewModel {
                 if (GeneralVariables.controlMode == ControlMode.CAT
                         || GeneralVariables.controlMode == ControlMode.RTS
                         || GeneralVariables.controlMode == ControlMode.DTR) {
-                    if (baseRig != null) {
-                        //if (GeneralVariables.connectMode != ConnectMode.NETWORK) stopSco();
-                        if (needControlSco()) stopSco();
-                        baseRig.setPTT(true);
-                    }
+                    transmitPttCoordinator.beforeTransmit(currentPttTarget(), needControlSco(),
+                            MainViewModel.this::stopSco);
                 }
                 if (ft8TransmitSignal.isActivated()) {
                     GeneralVariables.transmitMessages.add(message);
@@ -455,15 +470,9 @@ public class MainViewModel extends ViewModel {
 
             @Override
             public void onAfterTransmit(Ft8Message message, int functionOder) {
-                if (GeneralVariables.controlMode == ControlMode.CAT
-                        || GeneralVariables.controlMode == ControlMode.RTS
-                        || GeneralVariables.controlMode == ControlMode.DTR) {
-                    if (baseRig != null) {
-                        baseRig.setPTT(false);
-                        //if (GeneralVariables.connectMode != ConnectMode.NETWORK) startSco();
-                        if (needControlSco()) startSco();
-                    }
-                }
+                // The control mode can change while a transmit is active.  The
+                // coordinator owns the active target, and idle completion is a no-op.
+                transmitPttCoordinator.afterTransmit(MainViewModel.this::startSco);
             }
 
             @Override
