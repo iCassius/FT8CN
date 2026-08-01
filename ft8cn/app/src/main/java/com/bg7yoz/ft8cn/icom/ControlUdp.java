@@ -176,8 +176,8 @@ public class ControlUdp extends IcomUdpBase {
      *
      * @param data 指令
      */
-    public void sendCivData(byte[] data) {
-        civUdp.sendCivData(data);
+    public SubmissionResult sendCivData(byte[] data) {
+        return civUdp == null ? SubmissionResult.SESSION_INACTIVE : civUdp.sendCivData(data);
     }
 
     /**

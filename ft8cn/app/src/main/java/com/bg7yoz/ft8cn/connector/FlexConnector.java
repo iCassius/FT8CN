@@ -249,18 +249,29 @@ public class FlexConnector extends BaseRigConnector {
 
     @Override
     public void sendData(byte[] data) {
-        flexRadio.sendData(data);
+        submitData(data);
     }
 
+    @Override
+    public SubmissionResult submitData(byte[] data) {
+        SubmissionResult result = flexRadio.submitData(data);
+        reportOperationSubmission("Flex data", result);
+        return result;
+    }
 
     @Override
     public void setPttOn(boolean on) {
+        submitPttOn(on);
+    }
+
+    @Override
+    public SubmissionResult submitPttOn(boolean on) {
         SubmissionResult result = flexRadio.commandPTTOnOff(on);
         if (result.isEnqueued()) {
             flexRadio.isPttOn = on;
-        } else {
-            getOnConnectorStateChanged().onRunError("Flex PTT was not queued: " + result);
         }
+        reportOperationSubmission("Flex PTT", result);
+        return result;
     }
 
     @Override

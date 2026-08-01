@@ -22,6 +22,11 @@ public class XieGuControlUdp extends ControlUdp {
 
 
     public XieGuControlUdp(String userName, String password, String remoteIp, int remotePort) {
+        this(userName, password, remoteIp, remotePort, true);
+    }
+
+    XieGuControlUdp(String userName, String password, String remoteIp, int remotePort,
+                    boolean openDataStreams) {
         super(userName,password,remoteIp,remotePort);
 
 
@@ -30,8 +35,10 @@ public class XieGuControlUdp extends ControlUdp {
 
         civUdp.rigIp = remoteIp;
         audioUdp.rigIp = remoteIp;
-        civUdp.openStream();
-        audioUdp.openStream();
+        if (openDataStreams) {
+            civUdp.openStream();
+            audioUdp.openStream();
+        }
     }
 
     /**
@@ -47,7 +54,7 @@ public class XieGuControlUdp extends ControlUdp {
         rigName = IComPacketTypes.ConnInfoPacket.getRigName(data);
 
         if (!rigIsBusy) {//说明是第一次收到0x90数据包，要回复一个x090数据包
-            sendTrackedPacket(
+            if (sendTrackedPacket(
                     IComPacketTypes.ConnInfoPacket.connInfoPacketData(data, (short) 0
                             , localId, remoteId
                             , (byte) 0x01, (byte) 0x03, innerSeq, localToken, rigToken
@@ -56,8 +63,9 @@ public class XieGuControlUdp extends ControlUdp {
                             , IComPacketTypes.AUDIO_SAMPLE_RATE//12000采样率
                             //, IComPacketTypes.XIEGU_AUDIO_SAMPLE_RATE//48000采样率
                             , civUdp.localPort, audioUdp.localPort
-                            , IComPacketTypes.XIEGU_TX_BUFFER_SIZE));
-            innerSeq++;
+                            , IComPacketTypes.XIEGU_TX_BUFFER_SIZE)).isEnqueued()) {
+                innerSeq++;
+            }
         }
     }
 

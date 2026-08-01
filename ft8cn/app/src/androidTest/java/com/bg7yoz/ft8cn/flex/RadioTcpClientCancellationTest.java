@@ -82,8 +82,12 @@ public class RadioTcpClientCancellationTest {
             assertEquals(flexSequence, flex.getCommandSequence());
             FlexConnector flexConnector = new FlexConnector(
                     ApplicationProvider.getApplicationContext(), flex, 0);
+            flexConnector.getOnConnectorStateChanged().onConnected();
             flexConnector.setPttOn(true);
             assertFalse("PTT state must not advance after a rejected command", flex.isPttOn);
+            assertTrue("a local queue rejection must not be reported as a disconnected session",
+                    flexConnector.isConnected());
+            assertEquals(SubmissionResult.REJECTED, flexConnector.getLastOperationSubmission());
 
             BoundedSerialExecutor udpQueue = new BoundedSerialExecutor(1);
             RadioUdpClient udp = new RadioUdpClient(0, udpQueue);

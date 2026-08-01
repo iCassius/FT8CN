@@ -200,18 +200,30 @@ public class X6100Connector extends BaseRigConnector {
 
     @Override
     public void sendData(byte[] data) {
-        xieguRadio.sendData(data);
+        submitData(data);
+    }
+
+    @Override
+    public SubmissionResult submitData(byte[] data) {
+        SubmissionResult result = xieguRadio.submitData(data);
+        reportOperationSubmission("XieGu data", result);
+        return result;
     }
 
 
     @Override
     public void setPttOn(boolean on) {
+        submitPttOn(on);
+    }
+
+    @Override
+    public SubmissionResult submitPttOn(boolean on) {
         SubmissionResult result = xieguRadio.commandPTTOnOff(on);
         if (result.isEnqueued()) {
             xieguRadio.isPttOn = on;
-        } else {
-            getOnConnectorStateChanged().onRunError("XieGu PTT was not queued: " + result);
         }
+        reportOperationSubmission("XieGu PTT", result);
+        return result;
     }
 
     @Override

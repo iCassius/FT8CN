@@ -11,6 +11,7 @@ package com.bg7yoz.ft8cn.connector;
 import android.util.Log;
 
 import com.bg7yoz.ft8cn.icom.WifiRig;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 
 public class WifiConnector extends BaseRigConnector{
     private static final String TAG = "WifiConnector";
@@ -51,19 +52,32 @@ public class WifiConnector extends BaseRigConnector{
 
     @Override
     public void sendData(byte[] data) {
-        wifiRig.sendCivData(data);
+        submitData(data);
+    }
+
+    @Override
+    public SubmissionResult submitData(byte[] data) {
+        SubmissionResult result = wifiRig == null ? SubmissionResult.SESSION_INACTIVE : wifiRig.sendCivData(data);
+        reportOperationSubmission("WiFi CI-V data", result);
+        return result;
     }
 
     @Override
     public void setPttOn(byte[] command) {
-        wifiRig.sendCivData(command);
+        submitData(command);
     }
 
     @Override
     public void setPttOn(boolean on) {
-        if (wifiRig.opened){
-            wifiRig.setPttOn(on);
-        }
+        submitPttOn(on);
+    }
+
+    @Override
+    public SubmissionResult submitPttOn(boolean on) {
+        SubmissionResult result = wifiRig != null && wifiRig.opened
+                ? wifiRig.setPttOn(on) : SubmissionResult.SESSION_INACTIVE;
+        reportOperationSubmission("WiFi PTT", result);
+        return result;
     }
     public OnWifiDataReceived getOnWifiDataReceived() {
         return onWifiDataReceived;

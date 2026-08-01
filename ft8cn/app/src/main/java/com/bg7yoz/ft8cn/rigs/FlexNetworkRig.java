@@ -9,6 +9,7 @@ import com.bg7yoz.ft8cn.connector.FlexConnector;
 import com.bg7yoz.ft8cn.flex.FlexCommand;
 import com.bg7yoz.ft8cn.flex.FlexRadio;
 import com.bg7yoz.ft8cn.ft8transmit.GenerateFT8;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 
 public class FlexNetworkRig extends BaseRig {
     private static final String TAG = "FlexNetworkRig";
@@ -20,12 +21,16 @@ public class FlexNetworkRig extends BaseRig {
     //private byte[] dataBuffer=new byte[0];//数据缓冲区
     @SuppressLint("DefaultLocale")
     public void sendCommand(FlexCommand command, String cmdContent) {
-        if (getConnector().isConnected()) {
-            commandSeq++;
-            flexCommand = command;
-            commandStr = String.format("C%d%03d|%s\n", commandSeq, command.ordinal()
+        if (getConnector() != null && getConnector().isConnected()) {
+            int nextCommandSeq = commandSeq + 1;
+            String nextCommandStr = String.format("C%d%03d|%s\n", nextCommandSeq, command.ordinal()
                     , cmdContent);
-            getConnector().sendData(commandStr.getBytes());
+            SubmissionResult result = getConnector().submitData(nextCommandStr.getBytes());
+            if (result.isEnqueued()) {
+                commandSeq = nextCommandSeq;
+                flexCommand = command;
+                commandStr = nextCommandStr;
+            }
         }
     }
 
@@ -42,8 +47,9 @@ public class FlexNetworkRig extends BaseRig {
 
     @Override
     public void setPTT(boolean on) {
-        getConnector().setPttOn(on);
-
+        if (getConnector() != null && getConnector().submitPttOn(on).isEnqueued()) {
+            super.setPTT(on);
+        }
     }
 
     @Override
@@ -109,5 +115,13 @@ public class FlexNetworkRig extends BaseRig {
 
     public FlexNetworkRig() {
         Log.d(TAG, "FlexRadio: Create.");
+    }
+
+    int getCommandSequence() {
+        return commandSeq;
+    }
+
+    FlexCommand getLastCommand() {
+        return flexCommand;
     }
 }

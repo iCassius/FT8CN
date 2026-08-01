@@ -24,7 +24,9 @@ public class X6100CommandSubmissionTest {
 
         X6100Connector connector = new X6100Connector(
                 ApplicationProvider.getApplicationContext(), radio, 0);
+        connector.getOnConnectorStateChanged().onConnected();
         connector.setPttOn(true);
         assertFalse(radio.isPttOn);
+        assertEquals(SubmissionResult.SESSION_INACTIVE, connector.getLastOperationSubmission());
     }
 }

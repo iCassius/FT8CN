@@ -17,6 +17,11 @@ public class IcomControlUdp extends ControlUdp {
 
 
     public IcomControlUdp(String userName, String password, String remoteIp, int remotePort) {
+        this(userName, password, remoteIp, remotePort, true);
+    }
+
+    IcomControlUdp(String userName, String password, String remoteIp, int remotePort,
+                   boolean openDataStreams) {
         super(userName,password,remoteIp,remotePort);
 
         civUdp = new IcomCivUdp();
@@ -24,8 +29,10 @@ public class IcomControlUdp extends ControlUdp {
 
         civUdp.rigIp = remoteIp;
         audioUdp.rigIp = remoteIp;
-        civUdp.openStream();
-        audioUdp.openStream();
+        if (openDataStreams) {
+            civUdp.openStream();
+            audioUdp.openStream();
+        }
     }
 
 
@@ -42,7 +49,7 @@ public class IcomControlUdp extends ControlUdp {
         rigName = IComPacketTypes.ConnInfoPacket.getRigName(data);
 
         if (!rigIsBusy) {//说明是第一次收到0x90数据包，要回复一个x090数据包
-            sendTrackedPacket(
+            if (sendTrackedPacket(
                     IComPacketTypes.ConnInfoPacket.connInfoPacketData(data, (short) 0
                             , localId, remoteId
                             , (byte) 0x01, (byte) 0x03, innerSeq, localToken, rigToken
@@ -50,9 +57,10 @@ public class IcomControlUdp extends ControlUdp {
                             , IComPacketTypes.AUDIO_SAMPLE_RATE//接收12000采样率
                             , IComPacketTypes.AUDIO_SAMPLE_RATE//发射12000采样率
                             , civUdp.localPort, audioUdp.localPort
-                            , IComPacketTypes.XIEGU_TX_BUFFER_SIZE));//0x96是wfView常用的缓冲区长度
-                            //, IComPacketTypes.TX_BUFFER_SIZE));//0xf0是之前测试的缓冲区长度
-            innerSeq++;
+                            , IComPacketTypes.XIEGU_TX_BUFFER_SIZE)).isEnqueued()) {//0x96是wfView常用的缓冲区长度
+                             //, IComPacketTypes.TX_BUFFER_SIZE));//0xf0是之前测试的缓冲区长度
+                innerSeq++;
+            }
         }
     }
 

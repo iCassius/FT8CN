@@ -8,6 +8,7 @@ package com.bg7yoz.ft8cn.icom;
 import android.util.Log;
 
 import com.bg7yoz.ft8cn.rigs.IcomRigConstant;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 
 import java.net.DatagramPacket;
 import java.util.Timer;
@@ -61,15 +62,13 @@ public class IcomCivUdp extends IcomUdpBase{
        }
     }
 
-    public void sendOpenClose(boolean open){
-        if (open) {
-            sendTrackedPacket(IComPacketTypes.OpenClosePacket.toBytes((short) 0
-                    , localId, remoteId, civSeq,(byte) 0x04));//打开连接
-        }else {
-            sendTrackedPacket(IComPacketTypes.OpenClosePacket.toBytes((short) 0
-                    , localId, remoteId, civSeq,(byte) 0x00));//关闭连接
+    public SubmissionResult sendOpenClose(boolean open){
+        SubmissionResult result = sendTrackedPacket(IComPacketTypes.OpenClosePacket.toBytes((short) 0
+                , localId, remoteId, civSeq, open ? (byte) 0x04 : (byte) 0x00));
+        if (result.isEnqueued()) {
+            civSeq++;
         }
-        civSeq++;
+        return result;
     }
     public void startCivDataTimer(){
         stopTimer(openCivDataTimer);
@@ -86,17 +85,21 @@ public class IcomCivUdp extends IcomUdpBase{
     }
 
 
-    public void sendPttAction(boolean pttOn){
+    public SubmissionResult sendPttAction(boolean pttOn){
         if (pttOn) {
-            sendCivData(IcomRigConstant.setPTTState(0xe0, civAddress, IcomRigConstant.PTT_ON));
+            return sendCivData(IcomRigConstant.setPTTState(0xe0, civAddress, IcomRigConstant.PTT_ON));
         }else {
-            sendCivData(IcomRigConstant.setPTTState(0xe0, civAddress, IcomRigConstant.PTT_OFF));
+            return sendCivData(IcomRigConstant.setPTTState(0xe0, civAddress, IcomRigConstant.PTT_OFF));
         }
     }
 
-    public void sendCivData(byte[] data){
-        sendTrackedPacket(IComPacketTypes.CivPacket.setCivData((short) 0,localId,remoteId,civSeq,data));
-        civSeq++;
+    public SubmissionResult sendCivData(byte[] data){
+        SubmissionResult result = sendTrackedPacket(IComPacketTypes.CivPacket.setCivData(
+                (short) 0, localId, remoteId, civSeq, data));
+        if (result.isEnqueued()) {
+            civSeq++;
+        }
+        return result;
     }
 
     @Override
