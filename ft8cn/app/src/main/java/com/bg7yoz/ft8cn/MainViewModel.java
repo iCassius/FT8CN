@@ -98,6 +98,7 @@ import com.bg7yoz.ft8cn.ui.ToastMessage;
 import com.bg7yoz.ft8cn.wave.HamRecorder;
 import com.bg7yoz.ft8cn.wave.OnGetVoiceDataDone;
 import com.bg7yoz.ft8cn.x6100.X6100Radio;
+import com.bg7yoz.ft8cn.database.OnAfterQueryConfig;
 
 import java.io.File;
 import java.io.IOException;
@@ -108,6 +109,9 @@ import java.util.concurrent.ExecutorService;
 public class MainViewModel extends ViewModel {
     String TAG = "ft8cn MainViewModel";
     public boolean configIsLoaded = false;
+    public boolean configIsLoading = false;
+    public final MutableLiveData<Boolean> configLoadComplete = new MutableLiveData<>(false);
+    private boolean configLoadStarted = false;
 
 
     //public int decoded_counter = 0;//解码的总条数
@@ -279,12 +283,36 @@ public class MainViewModel extends ViewModel {
         return Objects.requireNonNull(ft8Messages.get(position));
     }
 
+    /** Start the shared config load once; Activities observe the completion state separately. */
+    public synchronized void loadConfigIfNeeded() {
+        if (configLoadStarted) return;
+        configLoadStarted = true;
+        configIsLoading = true;
+        databaseOpr.getAllConfigParameter(new OnAfterQueryConfig() {
+            @Override
+            public void doOnBeforeQueryConfig(String keyName) {
+            }
+
+            @Override
+            public void doOnAfterQueryConfig(String keyName, String value) {
+                // Config rows are data events; Activity UI work is driven by completion state.
+            }
+
+            @Override
+            public void doOnConfigLoadComplete() {
+                configIsLoading = false;
+                configIsLoaded = true;
+                configLoadComplete.postValue(true);
+            }
+        });
+    }
+
+    //@RequiresApi(api = Build.VERSION_CODES.N)
     /**
      * MainViewModel的构造函数主要完成一下事情：
-     * 1.创建与UTC同步的时钟，时钟是UtcTimer类，内核是用Timer和TimerTask实现的。回调函数是多线程的，要考虑线程安全的问题。
+     * 1.创建与UTC同步的时钟，回调中的动作用于处理解码和发射。
      * 2.创建Mutable型的解码消息列表。
      */
-    //@RequiresApi(api = Build.VERSION_CODES.N)
     public MainViewModel() {
 
         //获取配置信息。

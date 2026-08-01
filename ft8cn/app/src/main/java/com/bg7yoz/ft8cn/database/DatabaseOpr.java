@@ -409,104 +409,162 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 while (cursor.moveToNext()) {
                     String name = cursor.getString(0);
                     String value = cursor.getString(1);
+                    if (value == null) value = "";
 
-                    if (name.equalsIgnoreCase("grid")) GeneralVariables.setMyMaidenheadGrid(value);
-                    if (name.equalsIgnoreCase("callsign")) {
-                        GeneralVariables.myCallsign = value;
-                        if (!value.isEmpty()) {
-                            Ft8Message.hashList.addHash(FT8Package.getHash22(value), value);
-                            Ft8Message.hashList.addHash(FT8Package.getHash12(value), value);
-                            Ft8Message.hashList.addHash(FT8Package.getHash10(value), value);
-                            if (value.contains("/")) {
-                                String shortCall = GeneralVariables.getShortCallsign(value);
-                                Ft8Message.hashList.addHash(FT8Package.getHash22(shortCall), shortCall);
-                                Ft8Message.hashList.addHash(FT8Package.getHash12(shortCall), shortCall);
-                                Ft8Message.hashList.addHash(FT8Package.getHash10(shortCall), shortCall);
+                    try {
+                        if (name.equalsIgnoreCase("grid")) GeneralVariables.setMyMaidenheadGrid(value);
+                        if (name.equalsIgnoreCase("callsign")) {
+                            GeneralVariables.myCallsign = value;
+                            if (!value.isEmpty()) {
+                                Ft8Message.hashList.addHash(FT8Package.getHash22(value), value);
+                                Ft8Message.hashList.addHash(FT8Package.getHash12(value), value);
+                                Ft8Message.hashList.addHash(FT8Package.getHash10(value), value);
+                                if (value.contains("/")) {
+                                    String shortCall = GeneralVariables.getShortCallsign(value);
+                                    Ft8Message.hashList.addHash(FT8Package.getHash22(shortCall), shortCall);
+                                    Ft8Message.hashList.addHash(FT8Package.getHash12(shortCall), shortCall);
+                                    Ft8Message.hashList.addHash(FT8Package.getHash10(shortCall), shortCall);
+                                }
                             }
                         }
+                        if (name.equalsIgnoreCase("toModifier")) GeneralVariables.toModifier = value;
+                        if (name.equalsIgnoreCase("freq"))
+                            GeneralVariables.setBaseFrequency(parseFloatConfig(name, value, 1000f));
+                        if (name.equalsIgnoreCase("synFreq")) GeneralVariables.synFrequency = !value.equals("0");
+                        if (name.equalsIgnoreCase("transDelay"))
+                            GeneralVariables.transmitDelay = parseIntConfig(name, value, 500);
+                        if (name.equalsIgnoreCase("civ"))
+                            GeneralVariables.civAddress = parseIntConfig(name, value, 0xa4, 16);
+                        if (name.equalsIgnoreCase("baudRate"))
+                            GeneralVariables.baudRate = parseIntConfig(name, value, 19200);
+                        if (name.equalsIgnoreCase("bandFreq")) {
+                            GeneralVariables.band = parseLongConfig(name, value, 14074000L);
+                            GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(GeneralVariables.band);
+                        }
+                        if (name.equalsIgnoreCase("msgMode")) GeneralVariables.simpleCallItemMode = value.equals("1");
+                        if (name.equalsIgnoreCase("ctrMode"))
+                            GeneralVariables.controlMode = parseIntConfig(name, value, 0);
+                        if (name.equalsIgnoreCase("model"))
+                            GeneralVariables.modelNo = parseIntConfig(name, value, 0);
+                        if (name.equalsIgnoreCase("instruction"))
+                            GeneralVariables.instructionSet = parseIntConfig(name, value, 0);
+                        if (name.equalsIgnoreCase("launchSupervision"))
+                            GeneralVariables.launchSupervision = parseIntConfig(name, value, 600000);
+                        if (name.equalsIgnoreCase("noReplyLimit"))
+                            GeneralVariables.noReplyLimit = parseIntConfig(name, value, 0);
+                        if (name.equalsIgnoreCase("autoFollowCQ")) GeneralVariables.autoFollowCQ = !value.equals("0");
+                        if (name.equalsIgnoreCase("autoCallFollow")) GeneralVariables.autoCallFollow = !value.equals("0");
+                        if (name.equalsIgnoreCase("pttDelay"))
+                            GeneralVariables.pttDelay = parseIntConfig(name, value, 100);
+                        if (name.equalsIgnoreCase("icomIp")) GeneralVariables.icomIp = value.isEmpty() ? "255.255.255.255" : value;
+                        if (name.equalsIgnoreCase("icomPort"))
+                            GeneralVariables.icomUdpPort = parseIntConfig(name, value, 50001);
+                        if (name.equalsIgnoreCase("icomUserName")) GeneralVariables.icomUserName = value.isEmpty() ? "ic705" : value;
+                        if (name.equalsIgnoreCase("icomPassword")) GeneralVariables.icomPassword = value;
+                        if (name.equalsIgnoreCase("volumeValue"))
+                            GeneralVariables.volumePercent = parseFloatConfig(name, value, 100f) / 100f;
+                        if (name.equalsIgnoreCase("excludedCallsigns")) GeneralVariables.addExcludedCallsigns(value);
+                        if (name.equalsIgnoreCase("flexMaxRfPower"))
+                            GeneralVariables.flexMaxRfPower = parseIntConfig(name, value, 10);
+                        if (name.equalsIgnoreCase("flexMaxTunePower"))
+                            GeneralVariables.flexMaxTunePower = parseIntConfig(name, value, 10);
+                        if (name.equalsIgnoreCase("saveSWL")) GeneralVariables.saveSWLMessage = value.equals("1");
+                        if (name.equalsIgnoreCase("saveSWLQSO")) GeneralVariables.saveSWL_QSO = value.equals("1");
+                        if (name.equalsIgnoreCase("audioBits")) GeneralVariables.audioOutput32Bit = value.equals("1");
+                        if (name.equalsIgnoreCase("audioRate"))
+                            GeneralVariables.audioSampleRate = parseIntConfig(name, value, 12000);
+                        if (name.equalsIgnoreCase("deepMode")) GeneralVariables.deepDecodeMode = value.equals("1");
+                        if (name.equalsIgnoreCase("dataBits"))
+                            GeneralVariables.serialDataBits = parseIntConfig(name, value, 8);
+                        if (name.equalsIgnoreCase("stopBits"))
+                            GeneralVariables.serialStopBits = parseIntConfig(name, value, 1);
+                        if (name.equalsIgnoreCase("parityBits"))
+                            GeneralVariables.serialParity = parseIntConfig(name, value, 0);
+                        if (name.equalsIgnoreCase("enableCloudlog")) GeneralVariables.enableCloudlog = value.equals("1");
+                        if (name.equalsIgnoreCase("cloudlogServerAddress")) GeneralVariables.cloudlogServerAddress = value;
+                        if (name.equalsIgnoreCase("cloudlogApiKey")) GeneralVariables.cloudlogApiKey = value;
+                        if (name.equalsIgnoreCase("cloudlogStationID")) GeneralVariables.cloudlogStationID = value;
+                        if (name.equalsIgnoreCase("enableQRZ")) GeneralVariables.enableQRZ = value.equals("1");
+                        if (name.equalsIgnoreCase("qrzApiKey")) GeneralVariables.qrzApiKey = value;
+                        if (name.equalsIgnoreCase("swrSwitch")) GeneralVariables.swr_switch_on = value.equals("1");
+                        if (name.equalsIgnoreCase("alcSwitch")) GeneralVariables.alc_switch_on = value.equals("1");
+                        if (name.equalsIgnoreCase("connectMode"))
+                            GeneralVariables.connectMode = parseIntConfig(name, value, 0);
+                        if (name.equalsIgnoreCase("usbVendorId"))
+                            GeneralVariables.usbVendorId = parseIntConfig(name, value, -1);
+                        if (name.equalsIgnoreCase("usbProductId"))
+                            GeneralVariables.usbProductId = parseIntConfig(name, value, -1);
+                    } catch (RuntimeException e) {
+                        Log.w(TAG, "Config field '" + name + "' could not be applied; keeping its default");
                     }
-                    if (name.equalsIgnoreCase("toModifier")) GeneralVariables.toModifier = value;
-                    if (name.equalsIgnoreCase("freq"))
-                        GeneralVariables.setBaseFrequency(Float.parseFloat(value.isEmpty() ? "1000" : value));
-                    if (name.equalsIgnoreCase("synFreq")) GeneralVariables.synFrequency = !value.equals("0");
-                    if (name.equalsIgnoreCase("transDelay"))
-                        GeneralVariables.transmitDelay = Integer.parseInt(value.isEmpty() ? "500" : value);
-                    if (name.equalsIgnoreCase("civ"))
-                        GeneralVariables.civAddress = Integer.parseInt(value.isEmpty() ? "a4" : value, 16);
-                    if (name.equalsIgnoreCase("baudRate"))
-                        GeneralVariables.baudRate = Integer.parseInt(value.isEmpty() ? "19200" : value);
-                    if (name.equalsIgnoreCase("bandFreq")) {
-                        GeneralVariables.band = Long.parseLong(value.isEmpty() ? "14074000" : value);
-                        GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(GeneralVariables.band);
-                    }
-                    if (name.equalsIgnoreCase("msgMode")) GeneralVariables.simpleCallItemMode = value.equals("1");
-                    if (name.equalsIgnoreCase("ctrMode"))
-                        GeneralVariables.controlMode = Integer.parseInt(value.isEmpty() ? "0" : value);
-                    if (name.equalsIgnoreCase("model"))
-                        GeneralVariables.modelNo = Integer.parseInt(value.isEmpty() ? "0" : value);
-                    if (name.equalsIgnoreCase("instruction"))
-                        GeneralVariables.instructionSet = Integer.parseInt(value.isEmpty() ? "0" : value);
-                    if (name.equalsIgnoreCase("launchSupervision"))
-                        GeneralVariables.launchSupervision = Integer.parseInt(value.isEmpty() ? "600000" : value);
-                    if (name.equalsIgnoreCase("noReplyLimit"))
-                        GeneralVariables.noReplyLimit = Integer.parseInt(value.isEmpty() ? "0" : value);
-                    if (name.equalsIgnoreCase("autoFollowCQ")) GeneralVariables.autoFollowCQ = !value.equals("0");
-                    if (name.equalsIgnoreCase("autoCallFollow")) GeneralVariables.autoCallFollow = !value.equals("0");
-                    if (name.equalsIgnoreCase("pttDelay"))
-                        GeneralVariables.pttDelay = Integer.parseInt(value.isEmpty() ? "100" : value);
-                    if (name.equalsIgnoreCase("icomIp")) GeneralVariables.icomIp = value.isEmpty() ? "255.255.255.255" : value;
-                    if (name.equalsIgnoreCase("icomPort"))
-                        GeneralVariables.icomUdpPort = Integer.parseInt(value.isEmpty() ? "50001" : value);
-                    if (name.equalsIgnoreCase("icomUserName")) GeneralVariables.icomUserName = value.isEmpty() ? "ic705" : value;
-                    if (name.equalsIgnoreCase("icomPassword")) GeneralVariables.icomPassword = value;
-                    if (name.equalsIgnoreCase("volumeValue"))
-                        GeneralVariables.volumePercent = Float.parseFloat(value.isEmpty() ? "100" : value) / 100f;
-                    if (name.equalsIgnoreCase("excludedCallsigns")) GeneralVariables.addExcludedCallsigns(value);
-                    if (name.equalsIgnoreCase("flexMaxRfPower"))
-                        GeneralVariables.flexMaxRfPower = Integer.parseInt(value.isEmpty() ? "10" : value);
-                    if (name.equalsIgnoreCase("flexMaxTunePower"))
-                        GeneralVariables.flexMaxTunePower = Integer.parseInt(value.isEmpty() ? "10" : value);
-                    if (name.equalsIgnoreCase("saveSWL")) GeneralVariables.saveSWLMessage = value.equals("1");
-                    if (name.equalsIgnoreCase("saveSWLQSO")) GeneralVariables.saveSWL_QSO = value.equals("1");
-                    if (name.equalsIgnoreCase("audioBits")) GeneralVariables.audioOutput32Bit = value.equals("1");
-                    if (name.equalsIgnoreCase("audioRate"))
-                        GeneralVariables.audioSampleRate = Integer.parseInt(value.isEmpty() ? "12000" : value);
-                    if (name.equalsIgnoreCase("deepMode")) GeneralVariables.deepDecodeMode = value.equals("1");
-                    if (name.equalsIgnoreCase("dataBits"))
-                        GeneralVariables.serialDataBits = Integer.parseInt(value.isEmpty() ? "8" : value);
-                    if (name.equalsIgnoreCase("stopBits"))
-                        GeneralVariables.serialStopBits = Integer.parseInt(value.isEmpty() ? "1" : value);
-                    if (name.equalsIgnoreCase("parityBits"))
-                        GeneralVariables.serialParity = Integer.parseInt(value.isEmpty() ? "0" : value);
-                    if (name.equalsIgnoreCase("enableCloudlog")) GeneralVariables.enableCloudlog = value.equals("1");
-                    if (name.equalsIgnoreCase("cloudlogServerAddress")) GeneralVariables.cloudlogServerAddress = value;
-                    if (name.equalsIgnoreCase("cloudlogApiKey")) GeneralVariables.cloudlogApiKey = value;
-                    if (name.equalsIgnoreCase("cloudlogStationID")) GeneralVariables.cloudlogStationID = value;
-                    if (name.equalsIgnoreCase("enableQRZ")) GeneralVariables.enableQRZ = value.equals("1");
-                    if (name.equalsIgnoreCase("qrzApiKey")) GeneralVariables.qrzApiKey = value;
-                    if (name.equalsIgnoreCase("swrSwitch")) GeneralVariables.swr_switch_on = value.equals("1");
-                    if (name.equalsIgnoreCase("alcSwitch")) GeneralVariables.alc_switch_on = value.equals("1");
-                    if (name.equalsIgnoreCase("connectMode"))
-                        GeneralVariables.connectMode = Integer.parseInt(value.isEmpty() ? "0" : value);
-                    if (name.equalsIgnoreCase("usbVendorId"))
-                        GeneralVariables.usbVendorId = Integer.parseInt(value.isEmpty() ? "-1" : value);
-                    if (name.equalsIgnoreCase("usbProductId"))
-                        GeneralVariables.usbProductId = Integer.parseInt(value.isEmpty() ? "-1" : value);
 
                     final String fName = name;
                     final String fValue = value;
                     mainHandler.post(() -> {
                         if (onAfterQueryConfig != null) {
-                            onAfterQueryConfig.doOnAfterQueryConfig(fName, fValue);
+                            try {
+                                onAfterQueryConfig.doOnAfterQueryConfig(fName, fValue);
+                            } catch (RuntimeException e) {
+                                Log.w(TAG, "Config row callback failed for field '" + fName + "'");
+                            }
                         }
                     });
                 }
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Config query failed; continuing with available defaults");
+            } finally {
+                try {
+                    getAllQSLCallsignsSync();
+                } catch (RuntimeException e) {
+                    Log.e(TAG, "Config-dependent cache load failed; continuing");
+                }
+                mainHandler.post(() -> {
+                    if (onAfterQueryConfig != null) {
+                        try {
+                            onAfterQueryConfig.doOnConfigLoadComplete();
+                        } catch (RuntimeException e) {
+                            Log.w(TAG, "Config completion callback failed");
+                        }
+                    }
+                });
             }
-            getAllQSLCallsignsSync();
-            mainHandler.post(() -> {
-                if (onAfterQueryConfig != null) onAfterQueryConfig.doOnAfterQueryConfig(null, null);
-            });
         });
+    }
+
+    private static int parseIntConfig(String fieldName, String value, int defaultValue) {
+        return parseIntConfig(fieldName, value, defaultValue, 10);
+    }
+
+    private static int parseIntConfig(String fieldName, String value, int defaultValue, int radix) {
+        if (value == null || value.isEmpty()) return defaultValue;
+        try {
+            return Integer.parseInt(value, radix);
+        } catch (NumberFormatException e) {
+            Log.w(TAG, "Invalid numeric config field '" + fieldName + "'; using default");
+            return defaultValue;
+        }
+    }
+
+    private static long parseLongConfig(String fieldName, String value, long defaultValue) {
+        if (value == null || value.isEmpty()) return defaultValue;
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            Log.w(TAG, "Invalid numeric config field '" + fieldName + "'; using default");
+            return defaultValue;
+        }
+    }
+
+    private static float parseFloatConfig(String fieldName, String value, float defaultValue) {
+        if (value == null || value.isEmpty()) return defaultValue;
+        try {
+            float parsed = Float.parseFloat(value);
+            if (Float.isNaN(parsed) || Float.isInfinite(parsed)) throw new NumberFormatException();
+            return parsed;
+        } catch (NumberFormatException e) {
+            Log.w(TAG, "Invalid numeric config field '" + fieldName + "'; using default");
+            return defaultValue;
+        }
     }
 
     private void getAllQSLCallsignsSync() {
