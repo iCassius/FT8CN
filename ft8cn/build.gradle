@@ -3,12 +3,6 @@ plugins {
     id 'com.android.application' version '9.2.1' apply false
     id 'com.android.library' version '9.2.1' apply false
 }
-ext {
-    var3 = 'G:\\coding\\ft8CN\\ft8CN.jks'
-    var = var3
-    var1 = '/Users/mymac/Desktop/coding/ft8CN/ft8CN.jks'
-    var2 = var
-}
 task clean(type: Delete) {
     delete rootProject.buildDir
 }

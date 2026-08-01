@@ -5,7 +5,7 @@
 
 ## 近期重大更新与项目状态
 
-当前分支包含多次重要的维护与稳定性更新（从 `0.93.001` 升级至 `0.93.004`），重点提升了 Android 14 兼容性、系统资源占用和高负载挂机的稳定性。
+当前分支包含多次重要的维护与稳定性更新（正式历史版本至 `0.93.004`，当前发布准备版本为 `0.93.005`），重点提升了 Android 14 兼容性、系统资源占用和高负载挂机的稳定性。
 
 ### 目前项目进度与状态
 
@@ -16,7 +16,7 @@
   - **DXCC 恢复与测试落地**：恢复了被误改的 DXCC 呼号前缀最长匹配算法，保证归属地显示正确；并首次落地的 Instrumented 自动化测试，确保数据库底层逻辑的稳定性。
   - **测试版共存 (.beta)**：支持构建带有独立的包名 `com.bg7yoz.ft8cn.beta` 和名称 “FT8CN测试版” 的测试包，可与正式版无缝共存，方便挂机测试。
 - 🟢 **云同步扩展与构建发布 (v0.93.004)**：新增了 **Wavelog 日志同步** 支持，合并了 Cloudlog/Wavelog 的日志上传逻辑并支持连接免 Dummy QSO 验证；优化了 GitHub Actions 工作流，直接构建并发布 Release 版 APK。
-- 🎯 **当前阶段**：项目已在模拟器上完成自动化测试和功能冒烟验证，正在进行真机通联（WIFI 网络模式/QSO）与长时间挂机内测。准备在真机实测通过后，将全部稳定性补丁合入 release，发布 0.93.4 稳定版本。
+- 🟡 **v0.93.005 发布准备**：统一版本、JDK 17 CI、正式签名 fail-fast、Release notes 路径、TEST/BETA APK 命名和 Android 回退门禁；正式证书与真机/HIL 仍需发布环境单独确认。
 
 详细的维护文档、发布历史和技术分析请查阅：
 - 📂 [维护文档目录索引 (doc/README.md)](doc/README.md)
@@ -36,11 +36,11 @@ git push origin release
 正式发布版本时，需要在推送代码后创建并推送版本 tag。tag 名称必须和应用版本号一致，并以 `v` 开头：
 
 ```powershell
-git tag -a v0.93.002 -m "FT8CN v0.93.002"
-git push origin v0.93.002
+git tag -a v0.93.005 -m "FT8CN v0.93.005"
+git push origin v0.93.005
 ```
 
-推送 `v*.*.*` 格式的 tag 后，GitHub Actions 会自动构建 APK，并上传到对应的 GitHub Release。后续版本按构建号递增，例如 `v0.93.002`、`v0.93.003`。
+推送 `v*.*.*` 格式的 tag 后会进入 GitHub Actions 发布门禁；在用户确认签名迁移、提供长期 keystore 和可信证书前，正式 workflow 会阻断，不创建 Release。当前 `v0.93.004` 已存在且不可覆盖；现阶段只分发 TEST/BETA APK。
 
 请前往 [Releases](https://github.com/iCassius/FT8CN/releases) 下载最新 APK 文件。
 

@@ -6,6 +6,21 @@ plugins {
     id 'com.android.application'
 }
 
+def versionNameValue = rootProject.findProperty("ft8cn.versionName")?.toString()
+def versionCodeValue = rootProject.findProperty("ft8cn.versionCode")?.toString()
+if (!versionNameValue || !versionCodeValue) {
+    throw new GradleException("Missing canonical ft8cn.versionName/ft8cn.versionCode in ft8cn/gradle.properties")
+}
+
+def versionMatch = versionNameValue =~ /^(\d+)\.(\d+)\.(\d{3})$/
+if (!versionMatch.matches()) {
+    throw new GradleException("ft8cn.versionName must use MAJOR.MINOR.BUILD with a three-digit build: ${versionNameValue}")
+}
+def expectedVersionCode = (versionMatch[0][1] as int) * 10000 + (versionMatch[0][2] as int) * 1000 + (versionMatch[0][3] as int)
+if (!(versionCodeValue ==~ /^\d+$/) || versionCodeValue.toInteger() != expectedVersionCode) {
+    throw new GradleException("ft8cn.versionCode ${versionCodeValue} does not match ft8cn.versionName ${versionNameValue}; expected ${expectedVersionCode}")
+}
+
 def currentTime = getCurrentTime()
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file("keystore.properties")
@@ -28,12 +43,33 @@ def releaseStoreFile = envOrProperty("FT8CN_RELEASE_STORE_FILE", "storeFile")
 def releaseStorePassword = envOrProperty("FT8CN_RELEASE_STORE_PASSWORD", "storePassword")
 def releaseKeyAlias = envOrProperty("FT8CN_RELEASE_KEY_ALIAS", "keyAlias")
 def releaseKeyPassword = envOrProperty("FT8CN_RELEASE_KEY_PASSWORD", "keyPassword")
+def releaseCertSha256 = envOrProperty("FT8CN_RELEASE_CERT_SHA256", "releaseCertSha256")
 def hasReleaseSigning = [
         releaseStoreFile,
         releaseStorePassword,
         releaseKeyAlias,
-        releaseKeyPassword
-].every { it != null && !it.toString().trim().isEmpty() }
+        releaseKeyPassword,
+        releaseCertSha256
+].every { it != null && !it.toString().trim().isEmpty() } &&
+        releaseCertSha256.toString() ==~ /(?i)[0-9a-f]{64}/
+def releaseStorePath = hasReleaseSigning ? rootProject.file(releaseStoreFile.toString()) : null
+def releaseTaskRequested = gradle.startParameter.taskNames.any {
+    it.toLowerCase(Locale.ROOT).contains("release")
+}
+if (releaseTaskRequested && !hasReleaseSigning) {
+    throw new GradleException("Release signing is required. Set the four FT8CN_RELEASE_* signing values plus FT8CN_RELEASE_CERT_SHA256, or provide a complete ft8cn/keystore.properties. Debug signing or an untrusted certificate is never valid for release.")
+}
+if (releaseTaskRequested && !releaseStorePath.isFile()) {
+    throw new GradleException("Release keystore does not exist: ${releaseStorePath.absolutePath}")
+}
+gradle.taskGraph.whenReady { graph ->
+    def releaseInGraph = graph.allTasks.any {
+        it.path.toLowerCase(Locale.ROOT).contains("release")
+    }
+    if (releaseInGraph && !hasReleaseSigning) {
+        throw new GradleException("A formal release task was requested without complete signing configuration. Debug signing is never valid for release.")
+    }
+}
 
 static def getCurrentTime() {
     DateFormat df = new SimpleDateFormat("yyyy-MM-dd")
@@ -65,8 +101,8 @@ android {
         applicationId "com.bg7yoz.ft8cn"
         minSdk 23
         targetSdk 34
-        versionCode 93004
-        versionName '0.93.4'
+        versionCode versionCodeValue.toInteger()
+        versionName versionNameValue
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
 
         externalNativeBuild {
@@ -75,13 +111,13 @@ android {
 
             }
         }
-        signingConfig signingConfigs.debug
     }
 
     buildTypes {
 
         debug{
             //测试版独立包名+独立名称，可与正式版并存安装，数据互不影响
+            signingConfig signingConfigs.debug
             applicationIdSuffix '.beta'
             versionNameSuffix '-beta'
             manifestPlaceholders = [appLabel: "FT8CN测试版"]
@@ -115,6 +151,80 @@ android {
         }
     }
     namespace 'com.bg7yoz.ft8cn'
+}
+
+def verifyReleaseSigning = tasks.register("verifyReleaseSigning") {
+    group = "verification"
+    description = "Fail if the formal release signing configuration or keystore is incomplete."
+    doLast {
+        def missing = [
+                "FT8CN_RELEASE_STORE_FILE/storeFile": releaseStoreFile,
+                "FT8CN_RELEASE_STORE_PASSWORD/storePassword": releaseStorePassword,
+                "FT8CN_RELEASE_KEY_ALIAS/keyAlias": releaseKeyAlias,
+                "FT8CN_RELEASE_KEY_PASSWORD/keyPassword": releaseKeyPassword,
+                "FT8CN_RELEASE_CERT_SHA256/releaseCertSha256": releaseCertSha256
+        ].findAll { entry -> entry.value == null || entry.value.toString().trim().isEmpty() }.keySet()
+        if (!missing.isEmpty()) {
+            throw new GradleException("Missing release signing values: ${missing.join(', ')}. Formal release builds cannot use the debug certificate.")
+        }
+        if (!(releaseCertSha256.toString() ==~ /(?i)[0-9a-f]{64}/)) {
+            throw new GradleException("FT8CN_RELEASE_CERT_SHA256/releaseCertSha256 must be exactly 64 hexadecimal characters.")
+        }
+        def store = rootProject.file(releaseStoreFile.toString())
+        if (!store.isFile()) {
+            throw new GradleException("Release keystore does not exist: ${store.absolutePath}")
+        }
+        logger.lifecycle("Release signing configuration is complete; keystore file exists.")
+    }
+}
+
+tasks.matching { it.name == "assembleRelease" }.configureEach {
+    dependsOn(verifyReleaseSigning)
+}
+
+tasks.register("printVersion") {
+    group = "help"
+    description = "Print the canonical FT8CN version name and version code."
+    doLast {
+        println "${versionNameValue}:${versionCodeValue}"
+    }
+}
+
+def gitShortCommit = {
+    def configuredCommit = System.getenv("GITHUB_SHA") ?: System.getenv("CI_COMMIT_SHA")
+    if (configuredCommit != null && configuredCommit ==~ /^[0-9a-fA-F]{7,40}$/) {
+        return configuredCommit.substring(0, 7).toLowerCase(Locale.ROOT)
+    }
+    try {
+        def process = new ProcessBuilder("git", "rev-parse", "--short=7", "HEAD")
+                .directory(rootProject.projectDir)
+                .redirectErrorStream(true)
+                .start()
+        def output = process.inputStream.text.trim()
+        if (process.waitFor() == 0 && output ==~ /^[0-9a-fA-F]{7}$/) {
+            return output.toLowerCase(Locale.ROOT)
+        }
+    } catch (Exception ignored) {
+        // The CI workflow supplies GITHUB_SHA; local builds can still use a stable fallback.
+    }
+    return "nogit00"
+}
+
+tasks.register("packageTestApk") {
+    group = "build"
+    description = "Build the debug-signed beta APK and copy it to a versioned, commit-addressed artifact."
+    dependsOn("assembleDebug")
+    doLast {
+        def source = file("${project.buildDir}/outputs/apk/debug/app-debug.apk")
+        if (!source.isFile()) {
+            throw new GradleException("Debug APK was not produced: ${source.absolutePath}")
+        }
+        def artifactDir = rootProject.file(".artifacts")
+        artifactDir.mkdirs()
+        def target = new File(artifactDir, "FT8CN-v${versionNameValue}-beta-${gitShortCommit()}.apk")
+        java.nio.file.Files.copy(source.toPath(), target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        logger.lifecycle("TEST/BETA APK: ${target.absolutePath}")
+    }
 }
 
 dependencies {

@@ -46,11 +46,11 @@
 
 ## 六、发版规范
 
-- 版本号 `主.次.构建号`（如 `0.93.003`），同一基础版本每次发布构建号 +1，同步更新 `app/build.gradle` 的 `versionCode`/`versionName`。
+- 版本号 `主.次.构建号`（如 `0.93.005`），构建号必须是三位；唯一来源是 `ft8cn/gradle.properties` 的 `ft8cn.versionName`/`ft8cn.versionCode`，tag 使用同一版本的 `v` 前缀。已存在的 tag 和 Release 资产不得覆盖。
 - 普通推送只同步代码；**打 `v*.*.*` tag 并推送才会触发 GitHub Actions 构建 APK 并发布 Release**：
   ```bash
-  git tag -a v0.93.003 -m "FT8CN v0.93.003"
-  git push origin v0.93.003
+  git tag -a v0.93.005 -m "FT8CN v0.93.005"
+  git push origin v0.93.005
   ```
 - 修复类改动在 `fix/*` 分支上做，验证后合入 `release`。
 - 发版说明写清：修了什么、用户可感知的变化、已知未解决问题。

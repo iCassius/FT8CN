@@ -13,16 +13,35 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: set up JDK 11
+    - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
-        java-version: '11'
+        java-version: '17'
         distribution: 'temurin'
         cache: gradle
 
     - name: Grant execute permission for gradlew
       working-directory: ft8cn
       run: chmod +x gradlew
-    - name: Build release with Gradle
+    - name: Check release contract and sensitive-file hygiene
+      run: python scripts/check_release_contract.py
+
+    - name: Test release certificate gates
+      run: python -m unittest scripts.test_release_gates
+
+    - name: Build TEST/BETA APK
       working-directory: ft8cn
-      run: ./gradlew :app:assembleRelease
+      run: ./gradlew :app:packageTestApk
+
+    - name: Verify TEST/BETA APK signature
+      run: |
+        set -euo pipefail
+        VERSION="$(./ft8cn/gradlew -q :app:printVersion | cut -d: -f1)"
+        python scripts/verify_apk_signature.py --apk "ft8cn/.artifacts/FT8CN-v${VERSION}-beta-${GITHUB_SHA:0:7}.apk" --expect debug
+
+    - name: Upload TEST/BETA APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: FT8CN-test-beta-${{ github.sha }}
+        path: ft8cn/.artifacts/*.apk
+        if-no-files-found: error
