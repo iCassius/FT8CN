@@ -6,6 +6,8 @@ import static org.junit.Assert.assertTrue;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
+import com.bg7yoz.ft8cn.GeneralVariables;
+import com.bg7yoz.ft8cn.connector.ConnectMode;
 import com.bg7yoz.ft8cn.connector.BaseRigConnector;
 import com.bg7yoz.ft8cn.util.SubmissionResult;
 
@@ -20,11 +22,11 @@ public class NetworkRigPttSubmissionTest {
         XieGu6100NetRig rig = new XieGu6100NetRig(0);
         rig.setConnector(connector);
 
-        connector.next = SubmissionResult.ENQUEUED;
+        connector.pttResult = SubmissionResult.ENQUEUED;
         rig.setPTT(true);
         assertTrue(rig.isPttOn());
 
-        connector.next = SubmissionResult.REJECTED;
+        connector.pttResult = SubmissionResult.REJECTED;
         rig.setPTT(false);
         assertTrue("a rejected OFF must preserve the confirmed local PTT state", rig.isPttOn());
         assertEquals(SubmissionResult.REJECTED, connector.getLastOperationSubmission());
@@ -37,7 +39,7 @@ public class NetworkRigPttSubmissionTest {
         FlexNetworkRig rig = new FlexNetworkRig();
         rig.setConnector(connector);
 
-        connector.next = SubmissionResult.REJECTED;
+        connector.dataResult = SubmissionResult.REJECTED;
         int sequence = rig.getCommandSequence();
         rig.commandSliceTune(0, "14.074");
         assertEquals(SubmissionResult.REJECTED, connector.getLastOperationSubmission());
@@ -47,8 +49,78 @@ public class NetworkRigPttSubmissionTest {
         assertFalse(rig.isPttOn());
     }
 
+    @Test
+    public void icomNetworkPttOnlyChangesBaseStateAndEventAfterBothSubmissionsSucceed() {
+        int oldConnectMode = GeneralVariables.connectMode;
+        try {
+            GeneralVariables.connectMode = ConnectMode.NETWORK;
+            RecordingConnector connector = new RecordingConnector();
+            PttEvents events = new PttEvents();
+            IcomRig rig = new IcomRig(0, true, false);
+            rig.setConnector(connector);
+            rig.setOnRigStateChanged(events);
+
+            connector.dataResult = SubmissionResult.REJECTED;
+            connector.pttResult = SubmissionResult.ENQUEUED;
+            rig.setPTT(true);
+            assertFalse(rig.isPttOn());
+            assertEquals(0, connector.pttCalls);
+            assertEquals(0, events.count);
+
+            connector.dataResult = SubmissionResult.ENQUEUED;
+            connector.pttResult = SubmissionResult.REJECTED;
+            rig.setPTT(true);
+            assertFalse(rig.isPttOn());
+            assertEquals(0, events.count);
+
+            connector.pttResult = SubmissionResult.ENQUEUED;
+            rig.setPTT(true);
+            assertTrue(rig.isPttOn());
+            assertEquals(1, events.count);
+
+            connector.pttResult = SubmissionResult.REJECTED;
+            rig.setPTT(false);
+            assertTrue(rig.isPttOn());
+            assertEquals(1, events.count);
+        } finally {
+            GeneralVariables.connectMode = oldConnectMode;
+        }
+    }
+
+    @Test
+    public void xieGu6100NetworkPttRejectedOnAndOffDoNotChangeBaseStateOrEvent() {
+        int oldConnectMode = GeneralVariables.connectMode;
+        try {
+            GeneralVariables.connectMode = ConnectMode.NETWORK;
+            RecordingConnector connector = new RecordingConnector();
+            PttEvents events = new PttEvents();
+            XieGu6100Rig rig = new XieGu6100Rig(0, false);
+            rig.setConnector(connector);
+            rig.setOnRigStateChanged(events);
+
+            connector.pttResult = SubmissionResult.REJECTED;
+            rig.setPTT(true);
+            assertFalse(rig.isPttOn());
+            assertEquals(0, events.count);
+
+            connector.pttResult = SubmissionResult.ENQUEUED;
+            rig.setPTT(true);
+            assertTrue(rig.isPttOn());
+            assertEquals(1, events.count);
+
+            connector.pttResult = SubmissionResult.REJECTED;
+            rig.setPTT(false);
+            assertTrue(rig.isPttOn());
+            assertEquals(1, events.count);
+        } finally {
+            GeneralVariables.connectMode = oldConnectMode;
+        }
+    }
+
     private static final class RecordingConnector extends BaseRigConnector {
-        SubmissionResult next = SubmissionResult.SESSION_INACTIVE;
+        SubmissionResult dataResult = SubmissionResult.SESSION_INACTIVE;
+        SubmissionResult pttResult = SubmissionResult.SESSION_INACTIVE;
+        int pttCalls;
         boolean connected;
 
         RecordingConnector() {
@@ -62,14 +134,25 @@ public class NetworkRigPttSubmissionTest {
 
         @Override
         public synchronized SubmissionResult submitData(byte[] data) {
-            reportOperationSubmission("test data", next);
-            return next;
+            reportOperationSubmission("test data", dataResult);
+            return dataResult;
         }
 
         @Override
         public SubmissionResult submitPttOn(boolean on) {
-            reportOperationSubmission("test ptt", next);
-            return next;
+            pttCalls++;
+            reportOperationSubmission("test ptt", pttResult);
+            return pttResult;
         }
+    }
+
+    private static final class PttEvents implements OnRigStateChanged {
+        int count;
+
+        @Override public void onDisconnected() { }
+        @Override public void onConnected() { }
+        @Override public void onPttChanged(boolean isOn) { count++; }
+        @Override public void onFreqChanged(long freq) { }
+        @Override public void onRunError(String message) { }
     }
 }
