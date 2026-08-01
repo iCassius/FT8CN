@@ -4,26 +4,27 @@
 
 ---
 
-## 2026-08-01　v0.93.005 P0 集成（待最终验收）
+## 2026-08-01　v0.93.005 P0 集成自动验收
 
 ### 做了什么
 
 - 已在独立集成分支受控合入 P0-C 配置加载完成状态、P0-A 发射 PTT/SCO 生命周期、P0-B 网络/音频快照与 EOF 隔离、P0-E 版本和发布门禁。
-- 根据独立审查补齐 Flex TCP EOF 到连接状态所有者的传播、X6100 早期 EOF 安全收尾、流初始化的会话取消/退避上限，以及断连重连时 ping 调度器重建；对应仪器测试已加入但尚待独立 AVD 执行。
+- 根据独立审查补齐 Flex TCP EOF 到连接状态所有者的传播、X6100 早期 EOF 安全收尾、流初始化的会话取消/退避上限，以及断连重连时 ping 调度器重建。
 - 交接日志以 `release` 文档为基线，不合并各子会话的过程日志；最终只保留这一条统一集成记录。
 
 ### 关键决策
 
-- 本记录只陈述已合入范围与待执行门禁；最终自动化结果、APK 哈希和实机结论必须由集成验收完成后补充，不能提前写入。
+- 自动化、AVD、安装启动 smoke 与真实设备/HIL 分开报告；本次结果只证明 `ed64570` 代码树的自动化边界。
+- 测试产物必须由当前集成代码树重新打包，不使用以中间提交 `6ec16d8` 命名或构建的 APK 作为最终集成包。
 
 ### 当前状态
 
-- `:app:testDebugUnitTest`、`:app:assembleDebug`、`:app:compileDebugAndroidTestJavaWithJavac` 以及 Release gate 直接脚本、模块 unittest、contract 和 `--history` 扫描均已通过。
-- 完整 `connectedDebugAndroidTest` 留给独立验收会话执行；未进行真实设备/HIL 验证，未生成正式 Release、tag 或 GitHub Release。
+- `AUTO_VERIFIED`：JVM 8/8；AVD `connectedDebugAndroidTest` 43/43，失败 0、错误 0、跳过 0；clean、build、TEST/BETA package、干净安装和启动 smoke 均通过。
+- 上述结果不是实机/HIL。P0-D 解码单飞/终态、有线 legacy 连接契约与 P0-F 真机/性能门禁仍未完成；未生成正式 Release、tag 或 GitHub Release。
 
 ### 下一步
 
-- 在独立会话运行完整 `connectedDebugAndroidTest`，通过后生成和验签集成 TEST/BETA APK；正式签名发布仍需提供长期 keystore、可信证书 SHA-256 和发布批准。
+- 继续 P0-D、有线 legacy 契约和 P0-F 真机/HIL；正式签名发布仍需提供长期 keystore、可信证书 SHA-256，并完成真实设备干净安装确认。
 
 ---
 
