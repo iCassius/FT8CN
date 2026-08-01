@@ -567,17 +567,24 @@ public class FT8TransmitSignal {
             }
             activeTransmissions.add(transmission);
             transmission.beforeInProgress = true;
-            try {
-                if (onDoTransmitted != null) {
-                    onDoTransmitted.onBeforeTransmit(msg, functionOrder);
-                    transmission.beforeCalled = true;
-                }
-            } catch (RuntimeException e) {
-                callbackFailure = e;
-                transmission.beforeCalled = onDoTransmitted != null;
-            } finally {
-                transmission.beforeInProgress = false;
+        }
+
+        // PTT/SCO work can synchronously wait on a connector.  Do not hold the
+        // lifecycle lock while invoking it: a disconnect or stop request must be
+        // able to fence this transmission and return immediately.
+        try {
+            if (onDoTransmitted != null) {
+                onDoTransmitted.onBeforeTransmit(msg, functionOrder);
             }
+        } catch (RuntimeException e) {
+            callbackFailure = e;
+        }
+
+        synchronized (lifecycleLock) {
+            // Treat a throwing callback as having potentially turned PTT on, so
+            // the unique termination path still gets one chance to turn it off.
+            transmission.beforeCalled = onDoTransmitted != null;
+            transmission.beforeInProgress = false;
             mustTerminate = callbackFailure != null
                     || stopped || lifecycleGeneration != generation
                     || transmission.terminationRequested;

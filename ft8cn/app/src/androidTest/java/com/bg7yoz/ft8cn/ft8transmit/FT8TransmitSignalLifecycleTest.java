@@ -174,6 +174,61 @@ public class FT8TransmitSignalLifecycleTest {
     }
 
     @Test
+    public void stopReturnsWhileBeforeTransmitIsBlockedAndTerminatesOriginalPttOnce() throws Throwable {
+        RecordingExecutor executor = new RecordingExecutor();
+        BlockingBeforeCallbacks callbacks = new BlockingBeforeCallbacks();
+        final FT8TransmitSignal[] signal = new FT8TransmitSignal[1];
+        Thread worker = null;
+        Thread stopper = null;
+        try {
+            onMain(() -> {
+                GeneralVariables.pttDelay = 0;
+                signal[0] = newSignal(executor, callbacks);
+                signal[0].setActivated(true);
+                signal[0].doTransmit();
+            });
+            worker = executor.startNext();
+            assertTrue("onBeforeTransmit did not start", callbacks.beforeStarted.await(2, TimeUnit.SECONDS));
+
+            CountDownLatch stopReturned = new CountDownLatch(1);
+            stopper = new Thread(() -> {
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> signal[0].stop());
+                stopReturned.countDown();
+            });
+            stopper.start();
+            assertTrue("stop must not wait for connector/PTT work in onBeforeTransmit",
+                    stopReturned.await(2, TimeUnit.SECONDS));
+
+            callbacks.allowBeforeToReturn.countDown();
+            worker.join(2000);
+            stopper.join(2000);
+
+            assertFalse(worker.isAlive());
+            assertFalse(stopper.isAlive());
+            assertEquals(1, callbacks.beforeCount.get());
+            assertEquals("the original PTT target must receive one OFF after a stopped before callback",
+                    1, callbacks.afterCount.get());
+            assertEquals(1, callbacks.originalPttOnCount.get());
+            assertEquals(1, callbacks.originalPttOffCount.get());
+            assertFalse(signal[0].isTransmitting());
+        } finally {
+            callbacks.allowBeforeToReturn.countDown();
+            if (worker != null) {
+                worker.join(2000);
+            }
+            if (stopper != null) {
+                stopper.join(2000);
+            }
+            onMain(() -> {
+                if (signal[0] != null) {
+                    signal[0].close();
+                }
+            });
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     public void oneHundredCreateStopCyclesLeaveNoObserversOrShutdownExecutor() throws Throwable {
         RecordingExecutor executor = new RecordingExecutor();
         try {
@@ -280,6 +335,55 @@ public class FT8TransmitSignalLifecycleTest {
         @Override
         public void onTransmitOverCAT(Ft8Message message) {
             catStarted.countDown();
+        }
+    }
+
+    private static class BlockingBeforeCallbacks implements OnDoTransmitted {
+        private final AtomicInteger beforeCount = new AtomicInteger();
+        private final AtomicInteger afterCount = new AtomicInteger();
+        private final AtomicInteger originalPttOnCount = new AtomicInteger();
+        private final AtomicInteger originalPttOffCount = new AtomicInteger();
+        private final CountDownLatch beforeStarted = new CountDownLatch(1);
+        private final CountDownLatch allowBeforeToReturn = new CountDownLatch(1);
+
+        @Override
+        public void onBeforeTransmit(Ft8Message message, int functionOder) {
+            beforeCount.incrementAndGet();
+            originalPttOnCount.incrementAndGet();
+            beforeStarted.countDown();
+            boolean interrupted = false;
+            while (allowBeforeToReturn.getCount() != 0) {
+                try {
+                    allowBeforeToReturn.await();
+                } catch (InterruptedException e) {
+                    // A real connector may not promptly honor interruption.  Keep
+                    // this deterministic so the test proves stop does not need the
+                    // lifecycle lock held by the callback.
+                    interrupted = true;
+                }
+            }
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        @Override
+        public void onAfterTransmit(Ft8Message message, int functionOder) {
+            afterCount.incrementAndGet();
+            originalPttOffCount.incrementAndGet();
+        }
+
+        @Override
+        public void onTransmitByWifi(Ft8Message message) {
+        }
+
+        @Override
+        public boolean supportTransmitOverCAT() {
+            return false;
+        }
+
+        @Override
+        public void onTransmitOverCAT(Ft8Message message) {
         }
     }
 
