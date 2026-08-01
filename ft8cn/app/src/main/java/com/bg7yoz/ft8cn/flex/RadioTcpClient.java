@@ -12,22 +12,38 @@ import com.bg7yoz.ft8cn.util.BoundedSerialExecutor;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
 import java.util.Arrays;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class RadioTcpClient {
     private static final String TAG = "RadioTcpClient";
-    private static RadioTcpClient radioTcpClient = null;
+    private static final int CONNECT_TIMEOUT_MILLIS = 5_000;
+    private static volatile RadioTcpClient radioTcpClient = null;
     private volatile String ip;
     private volatile int port;
     public static final int MAX_BUFFER_SIZE=1024 * 32;
 
     private final BoundedSerialExecutor sendByteThreadPool = new BoundedSerialExecutor(256);
     private final AtomicLong generation = new AtomicLong();
+    private final AtomicLong droppedSendCount = new AtomicLong();
+    private final SocketFactory socketFactory;
+
+    interface SocketFactory {
+        Socket create() throws IOException;
+    }
+
+    public RadioTcpClient() {
+        this(Socket::new);
+    }
+
+    RadioTcpClient(SocketFactory socketFactory) {
+        this.socketFactory = socketFactory;
+    }
 
     public static RadioTcpClient getInstance() {
         if (radioTcpClient == null) {
@@ -41,7 +57,7 @@ public class RadioTcpClient {
     }
 
     private SocketThread mSocketThread;
-    private OnDataReceiveListener onDataReceiveListener = null;
+    private volatile OnDataReceiveListener onDataReceiveListener = null;
 
     public boolean isConnect() {
         SocketThread session = mSocketThread;
@@ -127,13 +143,23 @@ public class RadioTcpClient {
         public void run() {
             Log.d(TAG, "TcpSocketThread start...");
             try {
-                Socket connectedSocket = new Socket(InetAddress.getByName(targetIp), targetPort);
+                Socket connectedSocket = socketFactory.create();
                 synchronized (RadioTcpClient.this) {
                     if (!isCurrent(this)) {
                         closeResources(connectedSocket, null, null);
                         return;
                     }
                     socket = connectedSocket;
+                }
+                // Publish the socket before connect: disconnect() can therefore close an
+                // in-flight connection instead of waiting for the platform timeout.
+                connectedSocket.connect(new InetSocketAddress(targetIp, targetPort),
+                        CONNECT_TIMEOUT_MILLIS);
+                synchronized (RadioTcpClient.this) {
+                    if (!isCurrent(this) || socket != connectedSocket) {
+                        closeResources(connectedSocket, null, null);
+                        return;
+                    }
                     outputStream = connectedSocket.getOutputStream();
                     inputStream = connectedSocket.getInputStream();
                 }
@@ -233,7 +259,12 @@ public class RadioTcpClient {
         }
         // The session is captured before enqueueing; a later reconnect cannot
         // redirect this command to the new OutputStream.
-        sendByteThreadPool.submit(new SendByteRunnable(this, session, mBuffer));
+        try {
+            sendByteThreadPool.submit(new SendByteRunnable(this, session, mBuffer));
+        } catch (RejectedExecutionException rejected) {
+            long dropped = droppedSendCount.incrementAndGet();
+            Log.w(TAG, "TCP send queue rejected command; dropped=" + dropped);
+        }
     }
 
     private static class SendByteRunnable implements Runnable{
@@ -274,6 +305,10 @@ public class RadioTcpClient {
 
     public void setOnDataReceiveListener(OnDataReceiveListener dataReceiveListener) {
         onDataReceiveListener = dataReceiveListener;
+    }
+
+    long getDroppedSendCount() {
+        return droppedSendCount.get();
     }
 
     public String getIp() { return ip; }

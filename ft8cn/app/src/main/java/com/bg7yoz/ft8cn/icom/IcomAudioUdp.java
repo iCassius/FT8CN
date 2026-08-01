@@ -9,12 +9,14 @@ import com.bg7yoz.ft8cn.util.BoundedSerialExecutor;
 
 import java.net.DatagramPacket;
 import java.util.Arrays;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class IcomAudioUdp extends AudioUdp {
     private static final String TAG = "IcomAudioUdp";
     private final BoundedSerialExecutor doTXThreadPool = new BoundedSerialExecutor(4);
     private final AtomicLong txGeneration = new AtomicLong();
+    private final AtomicLong droppedTxAudioCount = new AtomicLong();
 
     @Override
     public void sendTxAudioData(float[] audioData) {
@@ -30,7 +32,12 @@ public class IcomAudioUdp extends AudioUdp {
                     snapshot, i * 2, 2);
         }
         long generation = txGeneration.get();
-        doTXThreadPool.submit(new DoTXAudioRunnable(this, snapshot, generation));
+        try {
+            doTXThreadPool.submit(new DoTXAudioRunnable(this, snapshot, generation));
+        } catch (RejectedExecutionException rejected) {
+            long dropped = droppedTxAudioCount.incrementAndGet();
+            Log.w(TAG, "ICOM TX audio queue rejected snapshot; dropped=" + dropped);
+        }
     }
 
     @Override
@@ -43,6 +50,10 @@ public class IcomAudioUdp extends AudioUdp {
 
     private boolean isCurrentTx(long generation) {
         return txGeneration.get() == generation && isPttOn;
+    }
+
+    long getDroppedTxAudioCount() {
+        return droppedTxAudioCount.get();
     }
 
     private static class DoTXAudioRunnable implements Runnable {

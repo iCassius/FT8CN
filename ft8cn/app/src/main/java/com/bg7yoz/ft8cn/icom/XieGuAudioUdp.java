@@ -19,6 +19,8 @@ public class XieGuAudioUdp extends AudioUdp {
     private AudioRunnable audioRunnable;
     private long generation;
     private volatile boolean audioIsRunning;
+    private final java.util.concurrent.atomic.AtomicLong droppedTxAudioCount =
+            new java.util.concurrent.atomic.AtomicLong();
 
     @Override
     public void sendTxAudioData(float[] audioData) {
@@ -36,10 +38,17 @@ public class XieGuAudioUdp extends AudioUdp {
         synchronized (sessionLock) {
             session = audioRunnable;
             if (!audioIsRunning || session == null) {
-                throw new RejectedExecutionException("audio session is not running");
+                long dropped = droppedTxAudioCount.incrementAndGet();
+                Log.w(TAG, "XieGu TX audio is not ready; dropped=" + dropped);
+                return;
             }
         }
-        session.enqueue(snapshot);
+        try {
+            session.enqueue(snapshot);
+        } catch (RejectedExecutionException rejected) {
+            long dropped = droppedTxAudioCount.incrementAndGet();
+            Log.w(TAG, "XieGu TX audio queue rejected snapshot; dropped=" + dropped);
+        }
     }
 
     @Override
@@ -73,6 +82,10 @@ public class XieGuAudioUdp extends AudioUdp {
         synchronized (sessionLock) {
             return audioIsRunning && audioRunnable == session && generation == sessionGeneration;
         }
+    }
+
+    long getDroppedTxAudioCount() {
+        return droppedTxAudioCount.get();
     }
 
     static final class AudioRunnable implements Runnable {

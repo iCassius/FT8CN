@@ -19,6 +19,8 @@ import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class RadioUdpClient {
     private static final String TAG = "RadioUdpSocket";
@@ -29,6 +31,7 @@ public class RadioUdpClient {
     private OnUdpEvents onUdpEvents = null;
     private final BoundedSerialExecutor sendDataThreadPool = new BoundedSerialExecutor(256);
     private final ExecutorService receiveThreadPool = Executors.newCachedThreadPool();
+    private final AtomicLong droppedSendCount = new AtomicLong();
     private long generation;
 
     public RadioUdpClient(int port) {
@@ -46,7 +49,12 @@ public class RadioUdpClient {
             session = generation;
         }
         // Never wait for a full queue while holding this client lock.
-        sendDataThreadPool.submit(new SendDataRunnable(this, socket, session, address, data, port));
+        try {
+            sendDataThreadPool.submit(new SendDataRunnable(this, socket, session, address, data, port));
+        } catch (RejectedExecutionException rejected) {
+            long dropped = droppedSendCount.incrementAndGet();
+            Log.w(TAG, "UDP send queue rejected packet; dropped=" + dropped);
+        }
     }
 
     private static class SendDataRunnable implements Runnable{
@@ -171,6 +179,10 @@ public class RadioUdpClient {
     public int getPort() {
         DatagramSocket socket = sendSocket;
         return socket == null ? 0 : socket.getLocalPort();
+    }
+
+    long getDroppedSendCount() {
+        return droppedSendCount.get();
     }
 
     public static String byteToStr(byte[] data) {

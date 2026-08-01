@@ -20,6 +20,8 @@ import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class IcomUdpClient {
     private static final String TAG = "RadioUdpSocket";
@@ -30,6 +32,7 @@ public class IcomUdpClient {
     private OnUdpEvents onUdpEvents = null;
     private final ExecutorService doReceiveThreadPool = Executors.newCachedThreadPool();
     private final BoundedSerialExecutor sendDataThreadPool = new BoundedSerialExecutor(256);
+    private final AtomicLong droppedSendCount = new AtomicLong();
     private long generation;
 
     public IcomUdpClient() {//本地端口随机
@@ -50,7 +53,12 @@ public class IcomUdpClient {
             socket = sendSocket;
             session = generation;
         }
-        sendDataThreadPool.submit(new SendDataRunnable(this, socket, session, address, data, port));
+        try {
+            sendDataThreadPool.submit(new SendDataRunnable(this, socket, session, address, data, port));
+        } catch (RejectedExecutionException rejected) {
+            long dropped = droppedSendCount.incrementAndGet();
+            Log.w(TAG, "UDP send queue rejected packet; dropped=" + dropped);
+        }
     }
 
     private static class SendDataRunnable implements Runnable {
@@ -150,6 +158,10 @@ public class IcomUdpClient {
 
     public DatagramSocket getSendSocket() {
         return sendSocket;
+    }
+
+    long getDroppedSendCount() {
+        return droppedSendCount.get();
     }
 
     public static String byteToStr(byte[] data) {
