@@ -272,6 +272,9 @@ public class FlexRadio {
             public void onConnectionClosed() {
                 tcpClient.disconnect();
                 ToastMessage.show(GeneralVariables.getStringFromResource(R.string.tcp_connect_closed));
+                if (onTcpConnectStatus != null) {
+                    onTcpConnectStatus.onConnectionClosed(tcpClient);
+                }
             }
         });
         clearBufferData();//清除一下缓存的指令数据
@@ -1031,6 +1034,8 @@ public class FlexRadio {
         void onConnectSuccess(RadioTcpClient tcpClient);
 
         void onConnectFail(RadioTcpClient tcpClient);
+
+        void onConnectionClosed(RadioTcpClient tcpClient);
     }
 
     /**

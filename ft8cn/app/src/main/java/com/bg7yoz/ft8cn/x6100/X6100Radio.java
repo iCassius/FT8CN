@@ -106,18 +106,18 @@ public class X6100Radio {
 
 
 
-    private Timer pingTimer = new Timer();
+    private final Object pingTimerLock = new Object();
+    private Timer pingTimer;
 
-    private TimerTask pingTask() {
+    private TimerTask pingTask(Timer owner) {
         return new TimerTask() {
             @Override
             public void run() {
 
                 try {
-                    if (!streamClient.isActivated() || !isConnect()) {
-                        pingTimer.cancel();
-                        pingTimer.purge();
-                        pingTimer = null;
+                    RadioUdpClient activeStream = streamClient;
+                    if (activeStream == null || !activeStream.isActivated() || !isConnect()) {
+                        stopPingTimer(owner);
                         return;
                     }
                     VITA vita = new VITA(VitaPacketType.EXT_DATA_WITH_STREAM
@@ -131,13 +131,60 @@ public class X6100Radio {
                     vita.packetSize = 7;
                     vita.integerTimestamp = 0;//0是发送包，1是接收包
                     vita.fracTimeStamp = System.currentTimeMillis();
-                    streamClient.sendData(vita.pingDataToVita(), rig_ip, stream_port);
+                    activeStream.sendData(vita.pingDataToVita(), rig_ip, stream_port);
 
                 } catch (Exception e) {
                     Log.e(TAG, "ping timer error:" + e.getMessage());
                 }
             }
         };
+    }
+
+    private void restartPingTimer() {
+        Timer next = new Timer("X6100-ping", true);
+        Timer previous;
+        synchronized (pingTimerLock) {
+            previous = pingTimer;
+            pingTimer = next;
+        }
+        if (previous != null) {
+            previous.cancel();
+            previous.purge();
+        }
+        try {
+            next.schedule(pingTask(next), 1000, 1000);
+        } catch (IllegalStateException cancelledDuringStart) {
+            stopPingTimer(next);
+            throw cancelledDuringStart;
+        }
+    }
+
+    private void stopPingTimer(Timer expected) {
+        synchronized (pingTimerLock) {
+            if (pingTimer == expected) {
+                pingTimer = null;
+            }
+        }
+        expected.cancel();
+        expected.purge();
+    }
+
+    private void stopPingTimer() {
+        Timer current;
+        synchronized (pingTimerLock) {
+            current = pingTimer;
+            pingTimer = null;
+        }
+        if (current != null) {
+            current.cancel();
+            current.purge();
+        }
+    }
+
+    boolean isPingTimerScheduledForTest() {
+        synchronized (pingTimerLock) {
+            return pingTimer != null;
+        }
     }
 
     /**
@@ -327,6 +374,7 @@ public class X6100Radio {
      * 关闭接收数据流的端口
      */
     public synchronized void closeStreamPort() {
+        stopPingTimer();
         if (streamClient != null) {
             if (streamClient.isActivated()) {
                 try {
@@ -440,7 +488,8 @@ public class X6100Radio {
     /**
      * 打开接收数据流的端口
      */
-    public void openStreamPort() {
+    public synchronized void openStreamPort() {
+        stopPingTimer();
         if (streamClient != null) {
             if (streamClient.isActivated()) {
                 try {
@@ -519,7 +568,7 @@ public class X6100Radio {
         streamClient.setOnUdpEvents(onUdpEvents);
         try {
             streamClient.setActivated(true);
-            pingTimer.schedule(pingTask(), 1000, 1000);//启动ping计时器
+            restartPingTimer();//为每个流会话创建新的 ping 调度器
 
         } catch (SocketException e) {
             ToastMessage.show(e.getMessage());
@@ -559,11 +608,7 @@ public class X6100Radio {
         if (tcpClient.isConnect()) {
             tcpClient.disconnect();
         }
-        if (pingTimer != null) {
-            pingTimer.cancel();
-            pingTimer.purge();
-            pingTimer = null;
-        }
+        stopPingTimer();
     }
 
     /**

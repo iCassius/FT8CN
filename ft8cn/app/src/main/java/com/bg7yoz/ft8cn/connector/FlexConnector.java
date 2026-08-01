@@ -218,6 +218,11 @@ public class FlexConnector extends BaseRigConnector {
                 ToastMessage.show(String.format(GeneralVariables.getStringFromResource
                         (R.string.flex_connect_failed),flexRadio.getModel()));
             }
+
+            @Override
+            public void onConnectionClosed(RadioTcpClient tcpClient) {
+                getOnConnectorStateChanged().onDisconnected();
+            }
         });
 
     }

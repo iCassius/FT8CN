@@ -2,6 +2,7 @@ package com.bg7yoz.ft8cn.x6100;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -28,5 +29,25 @@ public class X6100CommandSubmissionTest {
         connector.setPttOn(true);
         assertFalse(radio.isPttOn);
         assertEquals(SubmissionResult.SESSION_INACTIVE, connector.getLastOperationSubmission());
+    }
+
+    @Test
+    public void pingSchedulerIsRecreatedForAReconnectSession() {
+        X6100Radio radio = new X6100Radio();
+        try {
+            radio.openStreamPort();
+            assertTrue(radio.isPingTimerScheduledForTest());
+
+            radio.disConnect();
+            assertFalse(radio.isPingTimerScheduledForTest());
+            radio.closeStreamPort();
+
+            radio.openStreamPort();
+            assertTrue("a cancelled Timer must not be reused on reconnect",
+                    radio.isPingTimerScheduledForTest());
+        } finally {
+            radio.closeStreamPort();
+            radio.disConnect();
+        }
     }
 }

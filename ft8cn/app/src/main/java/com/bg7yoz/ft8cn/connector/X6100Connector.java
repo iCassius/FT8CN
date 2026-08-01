@@ -23,7 +23,7 @@ import com.bg7yoz.ft8cn.util.SubmissionResult;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 网络连接方式连接xiegu ft8cns
@@ -45,15 +45,33 @@ public class X6100Connector extends BaseRigConnector {
     private OnWaveDataReceived onWaveDataReceived;
 
     private BaseRig baseRig;
-    private boolean streamIsOn =false;
+    private volatile boolean streamIsOn =false;
+    private static final int DEFAULT_STREAM_INIT_MAX_ATTEMPTS = 12;
+    private static final long DEFAULT_STREAM_INIT_RETRY_DELAY_MS = 300L;
+    private final int streamInitMaxAttempts;
+    private final long streamInitRetryDelayMs;
+    private final AtomicLong sessionGeneration = new AtomicLong();
+    private final Object streamInitLock = new Object();
+    private volatile Thread streamInitThread;
 
     public float maxTXPower=10.0f;
     public MutableLiveData<Float> mutableMaxTxPower = new MutableLiveData<>();
 
 
     public X6100Connector(Context context, X6100Radio xiegRadio, int controlMode) {
+        this(context, xiegRadio, controlMode,
+                DEFAULT_STREAM_INIT_MAX_ATTEMPTS, DEFAULT_STREAM_INIT_RETRY_DELAY_MS);
+    }
+
+    X6100Connector(Context context, X6100Radio xiegRadio, int controlMode,
+                   int streamInitMaxAttempts, long streamInitRetryDelayMs) {
         super(controlMode);
         this.xieguRadio = xiegRadio;
+        if (streamInitMaxAttempts <= 0 || streamInitRetryDelayMs < 0) {
+            throw new IllegalArgumentException("invalid stream initialization retry policy");
+        }
+        this.streamInitMaxAttempts = streamInitMaxAttempts;
+        this.streamInitRetryDelayMs = streamInitRetryDelayMs;
         setXieguRadioInterface();
 
     }
@@ -161,24 +179,7 @@ public class X6100Connector extends BaseRigConnector {
             public void onConnectSuccess(RadioTcpClient tcpClient) {
                 ToastMessage.show(String.format(GeneralVariables.getStringFromResource(R.string.init_flex_operation)
                         ,xieguRadio.getModelName()));
-                new Thread(new Runnable() {//此处使用线程方式，是防止tcp对象阻塞
-                    @Override
-                    public void run() {
-                        while (!streamIsOn) {//等待电台打开流端口
-                            xieguRadio.commandOpenStream();//设置UDP端口
-                            try {
-                                Thread.sleep(300);
-                            } catch (InterruptedException e) {
-                                Log.e(TAG, Objects.requireNonNull(e.getMessage()));
-                            }
-                            //todo 此处经常丢命令
-                            xieguRadio.commandGetAudioInfo();//读取6100播放的参数
-                            //xieguRadio.commandSubGetMeter();//查阅仪表索引编号
-                            xieguRadio.commandSubAllMeter();//订阅仪表流数据
-                            //xieguRadio.commandSetTxPower(1);//订阅仪表流数据
-                        }
-                    }
-                }).start();
+                startStreamInitialization(sessionGeneration.get());
             }
 
             @Override
@@ -189,9 +190,10 @@ public class X6100Connector extends BaseRigConnector {
 
             @Override
             public void onConnectionClosed(RadioTcpClient tcpClient) {
-                if (baseRig.getOnRigStateChanged()!=null) {
-                    baseRig.getOnRigStateChanged().onDisconnected();
-                }
+                endSession();
+                // Use the connector bridge so EOF is safe even before MainViewModel has
+                // attached the BaseRig during connectRig()/setBaseRig().
+                getOnConnectorStateChanged().onDisconnected();
             }
         });
 
@@ -260,6 +262,7 @@ public class X6100Connector extends BaseRigConnector {
     @Override
     public void connect() {
         super.connect();
+        beginSession();
         xieguRadio.openAudio();
         xieguRadio.connect();
         xieguRadio.openStreamPort();
@@ -268,6 +271,7 @@ public class X6100Connector extends BaseRigConnector {
     @Override
     public void disconnect() {
         super.disconnect();
+        endSession();
         xieguRadio.closeAudio();
         xieguRadio.closeStreamPort();
         xieguRadio.disConnect();
@@ -287,6 +291,81 @@ public class X6100Connector extends BaseRigConnector {
 
     public void setBaseRig(BaseRig baseRig) {
         this.baseRig = baseRig;
+    }
+
+    private void beginSession() {
+        cancelStreamInitialization();
+        sessionGeneration.incrementAndGet();
+        streamIsOn = false;
+    }
+
+    private void endSession() {
+        sessionGeneration.incrementAndGet();
+        streamIsOn = false;
+        cancelStreamInitialization();
+    }
+
+    private void cancelStreamInitialization() {
+        Thread worker;
+        synchronized (streamInitLock) {
+            worker = streamInitThread;
+            streamInitThread = null;
+        }
+        if (worker != null && worker != Thread.currentThread()) {
+            worker.interrupt();
+        }
+    }
+
+    private void startStreamInitialization(long generation) {
+        Thread worker = new Thread(() -> {
+            try {
+                for (int attempt = 0; attempt < streamInitMaxAttempts; attempt++) {
+                    if (!isCurrentStreamSession(generation) || streamIsOn) return;
+                    xieguRadio.commandOpenStream();
+
+                    long delay = Math.min(streamInitRetryDelayMs * (attempt + 1), 1500L);
+                    if (delay > 0) {
+                        Thread.sleep(delay);
+                    }
+                    if (!isCurrentStreamSession(generation) || streamIsOn) return;
+
+                    // These subscriptions belong to the same live session as the open request.
+                    xieguRadio.commandGetAudioInfo();
+                    xieguRadio.commandSubAllMeter();
+                }
+                Log.w(TAG, "stream initialization stopped after bounded retries");
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            } finally {
+                synchronized (streamInitLock) {
+                    if (streamInitThread == Thread.currentThread()) {
+                        streamInitThread = null;
+                    }
+                }
+            }
+        }, "X6100-stream-init-" + generation);
+        worker.setDaemon(true);
+
+        Thread previous;
+        synchronized (streamInitLock) {
+            previous = streamInitThread;
+            streamInitThread = worker;
+        }
+        if (previous != null && previous != Thread.currentThread()) {
+            previous.interrupt();
+        }
+        worker.start();
+    }
+
+    private boolean isCurrentStreamSession(long generation) {
+        return sessionGeneration.get() == generation
+                && Thread.currentThread() == streamInitThread
+                && xieguRadio.isConnect();
+    }
+
+    boolean isStreamInitializationRunningForTest() {
+        Thread worker = streamInitThread;
+        return worker != null && worker.isAlive();
     }
 
     @Override
