@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-08-01　P0-E 发布门禁回归修复
+
+### 做了什么
+
+- 修正 `check_release_contract.py --history` 对 `git cat-file --batch` 的消费：commit、tree、tag 和 blob 都先完整读取 body，再只扫描文本 blob，避免首个 commit 造成游标错位、历史敏感内容漏扫。
+- 为上述路径增加 commit/tree/tag 位于敏感 blob 前的回归测试；`python scripts/test_release_gates.py` 和模块化 unittest 两种入口均已验证。
+- 删除顶层 Gradle 中未被引用的历史绝对 keystore 路径，正式签名继续只接受环境变量或未跟踪的 `keystore.properties`。
+
+### 当前状态
+
+- `python scripts/check_release_contract.py`、`--history` 和 5 项发布门禁测试通过；已用本机 Android SDK 重新完成 `:app:packageTestApk`。
+- 本修复不创建正式 keystore、tag 或 GitHub Release。集成后仍需更新该版本 Release Notes 以覆盖实际运行时修复，并在配置正式签名 Secrets 后执行正式 APK 门禁。
+
+---
+
 ## 2026-07-30　P0-E 第二轮独立发布审查：签名迁移与正式发布阻断
 
 ### 做了什么

@@ -94,6 +94,39 @@ def scan_staged_diff() -> None:
         scan_text("\n".join(added), f"staged diff {current_path}")
 
 
+def scan_history_batch(object_ids: list[str], output: bytes) -> None:
+    """Consume every ``git cat-file --batch`` response before inspecting blobs.
+
+    ``rev-list --objects`` starts with commit objects.  Each batch object, not
+    just blobs, has a body after its header; failing to consume a commit/tree/tag
+    body makes the next body look like a header and silently skips history.
+    """
+    cursor = 0
+    for object_id in object_ids:
+        header_end = output.find(b"\n", cursor)
+        if header_end < 0:
+            fail("git cat-file --batch ended before all requested history objects were read")
+        header = output[cursor:header_end].split()
+        cursor = header_end + 1
+        if len(header) != 3:
+            fail(f"git cat-file --batch returned an unreadable history object: {object_id[:12]}")
+        try:
+            size = int(header[2])
+        except ValueError:
+            fail(f"git cat-file --batch returned an invalid object size: {object_id[:12]}")
+        if size < 0 or cursor + size >= len(output):
+            fail(f"git cat-file --batch returned a truncated history object: {object_id[:12]}")
+        body = output[cursor:cursor + size]
+        cursor += size
+        if output[cursor:cursor + 1] != b"\n":
+            fail(f"git cat-file --batch returned an unterminated history object: {object_id[:12]}")
+        cursor += 1
+        if header[1] == b"blob" and b"\x00" not in body and len(body) < 2_000_000:
+            scan_text(body.decode("utf-8", errors="ignore"), f"history blob {object_id[:12]}")
+    if cursor != len(output):
+        fail("git cat-file --batch returned unexpected trailing history data")
+
+
 def scan_history() -> None:
     """Scan reachable historical text blobs when explicitly requested."""
     entries = [line.partition(" ") for line in run_git("rev-list", "--objects", "--all").splitlines()]
@@ -104,20 +137,7 @@ def scan_history() -> None:
         ["git", "cat-file", "--batch"], cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE
     )
     output, _ = process.communicate(("\n".join(object_ids) + "\n").encode())
-    cursor = 0
-    for object_id in object_ids:
-        header_end = output.find(b"\n", cursor)
-        if header_end < 0:
-            break
-        header = output[cursor:header_end].split()
-        cursor = header_end + 1
-        if len(header) < 3 or header[1] != b"blob":
-            continue
-        size = int(header[2])
-        body = output[cursor:cursor + size]
-        cursor += size + 1
-        if b"\x00" not in body and len(body) < 2_000_000:
-            scan_text(body.decode("utf-8", errors="ignore"), f"history blob {object_id[:12]}")
+    scan_history_batch(object_ids, output)
 
 
 def main() -> None:

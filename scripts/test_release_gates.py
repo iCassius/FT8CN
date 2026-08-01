@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
+import contextlib
+import io
+import subprocess
+import sys
 import unittest
+from pathlib import Path
 
-from scripts.verify_apk_signature import check_certificate
+try:
+    from scripts.check_release_contract import scan_history_batch
+    from scripts.verify_apk_signature import check_certificate
+except ModuleNotFoundError:
+    from check_release_contract import scan_history_batch
+    from verify_apk_signature import check_certificate
 
 
 EXPECTED = "0123456789abcdef" * 4
@@ -19,6 +29,33 @@ class CertificateGateTests(unittest.TestCase):
     def test_malformed_trusted_certificate_fails(self) -> None:
         with self.assertRaisesRegex(ValueError, "exactly 64"):
             check_certificate(APKSIGNER_OUTPUT, "not-a-fingerprint")
+
+    def test_history_scan_consumes_commit_tree_and_tag_before_blob(self) -> None:
+        object_ids = ["a" * 40, "b" * 40, "c" * 40, "d" * 40]
+
+        def record(object_id: str, object_type: str, body: bytes) -> bytes:
+            return f"{object_id} {object_type} {len(body)}\n".encode() + body + b"\n"
+
+        output = b"".join((
+            record(object_ids[0], "commit", b"tree deadbeef\nauthor Test <test@example.com> 0 +0000\n"),
+            record(object_ids[1], "tree", b"100644 blob deadbeef\ttracked.txt\n"),
+            record(object_ids[2], "tag", b"object deadbeef\ntype commit\ntag v0.0.001\n"),
+            record(object_ids[3], "blob", b"token=" + ("ABCDEFGHIJKLMNOPQRSTUVWXYZ" + "abcdef").encode() + b"\n"),
+        ))
+
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit):
+            scan_history_batch(object_ids, output)
+        self.assertIn("possible secret material", stderr.getvalue())
+
+    @unittest.skipIf(__name__ == "__main__", "the direct child must not recursively spawn itself")
+    def test_script_can_run_directly(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve())],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":
