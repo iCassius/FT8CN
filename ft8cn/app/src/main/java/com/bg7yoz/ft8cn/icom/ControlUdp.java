@@ -8,6 +8,8 @@ package com.bg7yoz.ft8cn.icom;
 
 import android.util.Log;
 
+import com.bg7yoz.ft8cn.util.SubmissionResult;
+
 import java.net.DatagramPacket;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -184,28 +186,35 @@ public class ControlUdp extends IcomUdpBase {
      * @param data 数据
      */
     public void sendWaveData(float[] data) {
-        audioUdp.sendTxAudioData(data);
+        submitWaveData(data);
+    }
+
+    public SubmissionResult submitWaveData(float[] data) {
+        return audioUdp == null ? SubmissionResult.SESSION_INACTIVE : audioUdp.sendTxAudioData(data);
     }
 
     /**
      * 发送0x90数据包，向电台请求连接
      */
     public void sendConnectionRequest() {
-        sendTrackedPacket(IComPacketTypes.ConnInfoPacket.connectRequestPacket((short) 0
+        if (sendTrackedPacket(IComPacketTypes.ConnInfoPacket.connectRequestPacket((short) 0
                 , localId, remoteId, (byte) 0x01, (byte) 0x03, innerSeq, localToken, rigToken
                 , rigMacAddress, rigName, userName, IComPacketTypes.AUDIO_SAMPLE_RATE
                 , civUdp.getLocalPort(), audioUdp.getLocalPort()
-                , IComPacketTypes.TX_BUFFER_SIZE));
-        innerSeq++;
+                , IComPacketTypes.TX_BUFFER_SIZE)).isEnqueued()) {
+            innerSeq++;
+        }
     }
 
     /**
      * 发送登录数据包0x80包
      */
     public void sendLoginPacket() {
-        sendTrackedPacket(IComPacketTypes.LoginPacket.loginPacketData((short) 0
-                , localId, remoteId, innerSeq, localToken, rigToken, userName, password, APP_NAME));
-        innerSeq++;
+        if (sendTrackedPacket(IComPacketTypes.LoginPacket.loginPacketData((short) 0
+                , localId, remoteId, innerSeq, localToken, rigToken, userName, password, APP_NAME))
+                .isEnqueued()) {
+            innerSeq++;
+        }
     }
 
     @Override
@@ -231,9 +240,11 @@ public class ControlUdp extends IcomUdpBase {
     }
 
     public void closeAll() {
-        sendTrackedPacket(IComPacketTypes.TokenPacket.getTokenPacketData((short) 0
-                , localId, remoteId, IComPacketTypes.TOKEN_TYPE_DELETE, innerSeq, localToken, rigToken));
-        innerSeq++;
+        if (sendTrackedPacket(IComPacketTypes.TokenPacket.getTokenPacketData((short) 0
+                , localId, remoteId, IComPacketTypes.TOKEN_TYPE_DELETE, innerSeq, localToken, rigToken))
+                .isEnqueued()) {
+            innerSeq++;
+        }
         this.close();
         civUdp.close();
         audioUdp.stopTXAudio();

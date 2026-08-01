@@ -9,6 +9,7 @@ package com.bg7yoz.ft8cn.icom;
 import android.util.Log;
 
 import com.bg7yoz.ft8cn.util.BoundedSerialExecutor;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -29,35 +30,42 @@ public class IcomUdpClient {
     private volatile DatagramSocket sendSocket;
     private int localPort = -1;
     private volatile boolean activated = false;
-    private OnUdpEvents onUdpEvents = null;
+    private volatile OnUdpEvents onUdpEvents = null;
     private final ExecutorService doReceiveThreadPool = Executors.newCachedThreadPool();
-    private final BoundedSerialExecutor sendDataThreadPool = new BoundedSerialExecutor(256);
+    private final BoundedSerialExecutor sendDataThreadPool;
     private final AtomicLong droppedSendCount = new AtomicLong();
     private long generation;
 
     public IcomUdpClient() {//本地端口随机
-        localPort = -1;
+        this(-1, new BoundedSerialExecutor(256));
     }
 
     public IcomUdpClient(int localPort) {//如果localPort==-1，本地端口随机
-        this.localPort = localPort;
+        this(localPort, new BoundedSerialExecutor(256));
     }
 
-    public void sendData(byte[] data, String ip, int port) throws UnknownHostException {
-        if (data == null) return;
+    IcomUdpClient(int localPort, BoundedSerialExecutor sendDataThreadPool) {
+        this.localPort = localPort;
+        this.sendDataThreadPool = sendDataThreadPool;
+    }
+
+    public SubmissionResult sendData(byte[] data, String ip, int port) throws UnknownHostException {
+        if (data == null) return SubmissionResult.INVALID_ARGUMENT;
         InetAddress address = InetAddress.getByName(ip);
         DatagramSocket socket;
         long session;
         synchronized (this) {
-            if (!activated || sendSocket == null) return;
+            if (!activated || sendSocket == null) return SubmissionResult.SESSION_INACTIVE;
             socket = sendSocket;
             session = generation;
         }
         try {
             sendDataThreadPool.submit(new SendDataRunnable(this, socket, session, address, data, port));
+            return SubmissionResult.ENQUEUED;
         } catch (RejectedExecutionException rejected) {
             long dropped = droppedSendCount.incrementAndGet();
             Log.w(TAG, "UDP send queue rejected packet; dropped=" + dropped);
+            return SubmissionResult.REJECTED;
         }
     }
 

@@ -8,6 +8,7 @@ package com.bg7yoz.ft8cn.flex;
 import android.util.Log;
 
 import com.bg7yoz.ft8cn.util.BoundedSerialExecutor;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -28,7 +29,7 @@ public class RadioTcpClient {
     private volatile int port;
     public static final int MAX_BUFFER_SIZE=1024 * 32;
 
-    private final BoundedSerialExecutor sendByteThreadPool = new BoundedSerialExecutor(256);
+    private final BoundedSerialExecutor sendByteThreadPool;
     private final AtomicLong generation = new AtomicLong();
     private final AtomicLong droppedSendCount = new AtomicLong();
     private final SocketFactory socketFactory;
@@ -38,11 +39,16 @@ public class RadioTcpClient {
     }
 
     public RadioTcpClient() {
-        this(Socket::new);
+        this(Socket::new, new BoundedSerialExecutor(256));
     }
 
     RadioTcpClient(SocketFactory socketFactory) {
+        this(socketFactory, new BoundedSerialExecutor(256));
+    }
+
+    RadioTcpClient(SocketFactory socketFactory, BoundedSerialExecutor sendByteThreadPool) {
         this.socketFactory = socketFactory;
+        this.sendByteThreadPool = sendByteThreadPool;
     }
 
     public static RadioTcpClient getInstance() {
@@ -250,20 +256,24 @@ public class RadioTcpClient {
      * send byte[] cmd
      * Exception : android.os.NetworkOnMainThreadException
      */
-    public void sendByte(final byte[] mBuffer) {
-        if (mBuffer == null) return;
+    public SubmissionResult sendByte(final byte[] mBuffer) {
+        if (mBuffer == null) return SubmissionResult.INVALID_ARGUMENT;
         SocketThread session;
         synchronized (this) {
             session = mSocketThread;
-            if (session == null || !session.isConnected() || !isCurrent(session)) return;
+            if (session == null || !session.isConnected() || !isCurrent(session)) {
+                return SubmissionResult.SESSION_INACTIVE;
+            }
         }
         // The session is captured before enqueueing; a later reconnect cannot
         // redirect this command to the new OutputStream.
         try {
             sendByteThreadPool.submit(new SendByteRunnable(this, session, mBuffer));
+            return SubmissionResult.ENQUEUED;
         } catch (RejectedExecutionException rejected) {
             long dropped = droppedSendCount.incrementAndGet();
             Log.w(TAG, "TCP send queue rejected command; dropped=" + dropped);
+            return SubmissionResult.REJECTED;
         }
     }
 

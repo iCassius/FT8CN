@@ -18,6 +18,7 @@ import com.bg7yoz.ft8cn.rigs.BaseRig;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
 import com.bg7yoz.ft8cn.x6100.X6100Meters;
 import com.bg7yoz.ft8cn.x6100.X6100Radio;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -205,8 +206,12 @@ public class X6100Connector extends BaseRigConnector {
 
     @Override
     public void setPttOn(boolean on) {
-        xieguRadio.isPttOn=on;
-        xieguRadio.commandPTTOnOff(on);
+        SubmissionResult result = xieguRadio.commandPTTOnOff(on);
+        if (result.isEnqueued()) {
+            xieguRadio.isPttOn = on;
+        } else {
+            getOnConnectorStateChanged().onRunError("XieGu PTT was not queued: " + result);
+        }
     }
 
     @Override

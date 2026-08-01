@@ -6,6 +6,7 @@ import android.util.Log;
 
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.util.BoundedSerialExecutor;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 
 import java.net.DatagramPacket;
 import java.util.Arrays;
@@ -14,13 +15,21 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class IcomAudioUdp extends AudioUdp {
     private static final String TAG = "IcomAudioUdp";
-    private final BoundedSerialExecutor doTXThreadPool = new BoundedSerialExecutor(4);
+    private final BoundedSerialExecutor doTXThreadPool;
     private final AtomicLong txGeneration = new AtomicLong();
     private final AtomicLong droppedTxAudioCount = new AtomicLong();
 
+    public IcomAudioUdp() {
+        this(new BoundedSerialExecutor(4));
+    }
+
+    IcomAudioUdp(BoundedSerialExecutor doTXThreadPool) {
+        this.doTXThreadPool = doTXThreadPool;
+    }
+
     @Override
-    public void sendTxAudioData(float[] audioData) {
-        if (audioData == null) return;
+    public SubmissionResult sendTxAudioData(float[] audioData) {
+        if (audioData == null) return SubmissionResult.INVALID_ARGUMENT;
 
         // Convert before enqueueing. The task owns this byte snapshot for its
         // entire 20 ms packet sequence; no later submit can replace it.
@@ -34,9 +43,11 @@ public class IcomAudioUdp extends AudioUdp {
         long generation = txGeneration.get();
         try {
             doTXThreadPool.submit(new DoTXAudioRunnable(this, snapshot, generation));
+            return SubmissionResult.ENQUEUED;
         } catch (RejectedExecutionException rejected) {
             long dropped = droppedTxAudioCount.incrementAndGet();
             Log.w(TAG, "ICOM TX audio queue rejected snapshot; dropped=" + dropped);
+            return SubmissionResult.REJECTED;
         }
     }
 
@@ -77,10 +88,11 @@ public class IcomAudioUdp extends AudioUdp {
                  packetIndex++) {
                 if (!icomAudioUdp.isCurrentTx(generation)) break;
 
-                icomAudioUdp.sendTrackedPacket(IComPacketTypes.AudioPacket.getTxAudioPacket(
+                if (icomAudioUdp.sendTrackedPacket(IComPacketTypes.AudioPacket.getTxAudioPacket(
                         audioPacket, (short) 0, icomAudioUdp.localId,
-                        icomAudioUdp.remoteId, icomAudioUdp.innerSeq));
-                icomAudioUdp.innerSeq++;
+                        icomAudioUdp.remoteId, icomAudioUdp.innerSeq)).isEnqueued()) {
+                    icomAudioUdp.innerSeq++;
+                }
 
                 Arrays.fill(audioPacket, (byte) 0);
                 if (packetIndex >= 3) {

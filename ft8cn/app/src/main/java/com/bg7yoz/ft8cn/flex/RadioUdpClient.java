@@ -8,6 +8,7 @@ package com.bg7yoz.ft8cn.flex;
 import android.util.Log;
 
 import com.bg7yoz.ft8cn.util.BoundedSerialExecutor;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -28,32 +29,39 @@ public class RadioUdpClient {
     private volatile DatagramSocket sendSocket;
     private int port;
     private volatile boolean activated = false;
-    private OnUdpEvents onUdpEvents = null;
-    private final BoundedSerialExecutor sendDataThreadPool = new BoundedSerialExecutor(256);
+    private volatile OnUdpEvents onUdpEvents = null;
+    private final BoundedSerialExecutor sendDataThreadPool;
     private final ExecutorService receiveThreadPool = Executors.newCachedThreadPool();
     private final AtomicLong droppedSendCount = new AtomicLong();
     private long generation;
 
     public RadioUdpClient(int port) {
-        this.port = port;
+        this(port, new BoundedSerialExecutor(256));
     }
 
-    public void sendData(byte[] data, String ip,int port) throws UnknownHostException {
-        if (data == null) return;
+    RadioUdpClient(int port, BoundedSerialExecutor sendDataThreadPool) {
+        this.port = port;
+        this.sendDataThreadPool = sendDataThreadPool;
+    }
+
+    public SubmissionResult sendData(byte[] data, String ip,int port) throws UnknownHostException {
+        if (data == null) return SubmissionResult.INVALID_ARGUMENT;
         InetAddress address = InetAddress.getByName(ip);
         DatagramSocket socket;
         long session;
         synchronized (this) {
-            if (!activated || sendSocket == null) return;
+            if (!activated || sendSocket == null) return SubmissionResult.SESSION_INACTIVE;
             socket = sendSocket;
             session = generation;
         }
         // Never wait for a full queue while holding this client lock.
         try {
             sendDataThreadPool.submit(new SendDataRunnable(this, socket, session, address, data, port));
+            return SubmissionResult.ENQUEUED;
         } catch (RejectedExecutionException rejected) {
             long dropped = droppedSendCount.incrementAndGet();
             Log.w(TAG, "UDP send queue rejected packet; dropped=" + dropped);
+            return SubmissionResult.REJECTED;
         }
     }
 

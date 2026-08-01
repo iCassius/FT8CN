@@ -438,11 +438,12 @@ public class RadioNetworkClientTest {
         }
 
         @Override
-        public synchronized void sendTrackedPacket(byte[] data) {
+        public synchronized com.bg7yoz.ft8cn.util.SubmissionResult sendTrackedPacket(byte[] data) {
             synchronized (packets) {
                 packets.add(IComPacketTypes.AudioPacket.getAudioData(data));
             }
             packetLatch.countDown();
+            return com.bg7yoz.ft8cn.util.SubmissionResult.ENQUEUED;
         }
     }
 
@@ -455,11 +456,12 @@ public class RadioNetworkClientTest {
         }
 
         @Override
-        public synchronized void sendTrackedPacket(byte[] data) {
+        public synchronized com.bg7yoz.ft8cn.util.SubmissionResult sendTrackedPacket(byte[] data) {
             synchronized (packets) {
                 packets.add(IComPacketTypes.AudioPacket.getAudioData(data));
             }
             packetLatch.countDown();
+            return com.bg7yoz.ft8cn.util.SubmissionResult.ENQUEUED;
         }
     }
 

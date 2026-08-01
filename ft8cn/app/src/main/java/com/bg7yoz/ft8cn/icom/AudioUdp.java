@@ -8,6 +8,7 @@ package com.bg7yoz.ft8cn.icom;
 import android.util.Log;
 
 import com.bg7yoz.ft8cn.GeneralVariables;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 
 import java.net.DatagramPacket;
 import java.util.Arrays;
@@ -23,7 +24,9 @@ public class AudioUdp extends IcomUdpBase {
 
 
 
-    public void sendTxAudioData(float[] audioData){}
+    public SubmissionResult sendTxAudioData(float[] audioData){
+        return SubmissionResult.SESSION_INACTIVE;
+    }
     public void startTxAudio(){}
     public void stopTXAudio(){}
 }

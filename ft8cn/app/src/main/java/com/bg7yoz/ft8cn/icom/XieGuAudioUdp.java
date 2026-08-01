@@ -6,6 +6,7 @@ import android.util.Log;
 
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.util.BoundedSerialExecutor;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 
 import java.net.DatagramPacket;
 import java.util.Arrays;
@@ -14,7 +15,7 @@ import java.util.concurrent.RejectedExecutionException;
 
 public class XieGuAudioUdp extends AudioUdp {
     private static final String TAG = "XieGuAudioUdp";
-    private final BoundedSerialExecutor doTXThreadPool = new BoundedSerialExecutor(1);
+    private final BoundedSerialExecutor doTXThreadPool;
     private final Object sessionLock = new Object();
     private AudioRunnable audioRunnable;
     private long generation;
@@ -22,9 +23,17 @@ public class XieGuAudioUdp extends AudioUdp {
     private final java.util.concurrent.atomic.AtomicLong droppedTxAudioCount =
             new java.util.concurrent.atomic.AtomicLong();
 
+    public XieGuAudioUdp() {
+        this(new BoundedSerialExecutor(1));
+    }
+
+    XieGuAudioUdp(BoundedSerialExecutor doTXThreadPool) {
+        this.doTXThreadPool = doTXThreadPool;
+    }
+
     @Override
-    public void sendTxAudioData(float[] audioData) {
-        if (audioData == null) return;
+    public SubmissionResult sendTxAudioData(float[] audioData) {
+        if (audioData == null) return SubmissionResult.INVALID_ARGUMENT;
 
         byte[] snapshot = new byte[audioData.length * 2];
         for (int i = 0; i < audioData.length; i++) {
@@ -40,14 +49,16 @@ public class XieGuAudioUdp extends AudioUdp {
             if (!audioIsRunning || session == null) {
                 long dropped = droppedTxAudioCount.incrementAndGet();
                 Log.w(TAG, "XieGu TX audio is not ready; dropped=" + dropped);
-                return;
+                return SubmissionResult.SESSION_INACTIVE;
             }
         }
         try {
             session.enqueue(snapshot);
+            return SubmissionResult.ENQUEUED;
         } catch (RejectedExecutionException rejected) {
             long dropped = droppedTxAudioCount.incrementAndGet();
             Log.w(TAG, "XieGu TX audio queue rejected snapshot; dropped=" + dropped);
+            return SubmissionResult.REJECTED;
         }
     }
 
@@ -126,10 +137,11 @@ public class XieGuAudioUdp extends AudioUdp {
                     index += copyLength;
                 }
 
-                audioUdp.sendTrackedPacket(IComPacketTypes.AudioPacket.getTxAudioPacket(
+                if (audioUdp.sendTrackedPacket(IComPacketTypes.AudioPacket.getTxAudioPacket(
                         audioPacket, (short) 0, audioUdp.localId, audioUdp.remoteId,
-                        audioUdp.innerSeq));
-                audioUdp.innerSeq++;
+                        audioUdp.innerSeq)).isEnqueued()) {
+                    audioUdp.innerSeq++;
+                }
                 nextSendTime += 20;
                 long sleepMs = nextSendTime - System.currentTimeMillis();
                 if (sleepMs > 0) {
