@@ -11,6 +11,7 @@ import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.R;
 import com.bg7yoz.ft8cn.icom.IcomUdpBase.IcomUdpStyle;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 
 import java.io.IOException;
 
@@ -74,15 +75,21 @@ public class XieGuWifiRig extends WifiRig{
     }
 
     @Override
-    public void setPttOn(boolean on){//打开PTT
-        isPttOn=on;
-        controlUdp.civUdp.sendPttAction(on);
-        controlUdp.audioUdp.isPttOn=on;
+    public SubmissionResult setPttOn(boolean on){//打开PTT
+        if (controlUdp == null || controlUdp.civUdp == null || controlUdp.audioUdp == null) {
+            return SubmissionResult.SESSION_INACTIVE;
+        }
+        SubmissionResult result = controlUdp.civUdp.sendPttAction(on);
+        if (result.isEnqueued()) {
+            isPttOn=on;
+            controlUdp.audioUdp.isPttOn=on;
+        }
+        return result;
     }
 
     @Override
-    public void sendCivData(byte[] data){
-        controlUdp.sendCivData(data);
+    public SubmissionResult sendCivData(byte[] data){
+        return controlUdp == null ? SubmissionResult.SESSION_INACTIVE : controlUdp.sendCivData(data);
     }
 
     @Override

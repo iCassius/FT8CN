@@ -14,6 +14,7 @@ import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.R;
 import com.bg7yoz.ft8cn.icom.IcomUdpBase.IcomUdpStyle;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 
 import java.io.IOException;
 
@@ -46,9 +47,9 @@ public abstract class WifiRig {
 
     public abstract void start();
 
-    public abstract void setPttOn(boolean on);
+    public abstract SubmissionResult setPttOn(boolean on);
 
-    public abstract void sendCivData(byte[] data);
+    public abstract SubmissionResult sendCivData(byte[] data);
 
     public abstract void sendWaveData(float[] data);
 

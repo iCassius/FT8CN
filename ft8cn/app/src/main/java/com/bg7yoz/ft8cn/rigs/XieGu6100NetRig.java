@@ -6,6 +6,7 @@ import com.bg7yoz.ft8cn.Ft8Message;
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.connector.X6100Connector;
 import com.bg7yoz.ft8cn.ft8transmit.GenerateFT8;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 
 /**
  * XieGu6100的ft8cns模式，只支持网络模式，所以在设置baseRig时要做好判断
@@ -20,9 +21,11 @@ public class XieGu6100NetRig extends BaseRig {
 
     @Override
     public void setPTT(boolean on) {
-        super.setPTT(on);
         if (getConnector() != null) {
-                getConnector().setPttOn(on);
+            SubmissionResult result = getConnector().submitPttOn(on);
+            if (result.isEnqueued()) {
+                super.setPTT(on);
+            }
         }
     }
 

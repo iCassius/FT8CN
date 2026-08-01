@@ -8,6 +8,7 @@ package com.bg7yoz.ft8cn.connector;
 
 import com.bg7yoz.ft8cn.rigs.OnConnectReceiveData;
 import com.bg7yoz.ft8cn.rigs.OnRigStateChanged;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 
 
 public class BaseRigConnector {
@@ -15,6 +16,12 @@ public class BaseRigConnector {
     private OnConnectReceiveData onConnectReceiveData;//当接收到数据后的动作
     private int controlMode;//控制模式
     private OnRigStateChanged onRigStateChanged;
+    private volatile SubmissionResult lastOperationSubmission = SubmissionResult.SESSION_INACTIVE;
+    private volatile OnOperationSubmission onOperationSubmission;
+
+    public interface OnOperationSubmission {
+        void onOperationSubmission(String operation, SubmissionResult result);
+    }
     private final OnConnectorStateChanged onConnectorStateChanged=new OnConnectorStateChanged() {
         @Override
         public void onDisconnected() {
@@ -51,10 +58,26 @@ public class BaseRigConnector {
     public synchronized void sendData(byte[] data){};
 
     /**
+     * Returns the transport submission outcome for callers that must not treat a local method
+     * invocation as a radio command having been queued.
+     */
+    public synchronized SubmissionResult submitData(byte[] data) {
+        return SubmissionResult.SESSION_INACTIVE;
+    }
+
+    /**
      * 设置PTT状态，ON OFF,如果是RTS和DTR，这个是在有线方式才有的，在CableConnector中会重载此方法
      * @param on 是否ON
      */
     public void setPttOn(boolean on){};
+
+    /**
+     * Submits a PTT state transition without changing the connector's connection state on a
+     * local queue rejection. Implementations must update local PTT state only after ENQUEUED.
+     */
+    public SubmissionResult submitPttOn(boolean on) {
+        return SubmissionResult.SESSION_INACTIVE;
+    }
 
     /**
      * 使用发送数据的方式设置PTT状态
@@ -131,6 +154,22 @@ public class BaseRigConnector {
 
     public void setOnRigStateChanged(OnRigStateChanged onRigStateChanged) {
         this.onRigStateChanged = onRigStateChanged;
+    }
+
+    public void reportOperationSubmission(String operation, SubmissionResult result) {
+        lastOperationSubmission = result;
+        OnOperationSubmission listener = onOperationSubmission;
+        if (listener != null) {
+            listener.onOperationSubmission(operation, result);
+        }
+    }
+
+    public SubmissionResult getLastOperationSubmission() {
+        return lastOperationSubmission;
+    }
+
+    public void setOnOperationSubmission(OnOperationSubmission onOperationSubmission) {
+        this.onOperationSubmission = onOperationSubmission;
     }
 
     public OnConnectorStateChanged getOnConnectorStateChanged() {

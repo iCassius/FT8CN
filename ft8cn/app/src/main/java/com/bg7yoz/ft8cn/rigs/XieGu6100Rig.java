@@ -52,14 +52,16 @@ public class XieGu6100Rig extends BaseRig {
 
     @Override
     public void setPTT(boolean on) {
+        if (GeneralVariables.connectMode == ConnectMode.NETWORK) {
+            if (getConnector() != null && getConnector().submitPttOn(on).isEnqueued()) {
+                super.setPTT(on);
+            }
+            return;
+        }
+
         super.setPTT(on);
 
         if (getConnector() != null) {
-
-            if (GeneralVariables.connectMode == ConnectMode.NETWORK) {
-                getConnector().setPttOn(on);
-                return;
-            }
 
             switch (getControlMode()) {
                 case ControlMode.CAT://以CIV指令
@@ -298,9 +300,15 @@ public class XieGu6100Rig extends BaseRig {
     }
 
     public XieGu6100Rig(int civAddress) {
+        this(civAddress, true);
+    }
+
+    XieGu6100Rig(int civAddress, boolean startQueryTimer) {
         Log.d(TAG, "XieGuRig: Create.");
         setCivAddress(civAddress);
 
-        readFreqTimer.schedule(readTask(), START_QUERY_FREQ_DELAY, QUERY_FREQ_TIMEOUT);
+        if (startQueryTimer) {
+            readFreqTimer.schedule(readTask(), START_QUERY_FREQ_DELAY, QUERY_FREQ_TIMEOUT);
+        }
     }
 }

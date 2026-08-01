@@ -10,6 +10,7 @@ import android.util.Log;
 
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.R;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 
 import org.checkerframework.checker.units.qual.A;
 
@@ -20,6 +21,7 @@ import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.Arrays;
 
 
 public class IcomUdpBase {
@@ -74,7 +76,7 @@ public class IcomUdpBase {
     public short innerSeq = 0x30;
     public int rigToken;//电台提供的令牌
     public short localToken = (short) System.currentTimeMillis();//本地生成的令牌，可以是随机数
-    public boolean isPttOn = false;
+    public volatile boolean isPttOn = false;
 
 
     public IcomSeqBuffer txSeqBuffer = new IcomSeqBuffer();//发送命令的历史列表
@@ -86,7 +88,7 @@ public class IcomUdpBase {
     public IcomUdpClient udpClient;//用于与电台通讯的udp
 
 
-    public OnStreamEvents onStreamEvents;//一些事件处理
+    public volatile OnStreamEvents onStreamEvents;//一些事件处理
     //Timer，执行代码部分：TimerTask，具体执行：timer.schedule(task,delay,period)
     public Timer areYouThereTimer;
     private AreYouThereTimerTask areYouThereTask = null;
@@ -342,9 +344,10 @@ public class IcomUdpBase {
      * @param requestType 令牌类型，0x02确认，0x05续订
      */
     public void sendTokenPacket(byte requestType) {
-        sendTrackedPacket(IComPacketTypes.TokenPacket.getTokenPacketData((short) 0
-                , localId, remoteId, requestType, innerSeq, localToken, rigToken));
-        innerSeq++;
+        if (sendTrackedPacket(IComPacketTypes.TokenPacket.getTokenPacketData((short) 0
+                , localId, remoteId, requestType, innerSeq, localToken, rigToken)).isEnqueued()) {
+            innerSeq++;
+        }
     }
 
     /**
@@ -371,11 +374,14 @@ public class IcomUdpBase {
      *
      * @param data 数据包
      */
-    public synchronized void sendUntrackedPacket(byte[] data) {
+    public synchronized SubmissionResult sendUntrackedPacket(byte[] data) {
+        if (data == null) return SubmissionResult.INVALID_ARGUMENT;
+        if (udpClient == null) return SubmissionResult.SESSION_INACTIVE;
         try {
-            udpClient.sendData(data, rigIp, rigPort);
+            return udpClient.sendData(data, rigIp, rigPort);
         } catch (UnknownHostException e) {
-            e.printStackTrace();
+            Log.w(TAG, "untracked packet address rejected: " + e.getMessage());
+            return SubmissionResult.REJECTED;
         }
     }
 
@@ -384,16 +390,22 @@ public class IcomUdpBase {
      *
      * @param data 数据包
      */
-    public synchronized void sendTrackedPacket(byte[] data) {
+    public synchronized SubmissionResult sendTrackedPacket(byte[] data) {
+        if (data == null || data.length < 8) return SubmissionResult.INVALID_ARGUMENT;
+        if (udpClient == null) return SubmissionResult.SESSION_INACTIVE;
+        byte[] packet = Arrays.copyOf(data, data.length);
+        System.arraycopy(IComPacketTypes.shortToBigEndian(trackedSeq), 0, packet, 6, 2);
         try {
-            lastSentTime = System.currentTimeMillis();
-            System.arraycopy(IComPacketTypes.shortToBigEndian(trackedSeq), 0
-                    , data, 6, 2);//把序号写到数据列表里
-            udpClient.sendData(data, rigIp, rigPort);
-            txSeqBuffer.add(trackedSeq, data);
-            trackedSeq++;
+            SubmissionResult result = udpClient.sendData(packet, rigIp, rigPort);
+            if (result.isEnqueued()) {
+                lastSentTime = System.currentTimeMillis();
+                txSeqBuffer.add(trackedSeq, packet);
+                trackedSeq++;
+            }
+            return result;
         } catch (UnknownHostException e) {
-            e.printStackTrace();
+            Log.w(TAG, "tracked packet address rejected: " + e.getMessage());
+            return SubmissionResult.REJECTED;
         }
     }
 

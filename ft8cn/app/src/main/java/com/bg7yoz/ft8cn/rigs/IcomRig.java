@@ -15,6 +15,7 @@ import com.bg7yoz.ft8cn.database.ControlMode;
 import com.bg7yoz.ft8cn.ft8transmit.GenerateFT8;
 import com.bg7yoz.ft8cn.icom.IComPacketTypes;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 
 import java.util.Timer;
 import java.util.TimerTask;
@@ -35,15 +36,32 @@ public class IcomRig extends BaseRig {
 
     @Override
     public void setPTT(boolean on) {
+        if (GeneralVariables.connectMode == ConnectMode.NETWORK) {
+            if (getConnector() == null) {
+                return;
+            }
+            if (on) {
+                SubmissionResult dataModeResult = getConnector().submitData(
+                        IcomRigConstant.setConnectorDataMode(ctrAddress, getCivAddress(), (byte) 0x03));
+                if (!dataModeResult.isEnqueued()) {
+                    return;
+                }
+            }
+            if (getConnector().submitPttOn(on).isEnqueued()) {
+                super.setPTT(on);
+                alcMaxAlert = false;
+                swrAlert = false;
+            }
+            return;
+        }
+
         super.setPTT(on);
         //isPttOn = on;
         alcMaxAlert = false;
         swrAlert = false;
         if (on) {
             //修正连接方式0x03是wlan,01是usb，0x02是usb+mic，确保声音能发送到电台
-            if (GeneralVariables.connectMode == ConnectMode.NETWORK) {
-                sendCivData(IcomRigConstant.setConnectorDataMode(ctrAddress, getCivAddress(), (byte) 0x03));
-            } else if (GeneralVariables.connectMode == ConnectMode.USB_CABLE) {
+            if (GeneralVariables.connectMode == ConnectMode.USB_CABLE) {
                 sendCivData(IcomRigConstant.setConnectorDataMode(ctrAddress, getCivAddress(), (byte) 0x01));
             } else {
                 sendCivData(IcomRigConstant.setConnectorDataMode(ctrAddress, getCivAddress(), (byte) 0x02));
@@ -51,11 +69,6 @@ public class IcomRig extends BaseRig {
         }
 
         if (getConnector() != null) {
-            if (GeneralVariables.connectMode == ConnectMode.NETWORK) {
-                getConnector().setPttOn(on);
-                return;
-            }
-
             switch (getControlMode()) {
                 case ControlMode.CAT://以CIV指令
                     getConnector().setPttOn(IcomRigConstant.setPTTState(ctrAddress, getCivAddress()
@@ -276,9 +289,15 @@ public class IcomRig extends BaseRig {
 
 
     public IcomRig(int civAddress, boolean newRig) {
+        this(civAddress, newRig, true);
+    }
+
+    IcomRig(int civAddress, boolean newRig, boolean startMeterTimer) {
         Log.d(TAG, "IcomRig: Create.");
         this.oldVersion = !newRig;//有的老电台不支持swr查询
         setCivAddress(civAddress);
-        startMeterTimer();
+        if (startMeterTimer) {
+            startMeterTimer();
+        }
     }
 }

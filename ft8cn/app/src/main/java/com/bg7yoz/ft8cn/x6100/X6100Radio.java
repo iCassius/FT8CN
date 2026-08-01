@@ -25,6 +25,7 @@ import com.bg7yoz.ft8cn.flex.VitaTSI;
 import com.bg7yoz.ft8cn.rigs.BaseRig;
 import com.bg7yoz.ft8cn.rigs.IcomRigConstant;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -73,7 +74,7 @@ public class X6100Radio {
     private long lastSeen;//最后一次消息的时间
     private boolean isAvailable = true;//电台是不是有效
     private final StringBuilder buffer = new StringBuilder();//指令的缓存
-    private final RadioTcpClient tcpClient = new RadioTcpClient();
+    private final RadioTcpClient tcpClient;
     private RadioUdpClient streamClient;
     private int commandSeq = 1;//指令的序列
     private XieguCommand xieguCommand;
@@ -147,12 +148,26 @@ public class X6100Radio {
     }
 
     public X6100Radio() {
+        this(new RadioTcpClient());
+    }
+
+    X6100Radio(RadioTcpClient tcpClient) {
+        this.tcpClient = tcpClient;
         updateLastSeen();
     }
 
     public X6100Radio(String s, String ip) {
+        this(new RadioTcpClient(), s, ip);
+    }
+
+    private X6100Radio(RadioTcpClient tcpClient, String s, String ip) {
+        this.tcpClient = tcpClient;
         mutableLossPackets.postValue(0);
         update(s, ip);
+    }
+
+    int getCommandSequence() {
+        return commandSeq;
     }
 
     public void update(String discoverStr, String ip) {
@@ -682,7 +697,11 @@ public class X6100Radio {
     }
 
     public synchronized void sendData(byte[] data) {
-        tcpClient.sendByte(data);
+        submitData(data);
+    }
+
+    public synchronized SubmissionResult submitData(byte[] data) {
+        return tcpClient.sendByte(data);
     }
 
     /**
@@ -692,23 +711,25 @@ public class X6100Radio {
      * @param cmdContent 命令的具体内容
      */
     @SuppressLint("DefaultLocale")
-    public void sendCommand(XieguCommand command, String cmdContent) {
-        if (tcpClient.isConnect()) {
-            commandSeq++;
+    public synchronized SubmissionResult sendCommand(XieguCommand command, String cmdContent) {
+        if (!tcpClient.isConnect()) return SubmissionResult.SESSION_INACTIVE;
+        int nextCommandSeq = commandSeq + 1;
+        String nextCommandStr = String.format("C%05d%03d|%s\n", nextCommandSeq,
+                command.ordinal(), cmdContent);
+        SubmissionResult result = tcpClient.sendByte(nextCommandStr.getBytes());
+        if (result.isEnqueued()) {
+            commandSeq = nextCommandSeq;
             xieguCommand = command;
-            commandStr = String.format("C%05d%03d|%s\n", commandSeq, command.ordinal()
-                    , cmdContent);
-            tcpClient.sendByte(commandStr.getBytes());
+            commandStr = nextCommandStr;
             Log.d(TAG, "sendCommand: " + commandStr);
+        } else {
+            Log.w(TAG, "XieGu command not queued: " + result);
         }
+        return result;
     }
 
-    public synchronized void commandPTTOnOff(boolean on) {
-        if (on) {
-            sendCommand(XieguCommand.PTT, "ptt on");
-        } else {
-            sendCommand(XieguCommand.PTT, "ptt off");
-        }
+    public synchronized SubmissionResult commandPTTOnOff(boolean on) {
+        return sendCommand(XieguCommand.PTT, on ? "ptt on" : "ptt off");
     }
 
     /**

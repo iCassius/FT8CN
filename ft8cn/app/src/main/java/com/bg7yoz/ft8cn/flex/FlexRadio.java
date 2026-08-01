@@ -16,6 +16,7 @@ import androidx.annotation.NonNull;
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.R;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 import com.bg7yoz.ft8cn.wave.FT8Resample;
 
 import java.io.ByteArrayInputStream;
@@ -90,7 +91,7 @@ public class FlexRadio {
 
 
     private final StringBuilder buffer = new StringBuilder();//指令的缓存
-    private final RadioTcpClient tcpClient = new RadioTcpClient();
+    private final RadioTcpClient tcpClient;
     private RadioUdpClient streamClient;
 
     private boolean allFlexRadioStatusEvent = false;
@@ -111,12 +112,26 @@ public class FlexRadio {
     private AudioTrack audioTrack = null;
 
     public FlexRadio() {
+        this(new RadioTcpClient());
+    }
+
+    FlexRadio(RadioTcpClient tcpClient) {
+        this.tcpClient = tcpClient;
         updateLastSeen();
     }
 
     public FlexRadio(String discoverStr) {
+        this(new RadioTcpClient(), discoverStr);
+    }
+
+    private FlexRadio(RadioTcpClient tcpClient, String discoverStr) {
+        this.tcpClient = tcpClient;
         update(discoverStr);
         updateLastSeen();
+    }
+
+    int getCommandSequence() {
+        return commandSeq;
     }
 
     public void updateLastSeen() {
@@ -575,7 +590,11 @@ public class FlexRadio {
     }
 
     public synchronized void sendData(byte[] data) {
-        tcpClient.sendByte(data);
+        submitData(data);
+    }
+
+    public synchronized SubmissionResult submitData(byte[] data) {
+        return tcpClient.sendByte(data);
     }
 
     /**
@@ -585,15 +604,21 @@ public class FlexRadio {
      * @param cmdContent 命令的具体内容
      */
     @SuppressLint("DefaultLocale")
-    public void sendCommand(FlexCommand command, String cmdContent) {
-        if (tcpClient.isConnect()) {
-            commandSeq++;
+    public synchronized SubmissionResult sendCommand(FlexCommand command, String cmdContent) {
+        if (!tcpClient.isConnect()) return SubmissionResult.SESSION_INACTIVE;
+        int nextCommandSeq = commandSeq + 1;
+        String nextCommandStr = String.format("C%d%03d|%s\n", nextCommandSeq, command.ordinal(),
+                cmdContent);
+        SubmissionResult result = tcpClient.sendByte(nextCommandStr.getBytes());
+        if (result.isEnqueued()) {
+            commandSeq = nextCommandSeq;
             flexCommand = command;
-            commandStr = String.format("C%d%03d|%s\n", commandSeq, command.ordinal()
-                    , cmdContent);
-            tcpClient.sendByte(commandStr.getBytes());
+            commandStr = nextCommandStr;
             Log.d(TAG, "sendCommand: " + commandStr);
+        } else {
+            Log.w(TAG, "Flex command not queued: " + result);
         }
+        return result;
     }
 
     /**
@@ -948,12 +973,8 @@ public class FlexRadio {
         sendCommand(FlexCommand.AUT_TUNE_MAX_POWER, String.format("transmit set tunepower=%d", power));
     }
 
-    public synchronized void commandPTTOnOff(boolean on) {
-        if (on) {
-            sendCommand(FlexCommand.PTT_ON, "xmit 1");
-        } else {
-            sendCommand(FlexCommand.PTT_ON, "xmit 0");
-        }
+    public synchronized SubmissionResult commandPTTOnOff(boolean on) {
+        return sendCommand(FlexCommand.PTT_ON, on ? "xmit 1" : "xmit 0");
     }
 
     public synchronized void commandTuneTransmitOnOff(boolean on) {

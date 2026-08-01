@@ -12,6 +12,7 @@ import com.bg7yoz.ft8cn.flex.FlexCommand;
 import com.bg7yoz.ft8cn.flex.FlexMeterInfos;
 import com.bg7yoz.ft8cn.flex.FlexMeterList;
 import com.bg7yoz.ft8cn.flex.FlexRadio;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
 import com.bg7yoz.ft8cn.flex.RadioTcpClient;
 import com.bg7yoz.ft8cn.flex.VITA;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
@@ -248,14 +249,29 @@ public class FlexConnector extends BaseRigConnector {
 
     @Override
     public void sendData(byte[] data) {
-        flexRadio.sendData(data);
+        submitData(data);
     }
 
+    @Override
+    public SubmissionResult submitData(byte[] data) {
+        SubmissionResult result = flexRadio.submitData(data);
+        reportOperationSubmission("Flex data", result);
+        return result;
+    }
 
     @Override
     public void setPttOn(boolean on) {
-        flexRadio.isPttOn=on;
-        flexRadio.commandPTTOnOff(on);
+        submitPttOn(on);
+    }
+
+    @Override
+    public SubmissionResult submitPttOn(boolean on) {
+        SubmissionResult result = flexRadio.commandPTTOnOff(on);
+        if (result.isEnqueued()) {
+            flexRadio.isPttOn = on;
+        }
+        reportOperationSubmission("Flex PTT", result);
+        return result;
     }
 
     @Override

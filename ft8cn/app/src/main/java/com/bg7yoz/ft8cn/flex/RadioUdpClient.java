@@ -7,6 +7,9 @@ package com.bg7yoz.ft8cn.flex;
 
 import android.util.Log;
 
+import com.bg7yoz.ft8cn.util.BoundedSerialExecutor;
+import com.bg7yoz.ft8cn.util.SubmissionResult;
+
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -17,52 +20,79 @@ import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class RadioUdpClient {
     private static final String TAG = "RadioUdpSocket";
     private final int MAX_BUFFER_SIZE = 1024*4;
-    private DatagramSocket sendSocket;
+    private volatile DatagramSocket sendSocket;
     private int port;
-    private boolean activated = false;
-    private OnUdpEvents onUdpEvents = null;
-    private final ExecutorService sendDataThreadPool = Executors.newCachedThreadPool();
+    private volatile boolean activated = false;
+    private volatile OnUdpEvents onUdpEvents = null;
+    private final BoundedSerialExecutor sendDataThreadPool;
     private final ExecutorService receiveThreadPool = Executors.newCachedThreadPool();
-    private final SendDataRunnable sendDataRunnable=new SendDataRunnable(this);
-    private final ReceiveRunnable receiveRunnable=new ReceiveRunnable(this);
+    private final AtomicLong droppedSendCount = new AtomicLong();
+    private long generation;
 
     public RadioUdpClient(int port) {
-        this.port = port;
+        this(port, new BoundedSerialExecutor(256));
     }
 
-    public synchronized void sendData(byte[] data, String ip,int port) throws UnknownHostException {
-        if (!activated) return;
-        //Log.e(TAG, "sendData: "+byteToStr(data) );
-        //Log.e(TAG, String.format("sendData: ip: %s,port:%d ",ip,port) );
+    RadioUdpClient(int port, BoundedSerialExecutor sendDataThreadPool) {
+        this.port = port;
+        this.sendDataThreadPool = sendDataThreadPool;
+    }
+
+    public SubmissionResult sendData(byte[] data, String ip,int port) throws UnknownHostException {
+        if (data == null) return SubmissionResult.INVALID_ARGUMENT;
         InetAddress address = InetAddress.getByName(ip);
-        sendDataRunnable.data=data;
-        sendDataRunnable.address=address;
-        sendDataRunnable.port=port;
-        sendDataThreadPool.execute(sendDataRunnable);
+        DatagramSocket socket;
+        long session;
+        synchronized (this) {
+            if (!activated || sendSocket == null) return SubmissionResult.SESSION_INACTIVE;
+            socket = sendSocket;
+            session = generation;
+        }
+        // Never wait for a full queue while holding this client lock.
+        try {
+            sendDataThreadPool.submit(new SendDataRunnable(this, socket, session, address, data, port));
+            return SubmissionResult.ENQUEUED;
+        } catch (RejectedExecutionException rejected) {
+            long dropped = droppedSendCount.incrementAndGet();
+            Log.w(TAG, "UDP send queue rejected packet; dropped=" + dropped);
+            return SubmissionResult.REJECTED;
+        }
     }
 
     private static class SendDataRunnable implements Runnable{
-        byte[] data;
-        InetAddress address;
-        int port;
-        RadioUdpClient client;
+        private final RadioUdpClient client;
+        private final DatagramSocket socket;
+        private final long generation;
+        private final byte[] data;
+        private final InetAddress address;
+        private final int port;
 
-        public SendDataRunnable(RadioUdpClient client) {
+        public SendDataRunnable(RadioUdpClient client, DatagramSocket socket, long generation,
+                                InetAddress address, byte[] data, int port) {
             this.client = client;
+            this.socket = socket;
+            this.generation = generation;
+            this.address = address;
+            this.data = Arrays.copyOf(data, data.length);
+            this.port = port;
         }
 
         @Override
         public void run() {
+            if (!client.isCurrentSession(socket, generation)) return;
             DatagramPacket packet = new DatagramPacket(data, data.length, address,port);
             try {
-                client.sendSocket.send(packet);
+                socket.send(packet);
             } catch (IOException e) {
-                e.printStackTrace();
-                Log.e(TAG, "run: " + e.getMessage());
+                if (client.isCurrentSession(socket, generation)) {
+                    Log.e(TAG, "run: " + e.getMessage());
+                }
             }
         }
     }
@@ -71,58 +101,79 @@ public class RadioUdpClient {
         return activated;
     }
 
-    public synchronized void  setActivated(boolean activated) throws SocketException {
-        this.activated = activated;
-        if (activated) {//通过activated判断是否结束接收线程，并清空sendSocket指针
-            sendSocket = new DatagramSocket(null);//绑定的端口号随机
-            sendSocket.bind(new InetSocketAddress(port));
-            receiveData();
-        }else {
-            if (sendSocket!=null){
-                sendSocket.close();
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
+    public synchronized void setActivated(boolean activated) throws SocketException {
+        DatagramSocket oldSocket = sendSocket;
+        generation++;
+        this.activated = false;
+        sendSocket = null;
+        sendDataThreadPool.cancelPending();
+        if (oldSocket != null) {
+            oldSocket.close();
+        }
+        if (!activated) {
+            return;
+        }
+
+        DatagramSocket socket = new DatagramSocket(null);//绑定的端口号随机
+        socket.bind(new InetSocketAddress(port));
+        sendSocket = socket;
+        this.activated = true;
+        long session = generation;
+        receiveThreadPool.execute(new ReceiveRunnable(this, socket, session));
+    }
+
+    private boolean isCurrentSession(DatagramSocket socket, long session) {
+        synchronized (this) {
+            return activated && generation == session && sendSocket == socket && !socket.isClosed();
+        }
+    }
+
+    private void endReceive(DatagramSocket socket, long session) {
+        synchronized (this) {
+            if (sendSocket == socket && generation == session) {
+                activated = false;
+                sendSocket = null;
+                generation++;
             }
         }
     }
 
-    private void receiveData() {
-        receiveThreadPool.execute(receiveRunnable);
-    }
     private static class ReceiveRunnable implements Runnable{
-        RadioUdpClient client;
+        private final RadioUdpClient client;
+        private final DatagramSocket socket;
+        private final long generation;
 
-        public ReceiveRunnable(RadioUdpClient client) {
+        public ReceiveRunnable(RadioUdpClient client, DatagramSocket socket, long generation) {
             this.client = client;
+            this.socket = socket;
+            this.generation = generation;
         }
 
         @Override
         public void run() {
-            while (client.activated) {
-
-                byte[] data = new byte[client.MAX_BUFFER_SIZE];
-                DatagramPacket packet = new DatagramPacket(data, data.length);
-                try {
-                    client.sendSocket.receive(packet);
-                    if (client.onUdpEvents != null) {
-                        byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength());
-
-                        client.onUdpEvents.OnReceiveData(client.sendSocket, packet, temp);
-
-
+            try {
+                while (client.isCurrentSession(socket, generation)) {
+                    byte[] data = new byte[client.MAX_BUFFER_SIZE];
+                    DatagramPacket packet = new DatagramPacket(data, data.length);
+                    try {
+                        socket.receive(packet);
+                        if (!client.isCurrentSession(socket, generation)) break;
+                        if (client.onUdpEvents != null) {
+                            byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength());
+                            client.onUdpEvents.OnReceiveData(socket, packet, temp);
+                        }
+                    } catch (IOException e) {
+                        if (client.isCurrentSession(socket, generation)) {
+                            Log.e(TAG, "receiveData: error:" + e.getMessage());
+                        }
+                        break;
                     }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    Log.e(TAG, "receiveData: error:" + e.getMessage());
                 }
-
+            } finally {
+                socket.close();
+                client.endReceive(socket, generation);
             }
             Log.e(TAG, "udpClient: is exit!");
-            client.sendSocket.close();
-            client.sendSocket = null;
         }
     }
     public void setOnUdpEvents(OnUdpEvents onUdpEvents) {
@@ -134,11 +185,12 @@ public class RadioUdpClient {
     }
 
     public int getPort() {
-        if (sendSocket!=null){
-            return sendSocket.getLocalPort();
-        }else {
-            return 0;
-        }
+        DatagramSocket socket = sendSocket;
+        return socket == null ? 0 : socket.getLocalPort();
+    }
+
+    long getDroppedSendCount() {
+        return droppedSendCount.get();
     }
 
     public static String byteToStr(byte[] data) {
