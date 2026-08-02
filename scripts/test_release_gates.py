@@ -60,6 +60,17 @@ class CertificateGateTests(unittest.TestCase):
 
 
 class ReleaseWorkflowTagFilterTests(unittest.TestCase):
+    def assert_wrapper_is_executable_before_first_gradle_call(self, workflow_name: str) -> None:
+        workflow = (REPOSITORY_ROOT / ".github" / "workflows" / workflow_name).read_text(encoding="utf-8")
+        grant_line = "chmod +x ./ft8cn/gradlew"
+        grant_offset = workflow.index(grant_line)
+        first_gradle_call_offset = next(
+            workflow.index(line)
+            for line in workflow.splitlines()
+            if "./gradlew" in line and "chmod +x" not in line
+        )
+        self.assertLess(grant_offset, first_gradle_call_offset, workflow_name)
+
     def test_formal_tags_include_and_prerelease_tags_exclude(self) -> None:
         workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "android-release.yml").read_text(
             encoding="utf-8"
@@ -70,6 +81,7 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
         self.assertIn(formal_pattern, workflow)
         self.assertIn(prerelease_exclusion, workflow)
         self.assertLess(workflow.index(formal_pattern), workflow.index(prerelease_exclusion))
+        self.assert_wrapper_is_executable_before_first_gradle_call("android-release.yml")
 
     def test_beta_prerelease_workflow_isolated_and_publishable(self) -> None:
         workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "android-prerelease.yml").read_text(
@@ -86,15 +98,17 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
         self.assertIn('notes_file="doc/release-notes/${GITHUB_REF_NAME}.md"', workflow)
         self.assertNotIn('notes_file="doc/release-notes/v${base_version}.md"', workflow)
         self.assertNotIn("FT8CN_RELEASE_", workflow)
+        self.assert_wrapper_is_executable_before_first_gradle_call("android-prerelease.yml")
 
-        notes = REPOSITORY_ROOT / "doc" / "release-notes" / "v0.93.005-beta.1.md"
-        self.assertTrue(notes.is_file())
-        notes_text = notes.read_text(encoding="utf-8")
-        self.assertIn("# FT8CN v0.93.005-beta.1 Pre-release Notes", notes_text)
-        self.assertIn("com.bg7yoz.ft8cn.beta", notes_text)
-        self.assertIn("Android Debug", notes_text)
-        self.assertIn("不是正式版", notes_text)
-        self.assertIn("不代表真实电台/HIL 已通过", notes_text)
+        for tag_name in ("v0.93.005-beta.1", "v0.93.005-beta.2"):
+            notes = REPOSITORY_ROOT / "doc" / "release-notes" / f"{tag_name}.md"
+            self.assertTrue(notes.is_file())
+            notes_text = notes.read_text(encoding="utf-8")
+            self.assertIn(f"# FT8CN {tag_name} Pre-release Notes", notes_text)
+            self.assertIn("com.bg7yoz.ft8cn.beta", notes_text)
+            self.assertIn("Android Debug", notes_text)
+            self.assertIn("不是正式版", notes_text)
+            self.assertIn("不代表真实电台/HIL 已通过", notes_text)
 
 
 if __name__ == "__main__":

@@ -24,6 +24,9 @@ jobs:
           java-version: "17"
           cache: gradle
 
+      - name: Grant Gradle wrapper execute permission
+        run: chmod +x ./ft8cn/gradlew
+
       - name: Check release contract and sensitive-file hygiene
         run: |
           python scripts/check_release_contract.py
@@ -68,7 +71,6 @@ jobs:
       - name: Run JVM regression tests
         working-directory: ft8cn
         run: |
-          chmod +x ./gradlew
           ./gradlew :app:testDebugUnitTest --rerun-tasks
 
       - name: Build versioned beta APK
@@ -76,7 +78,6 @@ jobs:
         working-directory: ft8cn
         shell: bash
         run: |
-          chmod +x ./gradlew
           ./gradlew :app:packageTestApk --rerun-tasks
           apk_path=".artifacts/FT8CN-v${{ steps.version.outputs.base_version }}-beta-${GITHUB_SHA:0:7}.apk"
           test -s "${apk_path}"

@@ -25,6 +25,9 @@ jobs:
           java-version: "17"
           cache: gradle
 
+      - name: Grant Gradle wrapper execute permission
+        run: chmod +x ./ft8cn/gradlew
+
       - name: Check release contract and sensitive-file hygiene
         run: python scripts/check_release_contract.py
 
@@ -124,7 +127,6 @@ jobs:
           FT8CN_RELEASE_KEY_PASSWORD: ${{ secrets.FT8CN_RELEASE_KEY_PASSWORD }}
           FT8CN_RELEASE_CERT_SHA256: ${{ secrets.FT8CN_RELEASE_CERT_SHA256 }}
         run: |
-          chmod +x ./gradlew
           ./gradlew assembleRelease
 
       - name: Prepare APK
