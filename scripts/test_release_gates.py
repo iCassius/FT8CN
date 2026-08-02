@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import contextlib
 import io
+import re
 import subprocess
 import sys
 import unittest
@@ -17,6 +18,14 @@ except ModuleNotFoundError:
 EXPECTED = "0123456789abcdef" * 4
 APKSIGNER_OUTPUT = f"V2 Signer: certificate SHA-256 digest: {EXPECTED}"
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
+CANONICAL_GRADLE_VERSION = re.compile(r"^\d+\.\d+\.\d{3}:\d+$")
+
+
+def extract_canonical_gradle_version(output: str) -> str:
+    matches = [line for line in output.splitlines() if CANONICAL_GRADLE_VERSION.fullmatch(line)]
+    if len(matches) != 1:
+        raise ValueError("printVersion output must contain exactly one canonical version line")
+    return matches[0]
 
 
 class CertificateGateTests(unittest.TestCase):
@@ -85,6 +94,23 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
         self.assertIn("./ft8cn/gradlew -p ./ft8cn -q :app:printVersion", workflow)
         self.assertIn("python scripts/check_release_contract.py --history", workflow)
 
+    def assert_version_output_is_filtered(self, workflow_name: str) -> None:
+        workflow = (REPOSITORY_ROOT / ".github" / "workflows" / workflow_name).read_text(encoding="utf-8")
+        version_pattern = "'^[0-9]+\\.[0-9]+\\.[0-9]{3}:[0-9]+$'"
+
+        self.assertIn("./ft8cn/gradlew -p ./ft8cn -q :app:printVersion", workflow)
+        self.assertIn(f"grep -E {version_pattern} | tail -n 1 || true", workflow)
+        self.assertIn(f"grep -Ec {version_pattern} || true", workflow)
+        self.assertIn('"${gradle_version_count}" != "1"', workflow)
+
+    def test_noisy_gradle_stdout_yields_only_the_canonical_version(self) -> None:
+        noisy_output = "Downloading https://services.gradle.org/distributions/gradle.zip\n45%\n0.93.005:93005\n"
+        self.assertEqual(extract_canonical_gradle_version(noisy_output), "0.93.005:93005")
+        with self.assertRaises(ValueError):
+            extract_canonical_gradle_version("Downloading\n")
+        with self.assertRaises(ValueError):
+            extract_canonical_gradle_version("0.93.005:93005\n0.93.005:93005\n")
+
     def test_formal_tags_include_and_prerelease_tags_exclude(self) -> None:
         workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "android-release.yml").read_text(
             encoding="utf-8"
@@ -97,6 +123,7 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
         self.assertLess(workflow.index(formal_pattern), workflow.index(prerelease_exclusion))
         self.assert_wrapper_is_executable_before_first_gradle_call("android-release.yml")
         self.assert_full_history_and_remote_tag_target_contract("android-release.yml")
+        self.assert_version_output_is_filtered("android-release.yml")
         self.assertIn('refs/heads/release', workflow)
         self.assertIn('"${remote_release_sha}" != "${head_sha}"', workflow)
 
@@ -117,12 +144,13 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
         self.assertNotIn("FT8CN_RELEASE_", workflow)
         self.assert_wrapper_is_executable_before_first_gradle_call("android-prerelease.yml")
         self.assert_full_history_and_remote_tag_target_contract("android-prerelease.yml")
+        self.assert_version_output_is_filtered("android-prerelease.yml")
         self.assertIn('refs/heads/codex/v0.93.005-integration', workflow)
         self.assertIn('"${remote_branch_sha}" != "${head_sha}"', workflow)
         self.assertIn('GITHUB_SHA: ${{ steps.version.outputs.head_sha }}', workflow)
         self.assertNotIn("GITHUB_SHA:0:7", workflow)
 
-        for tag_name in ("v0.93.005-beta.1", "v0.93.005-beta.2", "v0.93.005-beta.3", "v0.93.005-beta.4"):
+        for tag_name in ("v0.93.005-beta.1", "v0.93.005-beta.2", "v0.93.005-beta.3", "v0.93.005-beta.4", "v0.93.005-beta.5"):
             notes = REPOSITORY_ROOT / "doc" / "release-notes" / f"{tag_name}.md"
             self.assertTrue(notes.is_file())
             notes_text = notes.read_text(encoding="utf-8")
@@ -131,6 +159,9 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
             self.assertIn("Android Debug", notes_text)
             self.assertIn("不是正式版", notes_text)
             self.assertIn("不代表真实电台/HIL 已通过", notes_text)
+
+    def test_ci_version_output_is_filtered(self) -> None:
+        self.assert_version_output_is_filtered("android.yml")
 
 
 if __name__ == "__main__":

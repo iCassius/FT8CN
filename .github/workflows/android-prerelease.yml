@@ -51,8 +51,10 @@ jobs:
             exit 1
           fi
           base_version="${BASH_REMATCH[1]}"
-          gradle_version="$(./ft8cn/gradlew -p ./ft8cn -q :app:printVersion)"
-          if [[ "${gradle_version%%:*}" != "${base_version}" ]]; then
+          gradle_output="$(./ft8cn/gradlew -p ./ft8cn -q :app:printVersion)"
+          gradle_version="$(printf '%s\n' "${gradle_output}" | grep -E '^[0-9]+\.[0-9]+\.[0-9]{3}:[0-9]+$' | tail -n 1 || true)"
+          gradle_version_count="$(printf '%s\n' "${gradle_output}" | grep -Ec '^[0-9]+\.[0-9]+\.[0-9]{3}:[0-9]+$' || true)"
+          if [[ "${gradle_version_count}" != "1" || ! "${gradle_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]{3}:[0-9]+$ || "${gradle_version%%:*}" != "${base_version}" ]]; then
             echo "Tag ${GITHUB_REF_NAME} does not match canonical Gradle version ${gradle_version}" >&2
             exit 1
           fi

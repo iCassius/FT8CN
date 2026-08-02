@@ -40,7 +40,14 @@ jobs:
     - name: Verify TEST/BETA APK signature
       run: |
         set -euo pipefail
-        VERSION="$(./ft8cn/gradlew -q :app:printVersion | cut -d: -f1)"
+        gradle_output="$(./ft8cn/gradlew -p ./ft8cn -q :app:printVersion)"
+        gradle_version="$(printf '%s\n' "${gradle_output}" | grep -E '^[0-9]+\.[0-9]+\.[0-9]{3}:[0-9]+$' | tail -n 1 || true)"
+        gradle_version_count="$(printf '%s\n' "${gradle_output}" | grep -Ec '^[0-9]+\.[0-9]+\.[0-9]{3}:[0-9]+$' || true)"
+        if [[ "${gradle_version_count}" != "1" || ! "${gradle_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]{3}:[0-9]+$ ]]; then
+          echo "Could not read one canonical Gradle version from printVersion output." >&2
+          exit 1
+        fi
+        VERSION="${gradle_version%%:*}"
         python scripts/verify_apk_signature.py --apk "ft8cn/.artifacts/FT8CN-v${VERSION}-beta-${GITHUB_SHA:0:7}.apk" --expect debug
 
     - name: Upload TEST/BETA APK
