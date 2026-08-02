@@ -52,9 +52,9 @@
 
 ## 🛠️ 当前审计状态与下一步
 
-当前集成基线为 `codex/v0.93.005-integration`，正在受控合入 P0-C、P0-A、P0-B 与 P0-E：
+当前集成基线为 `codex/v0.93.005-integration`。`v0.93.005-beta.5` 已由 [GitHub Actions run 30760667432](https://github.com/iCassius/FT8CN/actions/runs/30760667432) 发布为 [GitHub Pre-release](https://github.com/iCassius/FT8CN/releases/tag/v0.93.005-beta.5)，但仍仅为 `AUTO_VERIFIED`：
 
-1. 配置加载完成状态、发射 PTT/SCO 生命周期、网络/音频任务快照与 EOF 隔离已进入集成范围；最终自动化和设备验证结果尚待集成门禁确认。
-2. v0.93.005 已具备统一版本、Release 签名门禁、GitHub Actions 和版本化测试 APK 流程；正式签名迁移允许卸载旧版后干净安装，详情见 [RELEASE_SIGNING.md](RELEASE_SIGNING.md)。
+1. 配置加载完成状态、发射 PTT/SCO 生命周期、网络/音频任务快照与 EOF 隔离已集成；JVM 8/8 和 AVD 43/43 通过，但真实设备/HIL 尚未完成。
+2. beta.5 使用 `com.bg7yoz.ft8cn.beta` 和 Android Debug 签名；其资产、hash 与签名事实见 [HANDOFF.md](HANDOFF.md)。正式签名迁移允许卸载旧版后干净安装，详情见 [RELEASE_SIGNING.md](RELEASE_SIGNING.md)。
 3. 不把构建、模拟器或历史结果表述为真机/HIL 结论；完整网络 QSO、长时间挂机、功耗和温升仍需在集成 APK 上单独验证。
 4. 后续任务与验收顺序以 [ROADMAP_TODO.md](ROADMAP_TODO.md) 为准；构建、自动化、模拟器、真机和 HIL 必须分开报告。

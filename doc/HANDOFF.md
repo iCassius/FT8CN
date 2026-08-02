@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-08-03　v0.93.005-beta.5 GitHub 预发布自动验收
+
+### 做了什么
+
+- 已成功发布不可变 tag `v0.93.005-beta.5`，其 peeled target 为 `3f6b0562806d016b0164fbd369234ea03797f4e0`。
+- GitHub Actions run [`30760667432`](https://github.com/iCassius/FT8CN/actions/runs/30760667432) 已完成 beta 预发布；对应 [GitHub Pre-release](https://github.com/iCassius/FT8CN/releases/tag/v0.93.005-beta.5) 已生成。
+- 远端资产为 `FT8CN-v0.93.005-beta-3f6b056.apk`，大小 `21,199,657` bytes，SHA-256 `7fa6b632…decae21`；包名 `com.bg7yoz.ft8cn.beta`，版本 `0.93.005-beta`，`versionCode` `93005`。
+
+### 关键决策
+
+- 此版本是 Android Debug 签名测试预发布；远端证书 SHA-256 记录为 `0ad16c4f…cc71f`。它不是正式签名版本，且 `AUTO_VERIFIED` 不等同于实机/HIL。
+- `v0.93.005-beta.1` 至 `v0.93.005-beta.4` 是已失败且不可变的 tag，均未创建 Release；不得删除、移动或复用这些 tag。后续预发布必须使用新 tag 和同名独立 notes。
+
+### 当前状态
+
+- `AUTO_VERIFIED`：JVM 8/8；AVD `connectedDebugAndroidTest` 43/43，失败、错误、跳过均为 0；GitHub 预发布构建、签名验证、资产上传完成。
+- 上述结果不含真实设备、电台、完整 QSO、长时稳定性、功耗或温升验证；P0-D 与 P0-F 仍未完成。
+
+### 下一步
+
+- 用户在真实设备上测试 beta.5；继续 P0-D、P0-F 与有线 legacy 连接契约。
+- 处理 beta 签名连续性、构建可复现性和发布半完成恢复策略，再评估正式签名迁移。
+
+---
+
 ## 2026-08-01　v0.93.005 P0 集成自动验收
 
 ### 做了什么
