@@ -1,0 +1,105 @@
+name: Android Beta Pre-release APK
+
+on:
+  push:
+    tags:
+      - "v*.*.*-beta.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-beta-prerelease:
+    name: Build and publish beta pre-release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Check release contract and sensitive-file hygiene
+        run: |
+          python scripts/check_release_contract.py
+          python scripts/check_release_contract.py --history
+
+      - name: Resolve beta tag and validate version
+        id: version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+            echo "This workflow must run from a beta tag." >&2
+            exit 1
+          fi
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^v([0-9]+\.[0-9]+\.[0-9]{3})-beta\.([0-9]+)$ ]]; then
+            echo "Tag must be vMAJOR.MINOR.BUILD-beta.N: ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+          base_version="${BASH_REMATCH[1]}"
+          gradle_version="$(./ft8cn/gradlew -q :app:printVersion)"
+          if [[ "${gradle_version%%:*}" != "${base_version}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match canonical Gradle version ${gradle_version}" >&2
+            exit 1
+          fi
+          remote_tag_sha="$(git ls-remote --refs origin "refs/tags/${GITHUB_REF_NAME}" | awk '{print $1}')"
+          local_tag_sha="$(git rev-parse "${GITHUB_REF_NAME}")"
+          if [[ -z "${remote_tag_sha}" || "${remote_tag_sha}" != "${local_tag_sha}" ]]; then
+            echo "Remote beta tag ${GITHUB_REF_NAME} is missing or does not match the checked-out tag." >&2
+            exit 1
+          fi
+          notes_file="doc/release-notes/v${base_version}.md"
+          test -f "${notes_file}"
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "GitHub Release ${GITHUB_REF_NAME} already exists; refusing to overwrite it." >&2
+            exit 1
+          fi
+          echo "base_version=${base_version}" >> "${GITHUB_OUTPUT}"
+          echo "notes_file=${notes_file}" >> "${GITHUB_OUTPUT}"
+
+      - name: Run JVM regression tests
+        working-directory: ft8cn
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:testDebugUnitTest --rerun-tasks
+
+      - name: Build versioned beta APK
+        id: apk
+        working-directory: ft8cn
+        shell: bash
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:packageTestApk --rerun-tasks
+          apk_path=".artifacts/FT8CN-v${{ steps.version.outputs.base_version }}-beta-${GITHUB_SHA:0:7}.apk"
+          test -s "${apk_path}"
+          echo "apk_path=ft8cn/${apk_path}" >> "${GITHUB_OUTPUT}"
+          echo "apk_name=$(basename "${apk_path}")" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify beta APK signature
+        run: python scripts/verify_apk_signature.py --apk "${{ steps.apk.outputs.apk_path }}" --expect debug
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.apk.outputs.apk_name }}
+          path: ${{ steps.apk.outputs.apk_path }}
+          if-no-files-found: error
+
+      - name: Create GitHub pre-release and upload APK
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+          NOTES_FILE: ${{ steps.version.outputs.notes_file }}
+          APK_PATH: ${{ steps.apk.outputs.apk_path }}
+        run: |
+          set -euo pipefail
+          gh release create "${TAG_NAME}" --prerelease --title "FT8CN ${TAG_NAME}" --notes-file "${NOTES_FILE}" "${APK_PATH}"

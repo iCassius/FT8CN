@@ -71,6 +71,21 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
         self.assertIn(prerelease_exclusion, workflow)
         self.assertLess(workflow.index(formal_pattern), workflow.index(prerelease_exclusion))
 
+    def test_beta_prerelease_workflow_isolated_and_publishable(self) -> None:
+        workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "android-prerelease.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('- "v*.*.*-beta.*"', workflow)
+        self.assertIn("^v([0-9]+\\.[0-9]+\\.[0-9]{3})-beta\\.([0-9]+)$", workflow)
+        self.assertIn("python scripts/check_release_contract.py --history", workflow)
+        self.assertIn("./gradlew :app:testDebugUnitTest --rerun-tasks", workflow)
+        self.assertIn("./gradlew :app:packageTestApk --rerun-tasks", workflow)
+        self.assertIn("--expect debug", workflow)
+        self.assertIn('gh release create "${TAG_NAME}" --prerelease', workflow)
+        self.assertIn('notes_file="doc/release-notes/v${base_version}.md"', workflow)
+        self.assertNotIn("FT8CN_RELEASE_", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
