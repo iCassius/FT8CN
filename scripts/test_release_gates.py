@@ -16,6 +16,7 @@ except ModuleNotFoundError:
 
 EXPECTED = "0123456789abcdef" * 4
 APKSIGNER_OUTPUT = f"V2 Signer: certificate SHA-256 digest: {EXPECTED}"
+REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 
 
 class CertificateGateTests(unittest.TestCase):
@@ -56,6 +57,19 @@ class CertificateGateTests(unittest.TestCase):
             text=True,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+class ReleaseWorkflowTagFilterTests(unittest.TestCase):
+    def test_formal_tags_include_and_prerelease_tags_exclude(self) -> None:
+        workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "android-release.yml").read_text(
+            encoding="utf-8"
+        )
+        formal_pattern = '- "v*.*.*"'
+        prerelease_exclusion = '- "!v*.*.*-*"'
+
+        self.assertIn(formal_pattern, workflow)
+        self.assertIn(prerelease_exclusion, workflow)
+        self.assertLess(workflow.index(formal_pattern), workflow.index(prerelease_exclusion))
 
 
 if __name__ == "__main__":
