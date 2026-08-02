@@ -83,8 +83,18 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
         self.assertIn("./gradlew :app:packageTestApk --rerun-tasks", workflow)
         self.assertIn("--expect debug", workflow)
         self.assertIn('gh release create "${TAG_NAME}" --prerelease', workflow)
-        self.assertIn('notes_file="doc/release-notes/v${base_version}.md"', workflow)
+        self.assertIn('notes_file="doc/release-notes/${GITHUB_REF_NAME}.md"', workflow)
+        self.assertNotIn('notes_file="doc/release-notes/v${base_version}.md"', workflow)
         self.assertNotIn("FT8CN_RELEASE_", workflow)
+
+        notes = REPOSITORY_ROOT / "doc" / "release-notes" / "v0.93.005-beta.1.md"
+        self.assertTrue(notes.is_file())
+        notes_text = notes.read_text(encoding="utf-8")
+        self.assertIn("# FT8CN v0.93.005-beta.1 Pre-release Notes", notes_text)
+        self.assertIn("com.bg7yoz.ft8cn.beta", notes_text)
+        self.assertIn("Android Debug", notes_text)
+        self.assertIn("不是正式版", notes_text)
+        self.assertIn("不代表真实电台/HIL 已通过", notes_text)
 
 
 if __name__ == "__main__":

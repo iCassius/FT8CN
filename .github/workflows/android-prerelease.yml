@@ -56,7 +56,7 @@ jobs:
             echo "Remote beta tag ${GITHUB_REF_NAME} is missing or does not match the checked-out tag." >&2
             exit 1
           fi
-          notes_file="doc/release-notes/v${base_version}.md"
+          notes_file="doc/release-notes/${GITHUB_REF_NAME}.md"
           test -f "${notes_file}"
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             echo "GitHub Release ${GITHUB_REF_NAME} already exists; refusing to overwrite it." >&2
