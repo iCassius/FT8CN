@@ -71,6 +71,18 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
         )
         self.assertLess(grant_offset, first_gradle_call_offset, workflow_name)
 
+    def assert_full_history_and_remote_tag_target_contract(self, workflow_name: str) -> None:
+        workflow = (REPOSITORY_ROOT / ".github" / "workflows" / workflow_name).read_text(encoding="utf-8")
+
+        self.assertIn("fetch-depth: 0", workflow)
+        self.assertIn("fetch-tags: true", workflow)
+        self.assertIn('head_sha="$(git rev-parse HEAD)"', workflow)
+        self.assertIn('git ls-remote --refs origin "refs/tags/${GITHUB_REF_NAME}"', workflow)
+        self.assertIn('git ls-remote origin "refs/tags/${GITHUB_REF_NAME}^{}"', workflow)
+        self.assertIn('remote_tag_target="${remote_tag_peeled:-$remote_tag_object}"', workflow)
+        self.assertIn('"${remote_tag_target}" != "${head_sha}"', workflow)
+        self.assertNotIn('git rev-parse "${GITHUB_REF_NAME}"', workflow)
+
     def test_formal_tags_include_and_prerelease_tags_exclude(self) -> None:
         workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "android-release.yml").read_text(
             encoding="utf-8"
@@ -82,6 +94,9 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
         self.assertIn(prerelease_exclusion, workflow)
         self.assertLess(workflow.index(formal_pattern), workflow.index(prerelease_exclusion))
         self.assert_wrapper_is_executable_before_first_gradle_call("android-release.yml")
+        self.assert_full_history_and_remote_tag_target_contract("android-release.yml")
+        self.assertIn('refs/heads/release', workflow)
+        self.assertIn('"${remote_release_sha}" != "${head_sha}"', workflow)
 
     def test_beta_prerelease_workflow_isolated_and_publishable(self) -> None:
         workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "android-prerelease.yml").read_text(
@@ -99,8 +114,13 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
         self.assertNotIn('notes_file="doc/release-notes/v${base_version}.md"', workflow)
         self.assertNotIn("FT8CN_RELEASE_", workflow)
         self.assert_wrapper_is_executable_before_first_gradle_call("android-prerelease.yml")
+        self.assert_full_history_and_remote_tag_target_contract("android-prerelease.yml")
+        self.assertIn('refs/heads/codex/v0.93.005-integration', workflow)
+        self.assertIn('"${remote_branch_sha}" != "${head_sha}"', workflow)
+        self.assertIn('GITHUB_SHA: ${{ steps.version.outputs.head_sha }}', workflow)
+        self.assertNotIn("GITHUB_SHA:0:7", workflow)
 
-        for tag_name in ("v0.93.005-beta.1", "v0.93.005-beta.2"):
+        for tag_name in ("v0.93.005-beta.1", "v0.93.005-beta.2", "v0.93.005-beta.3"):
             notes = REPOSITORY_ROOT / "doc" / "release-notes" / f"{tag_name}.md"
             self.assertTrue(notes.is_file())
             notes_text = notes.read_text(encoding="utf-8")
