@@ -82,6 +82,8 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
         self.assertIn('remote_tag_target="${remote_tag_peeled:-$remote_tag_object}"', workflow)
         self.assertIn('"${remote_tag_target}" != "${head_sha}"', workflow)
         self.assertNotIn('git rev-parse "${GITHUB_REF_NAME}"', workflow)
+        self.assertIn("./ft8cn/gradlew -p ./ft8cn -q :app:printVersion", workflow)
+        self.assertIn("python scripts/check_release_contract.py --history", workflow)
 
     def test_formal_tags_include_and_prerelease_tags_exclude(self) -> None:
         workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "android-release.yml").read_text(
@@ -120,7 +122,7 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
         self.assertIn('GITHUB_SHA: ${{ steps.version.outputs.head_sha }}', workflow)
         self.assertNotIn("GITHUB_SHA:0:7", workflow)
 
-        for tag_name in ("v0.93.005-beta.1", "v0.93.005-beta.2", "v0.93.005-beta.3"):
+        for tag_name in ("v0.93.005-beta.1", "v0.93.005-beta.2", "v0.93.005-beta.3", "v0.93.005-beta.4"):
             notes = REPOSITORY_ROOT / "doc" / "release-notes" / f"{tag_name}.md"
             self.assertTrue(notes.is_file())
             notes_text = notes.read_text(encoding="utf-8")

@@ -32,7 +32,9 @@ jobs:
         run: chmod +x ./ft8cn/gradlew
 
       - name: Check release contract and sensitive-file hygiene
-        run: python scripts/check_release_contract.py
+        run: |
+          python scripts/check_release_contract.py
+          python scripts/check_release_contract.py --history
 
       - name: Test release certificate gates
         run: python -m unittest scripts.test_release_gates
@@ -53,7 +55,7 @@ jobs:
             echo "Tag must be vMAJOR.MINOR.BUILD with a three-digit build: ${GITHUB_REF_NAME}" >&2
             exit 1
           fi
-          gradle_version="$(./ft8cn/gradlew -q :app:printVersion)"
+          gradle_version="$(./ft8cn/gradlew -p ./ft8cn -q :app:printVersion)"
           if [[ "${gradle_version%%:*}" != "${tag_version}" ]]; then
             echo "Tag ${tag_version} does not match canonical Gradle version ${gradle_version}" >&2
             exit 1

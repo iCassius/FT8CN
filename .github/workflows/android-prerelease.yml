@@ -51,7 +51,7 @@ jobs:
             exit 1
           fi
           base_version="${BASH_REMATCH[1]}"
-          gradle_version="$(./ft8cn/gradlew -q :app:printVersion)"
+          gradle_version="$(./ft8cn/gradlew -p ./ft8cn -q :app:printVersion)"
           if [[ "${gradle_version%%:*}" != "${base_version}" ]]; then
             echo "Tag ${GITHUB_REF_NAME} does not match canonical Gradle version ${gradle_version}" >&2
             exit 1
