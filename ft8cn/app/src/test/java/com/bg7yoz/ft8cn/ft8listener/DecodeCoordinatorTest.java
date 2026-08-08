@@ -290,6 +290,15 @@ public class DecodeCoordinatorTest {
         }
     }
 
+    @Test
+    public void stopIsIdempotentAndRejectsWorkAfterExecutorShutdown() {
+        DecodeCoordinator coordinator = new DecodeCoordinator("decode-test-stop-idempotent");
+        coordinator.stop();
+        coordinator.stop();
+
+        assertFalse(coordinator.submit(token -> { }, noOpListener(new CountDownLatch(1))));
+    }
+
     private static DecodeCoordinator.Listener noOpListener(CountDownLatch finished) {
         return new DecodeCoordinator.Listener() {
             @Override
