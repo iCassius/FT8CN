@@ -91,6 +91,22 @@ public class MicRecorder {
         }
     }
 
+    /**
+     * Session identity retirement is separated from resource cleanup so a
+     * caller can revoke ownership while holding its own lifecycle lock, then
+     * release AudioRecord and notify external services after that lock is
+     * released.
+     */
+    static final class RetiredSession {
+        private final Session session;
+        private final boolean interruptWorker;
+
+        private RetiredSession(Session session, boolean interruptWorker) {
+            this.session = session;
+            this.interruptWorker = interruptWorker;
+        }
+    }
+
     public MicRecorder() {
         this(new AndroidAudioRecordFactory(),
                 new AndroidForegroundServiceController(GeneralVariables.getMainContext()));
@@ -404,12 +420,19 @@ public class MicRecorder {
     }
 
     void stopSession(long sessionId) {
-        Session session;
-        boolean interruptWorker;
+        finishRetiredSession(retireSession(sessionId));
+    }
+
+    /**
+     * Atomically removes a session from the start admission path. This method
+     * only changes in-memory ownership under lifecycleLock; it does not touch
+     * AudioRecord, interrupt a worker, or call an external service.
+     */
+    RetiredSession retireSession(long sessionId) {
         synchronized (lifecycleLock) {
-            session = currentSession;
+            Session session = currentSession;
             if (session == null || session.id != sessionId) {
-                return;
+                return null;
             }
             session.cancelled = true;
             currentSession = null;
@@ -420,13 +443,21 @@ public class MicRecorder {
             // is active, interrupting a blocked setup/read is safe and keeps
             // stop responsive.  The AudioRecord release below is the normal
             // unblock path for a native read.
-            interruptWorker = session.activeDeliveries.get() == 0;
+            boolean interruptWorker = session.activeDeliveries.get() == 0;
+            return new RetiredSession(session, interruptWorker);
         }
-        Thread worker = session.worker;
-        if (interruptWorker && worker != null) {
+    }
+
+    /** Completes cleanup after {@link #retireSession(long)} has released ownership. */
+    void finishRetiredSession(RetiredSession retired) {
+        if (retired == null) {
+            return;
+        }
+        Thread worker = retired.session.worker;
+        if (retired.interruptWorker && worker != null) {
             worker.interrupt();
         }
-        cleanupSession(session);
+        cleanupSession(retired.session);
     }
 
     public boolean isRunning() {

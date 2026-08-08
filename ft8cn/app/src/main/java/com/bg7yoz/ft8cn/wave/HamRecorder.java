@@ -217,13 +217,18 @@ public class HamRecorder {
      */
     public void stopRecord() {
         long sessionId;
+        MicRecorder.RetiredSession retiredSession;
         List<VoiceDataMonitor> staleMonitors;
         synchronized (lifecycleLock) {
             sessionId = activeMicSessionId;
+            // Revoke MicRecorder ownership before releasing this lock. A
+            // concurrent startRecord must never receive the old Mic session
+            // while this stop is waiting to clean up AudioRecord.
+            retiredSession = micRecorder.retireSession(sessionId);
             staleMonitors = terminateActiveSessionLocked();
         }
         closeMonitors(staleMonitors);
-        micRecorder.stopSession(sessionId);
+        micRecorder.finishRetiredSession(retiredSession);
     }
 
     /** Single terminal route used by stop and a failed MicRecorder session. */
