@@ -76,7 +76,7 @@ jobs:
             exit 1
           fi
           notes_file="doc/release-notes/${GITHUB_REF_NAME}.md"
-          test -f "${notes_file}"
+          test -s "${notes_file}"
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             echo "GitHub Release ${GITHUB_REF_NAME} already exists; refusing to overwrite it." >&2
             exit 1
