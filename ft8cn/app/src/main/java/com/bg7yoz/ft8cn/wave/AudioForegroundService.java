@@ -27,10 +27,15 @@ public class AudioForegroundService extends Service {
     private static final String CHANNEL_ID = "FT8CN_Audio_Channel";
     private static final int NOTIFICATION_ID = 101;
     private static final String ACTION_START = "com.bg7yoz.ft8cn.wave.AudioForegroundService.START";
-    private static final String ACTION_STOP = "com.bg7yoz.ft8cn.wave.AudioForegroundService.STOP";
+    static final String ACTION_STOP = "com.bg7yoz.ft8cn.wave.AudioForegroundService.STOP";
     private static final String EXTRA_SESSION_ID = "session_id";
-    private static final String EXTRA_ACK = "session_ack";
-    private static final String EXTRA_ACK_SESSION_ID = "ack_session_id";
+    static final String EXTRA_ACK = "session_ack";
+    static final String EXTRA_ACK_SESSION_ID = "ack_session_id";
+    static final String EXTRA_ACK_START_ID = "ack_start_id";
+    static final String EXTRA_ACK_STOP_SELF_START_ID = "ack_stop_self_start_id";
+    static final String EXTRA_ACK_STOP_SELF_RESULT = "ack_stop_self_result";
+    /** Test-only command hook; it travels with the real service Intent. */
+    static final String EXTRA_TEST_FAIL_START_FOREGROUND = "test_fail_start_foreground";
     static final int ACK_STARTED = 1;
     static final int ACK_FAILED = 2;
     static final int ACK_STOPPED = 3;
@@ -55,6 +60,7 @@ public class AudioForegroundService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         long sessionId = intent == null ? NO_SESSION
                 : intent.getLongExtra(EXTRA_SESSION_ID, NO_SESSION);
+        CommandAudit audit = new CommandAudit();
         if (intent != null && ACTION_STOP.equals(intent.getAction())) {
             int result = sessionLifecycle.stop(sessionId, startId, new SessionLifecycle.Actions() {
                 @Override
@@ -64,10 +70,13 @@ public class AudioForegroundService extends Service {
 
                 @Override
                 public boolean stopSelfResult(int commandStartId) {
-                    return AudioForegroundService.this.stopSelfResult(commandStartId);
+                    boolean stopped = AudioForegroundService.this.stopSelfResult(commandStartId);
+                    audit.stopSelfStartId = commandStartId;
+                    audit.stopSelfResult = stopped;
+                    return stopped;
                 }
             });
-            sendAck(intent, result, sessionId);
+            sendAck(intent, result, sessionId, startId, audit);
             return START_NOT_STICKY;
         }
 
@@ -77,6 +86,7 @@ public class AudioForegroundService extends Service {
                 .setContentText(getString(R.string.decoding))
                 .setSmallIcon(R.drawable.ft8cn_icon)
                 .build();
+        NotificationStarter notificationStarter = notificationStarterFor(intent);
 
         int result = sessionLifecycle.start(sessionId, startId, new SessionLifecycle.Actions() {
             @Override
@@ -84,12 +94,7 @@ public class AudioForegroundService extends Service {
                 //未授权录音或 app 在后台时，startForeground(microphone) 会抛
                 //SecurityException/ForegroundServiceStartNotAllowedException，交给
                 //状态机统一转为 session failure 并终结服务。
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    AudioForegroundService.this.startForeground(NOTIFICATION_ID, notification,
-                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
-                } else {
-                    AudioForegroundService.this.startForeground(NOTIFICATION_ID, notification);
-                }
+                notificationStarter.start(AudioForegroundService.this, notification);
             }
 
             @Override
@@ -99,22 +104,59 @@ public class AudioForegroundService extends Service {
 
             @Override
             public boolean stopSelfResult(int commandStartId) {
-                return AudioForegroundService.this.stopSelfResult(commandStartId);
+                boolean stopped = AudioForegroundService.this.stopSelfResult(commandStartId);
+                audit.stopSelfStartId = commandStartId;
+                audit.stopSelfResult = stopped;
+                return stopped;
             }
         });
-        sendAck(intent, result, sessionId);
+        sendAck(intent, result, sessionId, startId, audit);
 
         return START_NOT_STICKY;
     }
 
     @SuppressWarnings("deprecation")
-    private void sendAck(Intent intent, int result, long sessionId) {
+    private void sendAck(Intent intent, int result, long sessionId, int startId,
+                         CommandAudit audit) {
         if (intent == null) return;
         ResultReceiver receiver = intent.getParcelableExtra(EXTRA_ACK);
         if (receiver == null) return;
         Bundle data = new Bundle();
         data.putLong(EXTRA_ACK_SESSION_ID, sessionId);
+        data.putInt(EXTRA_ACK_START_ID, startId);
+        data.putInt(EXTRA_ACK_STOP_SELF_START_ID, audit.stopSelfStartId);
+        data.putBoolean(EXTRA_ACK_STOP_SELF_RESULT, audit.stopSelfResult);
         receiver.send(result, data);
+    }
+
+    private NotificationStarter notificationStarterFor(Intent intent) {
+        NotificationStarter realStarter = (service, notification) -> {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                service.startForeground(NOTIFICATION_ID, notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+            } else {
+                service.startForeground(NOTIFICATION_ID, notification);
+            }
+        };
+        if (intent != null && intent.getBooleanExtra(EXTRA_TEST_FAIL_START_FOREGROUND, false)) {
+            return (service, notification) -> {
+                // The OS watchdog requires a real foreground promotion before
+                // a synthetic post-promotion failure can be observed through
+                // the ResultReceiver without killing the target process.
+                realStarter.start(service, notification);
+                throw new IllegalStateException("injected startForeground failure");
+            };
+        }
+        return realStarter;
+    }
+
+    interface NotificationStarter {
+        void start(AudioForegroundService service, Notification notification) throws Exception;
+    }
+
+    private static final class CommandAudit {
+        int stopSelfStartId = -1;
+        boolean stopSelfResult;
     }
 
     static final class SessionLifecycle {
