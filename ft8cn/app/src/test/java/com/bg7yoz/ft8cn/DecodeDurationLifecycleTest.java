@@ -52,4 +52,21 @@ public class DecodeDurationLifecycleTest {
             executor.shutdownNow();
         }
     }
+
+    @Test
+    public void currentEpochAdmitsAndPublishesDecodeDuration() {
+        DecodeLifecycleGate gate = new DecodeLifecycleGate();
+        assertTrue(gate.begin(11));
+        long[] duration = {0};
+        OnFt8Listen listener = new OnFt8Listen() {
+            @Override
+            public boolean onDecodeDuration(long epoch, long value, Runnable publication) {
+                return gate.runIfCurrent(epoch, publication);
+            }
+        };
+
+        assertTrue(listener.onDecodeDuration(11, 654,
+                () -> duration[0] = 654));
+        assertEquals(654, duration[0]);
+    }
 }
