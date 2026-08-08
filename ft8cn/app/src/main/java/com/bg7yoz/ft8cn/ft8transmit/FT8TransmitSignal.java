@@ -30,6 +30,7 @@ import com.bg7yoz.ft8cn.timer.UtcTimer;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -87,7 +88,8 @@ public class FT8TransmitSignal {
     private final ExecutorService doTransmitThreadPool;
     private final DoTransmitRunnable doTransmitRunnable = new DoTransmitRunnable(this);
     private final Object lifecycleLock = new Object();
-    private final Set<DoTransmitTask> doTransmitTasks = ConcurrentHashMap.newKeySet();
+    private final Set<DoTransmitTask> doTransmitTasks = Collections.newSetFromMap(
+            new ConcurrentHashMap<DoTransmitTask, Boolean>());
     private final Observer<Float> volumeObserver = new Observer<Float>() {
         @Override
         public void onChanged(Float aFloat) {
@@ -96,7 +98,8 @@ public class FT8TransmitSignal {
             }
         }
     };
-    private final Set<TransmissionContext> activeTransmissions = ConcurrentHashMap.newKeySet();
+    private final Set<TransmissionContext> activeTransmissions = Collections.newSetFromMap(
+            new ConcurrentHashMap<TransmissionContext, Boolean>());
     private volatile long lifecycleGeneration;
     private volatile boolean stopped;
 
