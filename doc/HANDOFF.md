@@ -4,6 +4,38 @@
 
 ---
 
+## 2026-08-08　v0.93.005 最后录音交付 lease 收口
+
+### 基线、分支与分层提交
+
+- 精确基线：`codex/v0.93.005-audio-session-fix@8cc69c5d8d179e1ca789b02ea646e20aae81fb5b`；已核对 `PROJECT_RULES.md`、本文件、无 `notes` 目录，工作树初始 clean。
+- 分支：`codex/v0.93.005-delivery-lease-fix`；未推送、未合并 `release`、未创建 tag/Release/Secrets；未修改或提交 `local.properties`、构建产物。
+- 分层提交：`9ee73b7`（P1 Mic delivery lease drain + stop→start barrier）、`4e268c6`（HamRecorder 真并发 admission test）、`b263c14`（真实 AudioForegroundService ACK/integration test）；本条为独立文档提交。
+
+### 根因与修复
+
+- **P1 MicRecorder**：停止前已由旧 session identity/lease 准入的 callback 不再被 `stopSession()` interrupt；stop 只在线性化撤销 session 后立即释放录音资源，并仅在没有 in-flight lease 时中止 setup/read worker。旧 callback 仍使用自己的 listener/buffer/session ID，自然返回后 lease 释放，不能进入新 session；新 session 不等待旧 callback，也不接收旧数据。
+- **HamRecorder 测试真实性**：`getVoiceData()` 现在由测试线程实际进入，再用 latch 与 stop 争用；旧 monitor 的终结/清理、旧 session 数据不触发新 monitor callback，以及新 session 的独立数据路径均保留断言在线程边界之外传播。
+- **AudioForegroundService integration**：新增真实 Android Service instrumentation，使用目标 app context 与 `ResultReceiver` ACK 覆盖真实 foreground start 成功、matching STOP、active new session 下 stale STOP、无 active STOP、命令 `startId/stopSelfResult`；注入失败路径先完成真实 foreground promotion 再抛出 synthetic notification-starter failure，避免 Android foreground watchdog 以 SIGKILL 中断测试，从而验证服务失败清理和 ACK。
+
+### 验证与边界
+
+- **AUTO_VERIFIED**：目标相关 instrumentation 连续 5 轮，每轮 13/13，失败 0、错误 0、跳过 0；全量 `connectedDebugAndroidTest` 连续 2 轮，每轮 60/60，失败 0、错误 0、跳过 0。两组均在独占 `Pixel_10_Pro_XL`（本机 `android-37.0` system image）上执行。
+- 文档提交后的最终 HEAD 还必须重新执行 JVM、release contract 默认/`--history`、release gates、`assembleDebug`、`packageTestApk`、`lintDebug`；最终 beta APK 的路径、metadata、SHA-256 和证书指纹以该轮输出为准。
+- **HIL**：无实体设备、无电台；未执行 CAT/PTT/TX、真实录音、完整 QSO、长时挂机、功耗/温升或用户 HIL。
+
+### 发布结论
+
+- beta candidate 只有在最终 HEAD 的上述 AUTO/AVD 门禁和 clean beta smoke 完成后才可判定为 `GO`；`v0.93.005-beta.6`、`release`、`formal` 在本会话均未创建或推进。
+- `formal` 保持 `NO-GO`：缺长期 keystore、可信证书 SHA-256 与明确批准；不生成正式签名 APK。
+- 不推送、不合并、不打 tag、不创建 Release，不执行真实手机/电台操作。
+
+### 下一步
+
+- 完成最终 HEAD 的自动门禁、clean beta install/Monkey/crash 检查；随后关闭独占 emulator，并将最终 HEAD、提交、测试计数、APK/SHA/证书与 beta.6/integration/release/formal GO/NO-GO 交还主会话。
+
+---
+
 ## 2026-08-08　v0.93.005 音频会话最终并发收口
 
 ### 基线、分支与分层提交
