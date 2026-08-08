@@ -204,8 +204,14 @@ public class FT8SignalListener {
     private long publishDecodeDuration(DecodeCoordinator.DecodeToken token, long startTime) {
         token.throwIfCancelled();
         long currentDuration = System.currentTimeMillis() - startTime;
-        timeSec = currentDuration;
-        decodeTimeSec.postValue(currentDuration);//解码耗时
+        boolean admitted = onFt8Listen == null || onFt8Listen.onDecodeDuration(
+                token.epoch(), currentDuration, () -> {
+                    timeSec = currentDuration;
+                    decodeTimeSec.postValue(currentDuration);//解码耗时
+                });
+        if (!admitted) {
+            throw new CancellationException("decode duration publication was rejected");
+        }
         return currentDuration;
     }
 

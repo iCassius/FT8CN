@@ -383,6 +383,11 @@ public class MainViewModel extends ViewModel {
         //创建监听对象，回调中的动作用于处理解码、发射、关注的呼号列表添加等操作
         ft8SignalListener = new FT8SignalListener(databaseOpr, new OnFt8Listen() {
             @Override
+            public boolean onDecodeDuration(long epoch, long duration, Runnable publication) {
+                return runDecodeEffect(epoch, publication);
+            }
+
+            @Override
             public void beforeListen(long utc, long epoch) {
                 decodeLifecycle.begin(epoch);
                 runDecodeEffect(epoch, () -> {

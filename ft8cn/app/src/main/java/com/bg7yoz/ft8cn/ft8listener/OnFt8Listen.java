@@ -11,6 +11,16 @@ import java.util.ArrayList;
 
 public interface OnFt8Listen {
     /**
+     * Admit a decode-duration publication together with the other decode
+     * effects. The callback owns the lifecycle/epoch gate; the supplied
+     * publication must only run when that gate admits it.
+     */
+    default boolean onDecodeDuration(long epoch, long duration, Runnable publication) {
+        publication.run();
+        return true;
+    }
+
+    /**
      * 当开始监听时触发的事件
      * @param utc 当前的UTC时间
      */
