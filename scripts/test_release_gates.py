@@ -126,6 +126,13 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
         self.assert_version_output_is_filtered("android-release.yml")
         self.assertIn('refs/heads/release', workflow)
         self.assertIn('"${remote_release_sha}" != "${head_sha}"', workflow)
+        self.assertIn(
+            'gh release create "${TAG_NAME}" --verify-tag --title "FT8CN ${TAG_NAME}" '
+            '--notes-file "${NOTES_FILE}" "${APK_PATH}"',
+            workflow,
+        )
+        self.assertNotIn("gh release upload", workflow)
+        self.assertNotIn("--clobber", workflow)
 
     def test_beta_prerelease_workflow_isolated_and_publishable(self) -> None:
         workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "android-prerelease.yml").read_text(
