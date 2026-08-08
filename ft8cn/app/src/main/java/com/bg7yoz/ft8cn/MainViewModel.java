@@ -281,7 +281,7 @@ public class MainViewModel extends ViewModel {
             utcTimer.delete();
         }
         if (hamRecorder != null) {
-            hamRecorder.stopRecord();
+            hamRecorder.onCleared();
         }
         if (ft8SignalListener != null) {
             ft8SignalListener.stopListen();

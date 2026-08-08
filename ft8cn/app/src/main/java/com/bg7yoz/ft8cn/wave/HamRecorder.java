@@ -13,6 +13,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * 录音类。通过AudioRecord对象来实现录音。
@@ -37,6 +38,8 @@ public class HamRecorder {
     private volatile boolean isMicRecord = true;
     private final Object lifecycleLock = new Object();
     private long activeMicSessionId;
+    private long nextRecorderGeneration;
+    private long activeRecorderGeneration;
 
     //监听回调列表，在监听回调中获取数据。
     //CopyOnWriteArrayList：音频线程遍历的同时，定时器线程会增删监听器，
@@ -54,13 +57,22 @@ public class HamRecorder {
     HamRecorder(OnVoiceMonitorChanged onVoiceMonitorChanged, MicRecorder micRecorder){
         this.onVoiceMonitorChanged=onVoiceMonitorChanged;
         this.micRecorder=micRecorder;
-        micRecorder.setOnStateListener((sessionId, running) -> {
-            synchronized (lifecycleLock) {
-                if (sessionId == activeMicSessionId && isMicRecord) {
-                    isRunning = running;
-                }
+        micRecorder.setOnStateListener(this::onMicStateChanged);
+    }
+
+    private void onMicStateChanged(long sessionId, boolean running) {
+        List<VoiceDataMonitor> staleMonitors = null;
+        synchronized (lifecycleLock) {
+            if (sessionId != activeMicSessionId || !isMicRecord) {
+                return;
             }
-        });
+            if (running) {
+                isRunning = true;
+                return;
+            }
+            staleMonitors = terminateActiveSessionLocked();
+        }
+        closeMonitors(staleMonitors);
     }
 
 
@@ -83,18 +95,49 @@ public class HamRecorder {
      * @param buffer 数据缓冲区
      */
     public void doOnWaveDataReceived(int bufferLen,float[] buffer){
-        if (!isRunning) return;
-        for (VoiceDataMonitor monitor : voiceDataMonitorList) {//迭代的是快照，回调中增删监听器不影响本次遍历
+        List<VoiceDataMonitor> monitors;
+        synchronized (lifecycleLock) {
+            if (!isRunning || activeRecorderGeneration == 0) return;
+            monitors = snapshotMonitorsLocked(activeRecorderGeneration);
+        }
+        deliverToMonitors(monitors, bufferLen, buffer);
+    }
+
+    void doOnWaveDataReceived(long sessionId, int bufferLen, float[] buffer) {
+        List<VoiceDataMonitor> monitors;
+        synchronized (lifecycleLock) {
+            if (!isRunning || sessionId == 0 || sessionId != activeMicSessionId
+                    || activeRecorderGeneration == 0) {
+                return;
+            }
+            monitors = snapshotMonitorsLocked(activeRecorderGeneration);
+        }
+        deliverToMonitors(monitors, bufferLen, buffer);
+    }
+
+    private void deliverToMonitors(List<VoiceDataMonitor> monitors, int bufferLen, float[] buffer) {
+        for (VoiceDataMonitor monitor : monitors) {
             if (monitor != null) {
                 monitor.onHamRecord.OnReceiveData(buffer, bufferLen);
             }
         }
-
-        //doDataMonitorChanged();
     }
 
-    void doOnWaveDataReceived(long sessionId, int bufferLen, float[] buffer) {
-        doOnWaveDataReceived(bufferLen, buffer);
+    private List<VoiceDataMonitor> snapshotMonitorsLocked(long generation) {
+        List<VoiceDataMonitor> monitors = new ArrayList<>();
+        for (VoiceDataMonitor monitor : voiceDataMonitorList) {
+            if (monitor.generation == generation) {
+                monitors.add(monitor);
+            }
+        }
+        return monitors;
+    }
+
+    private boolean isMonitorAdmitted(VoiceDataMonitor monitor, long generation) {
+        synchronized (lifecycleLock) {
+            return isRunning && activeRecorderGeneration == generation
+                    && voiceDataMonitorList.contains(monitor);
+        }
     }
 
 
@@ -127,7 +170,11 @@ public class HamRecorder {
                     doOnWaveDataReceived(sessionId, len, data);
                 }
             });
+            activeRecorderGeneration = ++nextRecorderGeneration;
             activeMicSessionId = micRecorder.startSession();
+            if (activeMicSessionId == 0) {
+                terminateActiveSessionLocked();
+            }
         }
 
     }
@@ -142,7 +189,9 @@ public class HamRecorder {
      * @param monitor 数据监听器
      */
     public void deleteVoiceDataMonitor(VoiceDataMonitor monitor) {
-        voiceDataMonitorList.remove(monitor);
+        synchronized (lifecycleLock) {
+            voiceDataMonitorList.remove(monitor);
+        }
         doDataMonitorChanged();
     }
 
@@ -167,12 +216,41 @@ public class HamRecorder {
      */
     public void stopRecord() {
         long sessionId;
+        List<VoiceDataMonitor> staleMonitors;
         synchronized (lifecycleLock) {
             sessionId = activeMicSessionId;
-            activeMicSessionId = 0;
-            isRunning = false;
+            staleMonitors = terminateActiveSessionLocked();
         }
+        closeMonitors(staleMonitors);
         micRecorder.stopSession(sessionId);
+    }
+
+    /** Single terminal route used by stop and a failed MicRecorder session. */
+    public void onCleared() {
+        stopRecord();
+    }
+
+    private List<VoiceDataMonitor> terminateActiveSessionLocked() {
+        List<VoiceDataMonitor> staleMonitors = new ArrayList<>();
+        long generation = activeRecorderGeneration;
+        if (generation != 0) {
+            for (VoiceDataMonitor monitor : voiceDataMonitorList) {
+                if (monitor.generation == generation && voiceDataMonitorList.remove(monitor)) {
+                    staleMonitors.add(monitor);
+                }
+            }
+        }
+        activeMicSessionId = 0;
+        activeRecorderGeneration = 0;
+        isRunning = false;
+        return staleMonitors;
+    }
+
+    private static void closeMonitors(List<VoiceDataMonitor> monitors) {
+        if (monitors == null) return;
+        for (VoiceDataMonitor monitor : monitors) {
+            monitor.closeWithoutCallback();
+        }
     }
 
     /**
@@ -190,26 +268,35 @@ public class HamRecorder {
      * @param getVoiceDataDone 当录音数据达到指定的时长后，触发此回调
      */
     public VoiceDataMonitor getVoiceData(int duration, boolean afterDoneRemove, OnGetVoiceDataDone getVoiceDataDone) {
-        if (isRunning) {
+        List<VoiceDataMonitor> monitorsToForce = new ArrayList<>();
+        VoiceDataMonitor dataMonitor;
+        int monitorCount;
+        synchronized (lifecycleLock) {
+            if (!isRunning || activeRecorderGeneration == 0) {
+                return null;
+            }
+            long generation = activeRecorderGeneration;
             if (afterDoneRemove) {
-                //新的一次性录音窗口（解码周期）开始前，把上一个还没凑满的一次性窗口强制结算（不足补零）。
-                //否则音频流一旦断流（发射期间、网络丢包），旧窗口会吞掉下一个周期的音频，
-                //解码数据与UTC时隙错位，且未完成的窗口会越积越多（每个持有720KB缓冲区）。
                 for (VoiceDataMonitor monitor : voiceDataMonitorList) {
-                    if (monitor.oneShot) {
-                        monitor.forceComplete();
+                    if (monitor.generation == generation && monitor.oneShot
+                            && voiceDataMonitorList.remove(monitor)) {
+                        monitorsToForce.add(monitor);
                     }
                 }
             }
-            VoiceDataMonitor dataMonitor = new VoiceDataMonitor(duration, this
-                    , afterDoneRemove, getVoiceDataDone);
+            dataMonitor = new VoiceDataMonitor(duration, this, afterDoneRemove,
+                    getVoiceDataDone, generation);
             dataMonitor.voiceDataMonitor = dataMonitor;//用于监听器删除自己用。
             voiceDataMonitorList.add(dataMonitor);
-            doDataMonitorChanged();
-            return dataMonitor;
-        } else {
-            return null;
+            monitorCount = voiceDataMonitorList.size();
         }
+        for (VoiceDataMonitor monitor : monitorsToForce) {
+            monitor.forceComplete();
+        }
+        if (onVoiceMonitorChanged != null) {
+            onVoiceMonitorChanged.onMonitorChanged(monitorCount);
+        }
+        return dataMonitor;
     }
 
     /**
@@ -225,6 +312,7 @@ public class HamRecorder {
         private int dataCount;//计数器，当前数据的获取量
         private boolean done = false;//一次性监听器是否已经结算（正常凑满或被强制结算）
         public final boolean oneShot;//是否是一次性监听器（afterDoneRemove=true）
+        private final long generation;
         private final HamRecorder hamRecorder;
         private final OnGetVoiceDataDone onGetVoiceDataDone;
 
@@ -245,12 +333,13 @@ public class HamRecorder {
          * @param onGetVoiceDataDone 达到录音的时长后，触发此回调。为了防止占用太多录音的时间，此回调在另一个线程。
          */
         public VoiceDataMonitor(int duration, HamRecorder hamRecorder, boolean afterDoneRemove
-                , OnGetVoiceDataDone onGetVoiceDataDone) {
+                , OnGetVoiceDataDone onGetVoiceDataDone, long generation) {
             //时长，毫秒
             //宿主对象，方便用词对象调用删除数据获取动作列表中的本实例
 
             dataCount = 0;//当前的数据获取量
             oneShot = afterDoneRemove;
+            this.generation = generation;
             this.hamRecorder = hamRecorder;
             this.onGetVoiceDataDone = onGetVoiceDataDone;
             //生成预期大小中的数据缓冲区。
@@ -260,7 +349,9 @@ public class HamRecorder {
             onHamRecord = new OnHamRecord() {
                 @Override
                 public void OnReceiveData(float[] data, int size) {
-                    receiveData(data, size);
+                    if (hamRecorder.isMonitorAdmitted(VoiceDataMonitor.this, generation)) {
+                        receiveData(data, size);
+                    }
                 }
             };
 
@@ -278,11 +369,17 @@ public class HamRecorder {
             if (dataCount >= (voiceData.length)) {//当数据量达到所需要的。发起回调。
                 if (oneShot) {//如果是一次性的获取数据，则在录音对象中的监听列表中删除此监听回调。
                     done = true;
-                    onGetVoiceDataDone.onGetDone(voiceData);
-                    hamRecorder.deleteVoiceDataMonitor(voiceDataMonitor);
+                    try {
+                        onGetVoiceDataDone.onGetDone(voiceData);
+                    } finally {
+                        hamRecorder.deleteVoiceDataMonitor(voiceDataMonitor);
+                    }
                 } else {
-                    onGetVoiceDataDone.onGetDone(voiceData);
-                    dataCount = 0;//如果是循环录音，则复位计数器。
+                    try {
+                        onGetVoiceDataDone.onGetDone(voiceData);
+                    } finally {
+                        dataCount = 0;//如果是循环录音，则复位计数器。
+                    }
                     if (remainingSize > 0) {//把剩余的数据补发到后续事件上
                         float[] remainingData = new float[remainingSize];
                         System.arraycopy(data, size - remainingSize, remainingData, 0, remainingSize);
@@ -308,8 +405,15 @@ public class HamRecorder {
                 }
                 Arrays.fill(voiceData, dataCount, voiceData.length, 0f);
             }
-            onGetVoiceDataDone.onGetDone(voiceData);
-            hamRecorder.deleteVoiceDataMonitor(voiceDataMonitor);
+            try {
+                onGetVoiceDataDone.onGetDone(voiceData);
+            } finally {
+                hamRecorder.deleteVoiceDataMonitor(voiceDataMonitor);
+            }
+        }
+
+        private synchronized void closeWithoutCallback() {
+            done = true;
         }
 
     }
