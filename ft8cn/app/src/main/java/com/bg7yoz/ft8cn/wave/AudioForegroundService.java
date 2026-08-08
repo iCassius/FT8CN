@@ -34,8 +34,6 @@ public class AudioForegroundService extends Service {
     static final String EXTRA_ACK_START_ID = "ack_start_id";
     static final String EXTRA_ACK_STOP_SELF_START_ID = "ack_stop_self_start_id";
     static final String EXTRA_ACK_STOP_SELF_RESULT = "ack_stop_self_result";
-    /** Test-only command hook; it travels with the real service Intent. */
-    static final String EXTRA_TEST_FAIL_START_FOREGROUND = "test_fail_start_foreground";
     static final int ACK_STARTED = 1;
     static final int ACK_FAILED = 2;
     static final int ACK_STOPPED = 3;
@@ -86,15 +84,13 @@ public class AudioForegroundService extends Service {
                 .setContentText(getString(R.string.decoding))
                 .setSmallIcon(R.drawable.ft8cn_icon)
                 .build();
-        NotificationStarter notificationStarter = notificationStarterFor(intent);
-
         int result = sessionLifecycle.start(sessionId, startId, new SessionLifecycle.Actions() {
             @Override
             public void startForeground() throws Exception {
                 //未授权录音或 app 在后台时，startForeground(microphone) 会抛
                 //SecurityException/ForegroundServiceStartNotAllowedException，交给
                 //状态机统一转为 session failure 并终结服务。
-                notificationStarter.start(AudioForegroundService.this, notification);
+                promoteToForeground(notification);
             }
 
             @Override
@@ -129,29 +125,19 @@ public class AudioForegroundService extends Service {
         receiver.send(result, data);
     }
 
-    private NotificationStarter notificationStarterFor(Intent intent) {
-        NotificationStarter realStarter = (service, notification) -> {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                service.startForeground(NOTIFICATION_ID, notification,
+    /**
+     * Foreground promotion is the production framework boundary. Instrumented
+     * tests may override this method on a test-only Service component to make
+     * the real promotion call fail at this boundary; production Intents do not
+     * carry a test switch.
+     */
+    protected void promoteToForeground(Notification notification) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            startForeground(NOTIFICATION_ID, notification,
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
-            } else {
-                service.startForeground(NOTIFICATION_ID, notification);
-            }
-        };
-        if (intent != null && intent.getBooleanExtra(EXTRA_TEST_FAIL_START_FOREGROUND, false)) {
-            return (service, notification) -> {
-                // The OS watchdog requires a real foreground promotion before
-                // a synthetic post-promotion failure can be observed through
-                // the ResultReceiver without killing the target process.
-                realStarter.start(service, notification);
-                throw new IllegalStateException("injected startForeground failure");
-            };
+        } else {
+            startForeground(NOTIFICATION_ID, notification);
         }
-        return realStarter;
-    }
-
-    interface NotificationStarter {
-        void start(AudioForegroundService service, Notification notification) throws Exception;
     }
 
     private static final class CommandAudit {

@@ -39,6 +39,7 @@ public class AudioForegroundServiceLifecycleTest {
     @After
     public void stopRealServiceAfterTest() {
         context().stopService(new Intent(context(), AudioForegroundService.class));
+        context().stopService(new Intent(context(), FailingAudioForegroundService.class));
     }
 
     @Test
@@ -83,9 +84,10 @@ public class AudioForegroundServiceLifecycleTest {
     }
 
     @Test
-    public void realServicePropagatesInjectedStartForegroundFailureAndCleansUp() throws Exception {
+    public void testServicePropagatesPromotionFailureAndCleansUp() throws Exception {
         Intent start = AudioForegroundService.createStartIntent(context(), 601)
-                .putExtra(AudioForegroundService.EXTRA_TEST_FAIL_START_FOREGROUND, true);
+                .setComponent(new android.content.ComponentName(
+                        context(), FailingAudioForegroundService.class));
         Ack failed = sendRealCommand(start);
         assertEquals(AudioForegroundService.ACK_FAILED, failed.resultCode);
         assertEquals(601L, failed.sessionId);
