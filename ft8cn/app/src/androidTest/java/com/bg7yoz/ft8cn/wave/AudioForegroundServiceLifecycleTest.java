@@ -172,7 +172,8 @@ public class AudioForegroundServiceLifecycleTest {
                 received.countDown();
             }
         });
-        if (AudioForegroundService.ACTION_STOP.equals(command.getAction())) {
+        if (AudioForegroundService.ACTION_STOP.equals(command.getAction())
+                || isPromotionFailureTestService(command)) {
             context().startService(command);
         } else {
             ContextCompat.startForegroundService(context(), command);
@@ -182,6 +183,12 @@ public class AudioForegroundServiceLifecycleTest {
         Ack result = ack.get();
         assertTrue("real service ACK payload was missing", result != null);
         return result;
+    }
+
+    private static boolean isPromotionFailureTestService(Intent command) {
+        return command.getComponent() != null
+                && FailingAudioForegroundService.class.getName().equals(
+                        command.getComponent().getClassName());
     }
 
     private static final class Ack {
