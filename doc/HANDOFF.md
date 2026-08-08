@@ -4,6 +4,38 @@
 
 ---
 
+## 2026-08-08　v0.93.005-beta.6 发布阻断最终收口
+
+### 基线、分支与分层提交
+
+- 精确基线：`codex/v0.93.005-delivery-lease-fix@30cfb169e7ff2abf65bc79b91e19c072c1846741`；已核对 `PROJECT_RULES.md`、本文件；没有 `notes` 目录；工作树初始 clean。
+- 分支：`codex/v0.93.005-beta6-ready`；未推送、未合并 `release`、未创建 tag/Release/Secrets；未修改或提交 `local.properties`、构建产物。
+- 分层代码提交：`5e4505c`（P1-1 Ham/Mic stop→start ownership 与真实 MicRecorder control test）、`a820fa2`（P1-2 production foreground promotion boundary 与真实 Service integration test）、`f208096`（P1-2 debug-only failing Service registration）、`90455ce`（P1-3 beta.6 notes local gate/workflow enforcement）；本条、正式 notes 与 beta.6 notes 为最后独立文档提交。
+
+### 根因与修复
+
+- **P1-1 HamRecorder/MicRecorder**：HamRecorder stop 先通过 `MicRecorder.retireSession()` 在线性化 ownership 下撤销旧 session identity，再释放 HamRecorder lifecycle lock；AudioRecord、worker interrupt、前台服务停止和其他外部动作均在锁外完成。并发 start 不能取得旧 id，旧 cleanup 不能清理新 session。
+- **P1-1 回归证据**：新增真实 `MicRecorder`（fake AudioRecord factory + controlled read）并发 stop/start test；latch 强制 stop 尚未完成 identity retirement 时发起 start，使用 Future 获取传播异常，断言 start 被锁住、取得不同 session id、新 session 真正进入 running 并交付新数据。
+- **P1-2 前台服务**：删除 production Intent 测试 extra 和 synthetic post-startForeground throw；生产 Service 只通过 `protected promoteToForeground()` 调用真实 framework promotion。失败 ACK instrumentation 使用独立 debug-only `FailingAudioForegroundService` 组件，在 promotion boundary 抛出异常；release manifest 不包含该组件或 hook。真实 Service 路径仍覆盖成功 START、matching/stale/no-active STOP、startId/stopSelfResult 与失败 ACK。
+- **P1-3 门禁**：beta workflow 使用非空 version-specific notes 检查；本地 `scripts.test_release_gates` 新增 `v0.93.005-beta.6` notes 必须存在、非空、含包名/Debug/HIL 边界的检查。
+
+### 最终验证与边界
+
+- **AUTO_VERIFIED**：最终文档 HEAD 重新执行 JVM `:app:testDebugUnitTest --rerun-tasks`、Java/androidTest Java 编译、`assembleDebug`、`packageTestApk`、`lintDebug`；release contract 默认/`--history`、release gates、`git diff --check` 均以最终输出为准。lint 保留既有 `0 errors / 330 warnings`。
+- **AVD_VERIFIED**：先确认无实体设备、无其他 emulator/qemu owner，独占唯一 `Pixel_10_Pro_XL` / API 37 AVD。受影响目标集合 14/14 连续 5 轮；全量 `connectedDebugAndroidTest` 61/61 连续 2 轮；最终 debug beta clean uninstall/install、Monkey 启动、包进程存活且 crash buffer 无该包记录。首次目标轮次中发现 test Service 未注册到 target manifest，改为 debug-only component 后重新完成全部最终轮次；失败轮次不计入证据。
+- **HIL**：无真实手机、无电台；未执行 CAT/PTT/TX、真实录音、完整 QSO、长时挂机、功耗/温升或用户 HIL。`AUTO_VERIFIED`/`AVD_VERIFIED` 不等同于 HIL，也不构成正式发布授权。
+
+### 产物与发布结论
+
+- 最终 beta APK 为 debug-signed `com.bg7yoz.ft8cn.beta`，版本 `0.93.005-beta` / `versionCode 93005`；最终路径、大小、SHA-256、Debug 证书指纹以最终 HEAD 的最终构建输出为准。
+- beta.6 candidate：`GO`（仅限最终 AUTO/AVD/clean beta smoke 证据）；`v0.93.005-beta.6`：`NO-GO`，未创建 tag/Release；`release`：`NO-GO`，未合并/推送；`formal`：`NO-GO`，缺长期 keystore、可信证书 SHA-256 与明确批准，未生成正式签名 APK。
+
+### 下一步
+
+- 将最终 HEAD、分层提交、测试计数、APK/SHA/证书和上述 beta.6/integration/release/formal 结论交还主会话；不推送、不合并、不打 tag/Release，不执行真实手机/电台操作。
+
+---
+
 ## 2026-08-08　v0.93.005 最后录音交付 lease 收口
 
 ### 基线、分支与分层提交
