@@ -144,6 +144,7 @@ public class MainViewModel extends ViewModel {
     private final AtomicLong lifecycleGeneration = new AtomicLong();
     private final AtomicLong rigGeneration = new AtomicLong();
     private final AtomicLong qthGeneration = new AtomicLong();
+    private final AtomicLong latestDecodeEpoch = new AtomicLong(-1);
     private volatile boolean cleared;
 
 
@@ -269,6 +270,7 @@ public class MainViewModel extends ViewModel {
         lifecycleGeneration.incrementAndGet();
         rigGeneration.incrementAndGet();
         qthGeneration.incrementAndGet();
+        latestDecodeEpoch.incrementAndGet();
         getQTHThreadPool.cancelPending();
         sendWaveDataThreadPool.cancelPending();
         getQTHThreadPool.shutdown();
@@ -381,14 +383,25 @@ public class MainViewModel extends ViewModel {
         //创建监听对象，回调中的动作用于处理解码、发射、关注的呼号列表添加等操作
         ft8SignalListener = new FT8SignalListener(databaseOpr, new OnFt8Listen() {
             @Override
-            public void beforeListen(long utc) {
+            public void beforeListen(long utc, long epoch) {
+                if (cleared) return;
+                latestDecodeEpoch.set(epoch);
+                currentDecodeCount = 0;
+                currentMessages = new ArrayList<>();
                 mutableIsDecoding.postValue(true);
             }
 
             @Override
             public void afterDecode(long utc, float time_sec, int sequential
-                    , ArrayList<Ft8Message> messages, boolean isDeep) {
-                if (messages.isEmpty()) return;//没有解码出消息，不触发动作
+                    , ArrayList<Ft8Message> messages, boolean isDeep, long epoch) {
+                if (!isCurrentDecode(epoch)) return;
+                if (messages == null) messages = new ArrayList<>();
+                currentMessages = messages;
+                if (messages.isEmpty()) {
+                    if (!isDeep) currentDecodeCount = 0;
+                    mutable_Decoded_Counter.postValue(currentDecodeCount);
+                    return;//没有解码出消息，不触发动作
+                }
 
                 synchronized (ft8Messages) {
                     ft8Messages.addAll(messages);//添加消息到列表
@@ -420,9 +433,6 @@ public class MainViewModel extends ViewModel {
                     currentDecodeCount = messages.size();
                 }
 
-                mutableIsDecoding.postValue(false);//解码的状态，会触发频谱图中的标记动作
-
-
                 long lifecycle = lifecycleGeneration.get();
                 long qth = qthGeneration.get();
                 submitQthTask(new GetQTHRunnable(MainViewModel.this, messages, lifecycle, qth));//用线程池的方式查询归属地
@@ -443,6 +453,13 @@ public class MainViewModel extends ViewModel {
                 }
                 //从列表中查找呼号和网格对应关系，并添加到表中
                 getCallsignAndGrid(messages);
+            }
+
+            @Override
+            public void onDecodeFinished(long utc, long epoch, boolean cancelled, Throwable failure) {
+                if (!isCurrentDecode(epoch)) return;
+                mutableIsDecoding.postValue(false);//所有成功、空结果、异常和取消都在此复位
+                mutable_Decoded_Counter.postValue(currentDecodeCount);
             }
         });
 
@@ -1260,6 +1277,10 @@ public class MainViewModel extends ViewModel {
 
     private boolean isCurrentWave(long lifecycle, long rig) {
         return !cleared && lifecycleGeneration.get() == lifecycle && rigGeneration.get() == rig;
+    }
+
+    private boolean isCurrentDecode(long epoch) {
+        return !cleared && latestDecodeEpoch.get() == epoch;
     }
 
 }

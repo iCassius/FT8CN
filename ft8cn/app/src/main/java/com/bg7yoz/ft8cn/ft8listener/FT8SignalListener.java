@@ -22,6 +22,7 @@ import com.bg7yoz.ft8cn.wave.WaveFileReader;
 import com.bg7yoz.ft8cn.wave.WaveFileWriter;
 
 import java.util.ArrayList;
+import java.util.concurrent.CancellationException;
 
 public class FT8SignalListener {
     private static final String TAG = "FT8SignalListener";
@@ -33,6 +34,7 @@ public class FT8SignalListener {
     public long timeSec=0;//解码的时长
 
     private OnWaveDataListener onWaveDataListener;
+    private final DecodeCoordinator decodeCoordinator = new DecodeCoordinator(TAG + "-decode");
 
 
     private DatabaseOpr db;
@@ -74,6 +76,7 @@ public class FT8SignalListener {
     public void stopListen() {
         utcTimer.stop();
         utcTimer.delete();
+        decodeCoordinator.stop();
     }
 
     public boolean isListening() {
@@ -111,78 +114,107 @@ public class FT8SignalListener {
     }
 
     public void decodeFt8(long utc, float[] voiceData) {
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                long time = System.currentTimeMillis();
-                if (onFt8Listen != null) {
-                    onFt8Listen.beforeListen(utc);
-                }
+        if (voiceData == null) return;
 
-                ///读入音频数据，并做预处理
-                //其实这种方式要注意一个问题，在一个周期之内，必须解码完毕，否则新的解码又要开始了
-                long ft8Decoder = InitDecoder(utc, FT8Common.SAMPLE_RATE
-                        , voiceData.length, true);
-                
-                try {
-                    DecoderMonitorPressFloat(voiceData, ft8Decoder);//读入音频数据
-
-                    A91List localA91List = new A91List();
-                    ArrayList<Ft8Message> allMsg = new ArrayList<>();
-                    ArrayList<Ft8Message> msgs = runDecode(ft8Decoder, utc, false, localA91List);
-                    addMsgToList(allMsg, msgs);
-                    
-                    long currentDuration = System.currentTimeMillis() - time;
-                    timeSec = currentDuration;
-                    decodeTimeSec.postValue(currentDuration);//解码耗时
-                    
-                    if (onFt8Listen != null) {
-                        onFt8Listen.afterDecode(utc, averageOffset(allMsg), UtcTimer.sequential(utc), msgs, false);
-                    }
-
-                    if (GeneralVariables.deepDecodeMode) {//进入深度解码模式
-                        msgs = runDecode(ft8Decoder, utc, true, localA91List);
-                        addMsgToList(allMsg, msgs);
-                        
-                        currentDuration = System.currentTimeMillis() - time;
-                        timeSec = currentDuration;
-                        decodeTimeSec.postValue(currentDuration);//解码耗时
-                        
+        boolean accepted = decodeCoordinator.submit(token -> decodeFt8Task(token, utc, voiceData),
+                new DecodeCoordinator.Listener() {
+                    @Override
+                    public void onStarted(long epoch) {
                         if (onFt8Listen != null) {
-                            onFt8Listen.afterDecode(utc, averageOffset(allMsg), UtcTimer.sequential(utc), msgs, true);
-                        }
-
-                        while (msgs.size() > 0) {
-                            if (currentDuration > FT8Common.DEEP_DECODE_TIMEOUT) break;//此处做超时检测，超过一定时间(7秒)，就不做减码操作了
-                            //减去解码的信号
-                            ReBuildSignal.subtractSignal(ft8Decoder, localA91List);
-
-                            //再做一次解码
-                            msgs = runDecode(ft8Decoder, utc, true, localA91List);
-                            addMsgToList(allMsg, msgs);
-                            
-                            currentDuration = System.currentTimeMillis() - time;
-                            timeSec = currentDuration;
-                            decodeTimeSec.postValue(currentDuration);//解码耗时
-                            
-                            if (onFt8Listen != null) {
-                                onFt8Listen.afterDecode(utc, averageOffset(allMsg), UtcTimer.sequential(utc), msgs, true);
-                            }
+                            onFt8Listen.beforeListen(utc, epoch);
                         }
                     }
-                } catch (Exception e) {
-                    Log.e(TAG, "decodeFt8 error: " + e.getMessage());
-                } finally {
+
+                    @Override
+                    public void onFinished(long epoch, boolean cancelled, Throwable failure) {
+                        if (failure != null) {
+                            Log.e(TAG, "decodeFt8 error", failure);
+                        }
+                        if (onFt8Listen != null) {
+                            onFt8Listen.onDecodeFinished(utc, epoch, cancelled, failure);
+                        }
+                    }
+                });
+        if (!accepted) {
+            Log.d(TAG, "跳过重叠或已停止的解码, utc=" + utc);
+        }
+    }
+
+    private void decodeFt8Task(DecodeCoordinator.DecodeToken token, long utc, float[] voiceData)
+            throws Exception {
+        long time = System.currentTimeMillis();
+        long ft8Decoder = 0;
+        try {
+            token.throwIfCancelled();
+
+            ///读入音频数据，并做预处理
+            ft8Decoder = InitDecoder(utc, FT8Common.SAMPLE_RATE, voiceData.length, true);
+            token.throwIfCancelled();
+            DecoderMonitorPressFloat(voiceData, ft8Decoder);//读入音频数据
+
+            A91List localA91List = new A91List();
+            ArrayList<Ft8Message> allMsg = new ArrayList<>();
+            ArrayList<Ft8Message> msgs = runDecode(token, ft8Decoder, utc, false, localA91List);
+            addMsgToList(allMsg, msgs);
+
+            publishDecodeDuration(token, time);
+            publishDecode(token, utc, averageOffset(allMsg), msgs, false);
+
+            if (GeneralVariables.deepDecodeMode) {//进入深度解码模式
+                msgs = runDecode(token, ft8Decoder, utc, true, localA91List);
+                addMsgToList(allMsg, msgs);
+
+                long currentDuration = publishDecodeDuration(token, time);
+                publishDecode(token, utc, averageOffset(allMsg), msgs, true);
+
+                while (msgs.size() > 0) {
+                    token.throwIfCancelled();
+                    if (currentDuration > FT8Common.DEEP_DECODE_TIMEOUT) break;//此处做超时检测，超过一定时间(7秒)，就不做减码操作了
+                    //减去解码的信号
+                    ReBuildSignal.subtractSignal(ft8Decoder, localA91List);
+                    token.throwIfCancelled();
+
+                    //再做一次解码
+                    msgs = runDecode(token, ft8Decoder, utc, true, localA91List);
+                    addMsgToList(allMsg, msgs);
+
+                    currentDuration = publishDecodeDuration(token, time);
+                    publishDecode(token, utc, averageOffset(allMsg), msgs, true);
+                }
+            }
+        } finally {
+            try {
+                if (ft8Decoder != 0) {
                     DeleteDecoder(ft8Decoder);
                 }
-
-                Log.d(TAG, String.format("解码耗时:%d毫秒", System.currentTimeMillis() - time));
+            } finally {
+                if (token.isCurrent()) {
+                    Log.d(TAG, String.format("解码耗时:%d毫秒", System.currentTimeMillis() - time));
+                }
             }
-        }).start();
+        }
+    }
+
+    private long publishDecodeDuration(DecodeCoordinator.DecodeToken token, long startTime) {
+        token.throwIfCancelled();
+        long currentDuration = System.currentTimeMillis() - startTime;
+        timeSec = currentDuration;
+        decodeTimeSec.postValue(currentDuration);//解码耗时
+        return currentDuration;
+    }
+
+    private void publishDecode(DecodeCoordinator.DecodeToken token, long utc, float time_sec
+            , ArrayList<Ft8Message> messages, boolean isDeep) {
+        token.throwIfCancelled();
+        if (onFt8Listen != null) {
+            onFt8Listen.afterDecode(utc, time_sec, UtcTimer.sequential(utc), messages, isDeep
+                    , token.epoch());
+        }
     }
 
 
-    private ArrayList<Ft8Message> runDecode(long ft8Decoder, long utc, boolean isDeep, A91List localA91List) {
+    private ArrayList<Ft8Message> runDecode(DecodeCoordinator.DecodeToken token, long ft8Decoder
+            , long utc, boolean isDeep, A91List localA91List) {
         ArrayList<Ft8Message> ft8Messages = new ArrayList<>();
         Ft8Message ft8Message = new Ft8Message(FT8Common.FT8_MODE);
 
@@ -190,12 +222,15 @@ public class FT8SignalListener {
         ft8Message.band = GeneralVariables.band;
         localA91List.clear();
 
+        token.throwIfCancelled();
         setDecodeMode(ft8Decoder, isDeep);//设置迭代次数,isDeep==true，迭代次数增加
 
+        token.throwIfCancelled();
         int num_candidates = DecoderFt8FindSync(ft8Decoder);//最多120个
         //long startTime = System.currentTimeMillis();
         for (int idx = 0; idx < num_candidates; ++idx) {
             //todo 应当做一下超时计算
+            token.throwIfCancelled();
             try {//做一下解码失败保护
                 if (DecoderFt8Analysis(idx, ft8Decoder, ft8Message)) {
 
@@ -214,6 +249,7 @@ public class FT8SignalListener {
                     }
                 }
             } catch (Exception e) {
+                if (e instanceof CancellationException) throw (CancellationException) e;
                 Log.e(TAG, "run: " + e.getMessage());
             }
 
