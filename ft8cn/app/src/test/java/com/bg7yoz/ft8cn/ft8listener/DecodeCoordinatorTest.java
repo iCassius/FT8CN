@@ -125,6 +125,7 @@ public class DecodeCoordinatorTest {
     public void cancelledOldEpochCannotWriteAfterTheNextEpochStarts() throws Exception {
         DecodeCoordinator coordinator = new DecodeCoordinator("decode-test-epoch");
         CountDownLatch oldStarted = new CountDownLatch(1);
+        CountDownLatch releaseOld = new CountDownLatch(1);
         CountDownLatch oldFinished = new CountDownLatch(1);
         CountDownLatch newFinished = new CountDownLatch(1);
         List<String> writes = new ArrayList<>();
@@ -133,7 +134,7 @@ public class DecodeCoordinatorTest {
             assertTrue(coordinator.submit(token -> {
                 oldStarted.countDown();
                 try {
-                    Thread.sleep(10000);
+                    releaseOld.await();
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
                 }
@@ -175,6 +176,7 @@ public class DecodeCoordinatorTest {
             assertEquals(1, writes.size());
             assertEquals("new", writes.get(0));
         } finally {
+            releaseOld.countDown();
             coordinator.stop();
         }
     }
@@ -218,20 +220,25 @@ public class DecodeCoordinatorTest {
     }
 
     @Test
-    public void runningOldTaskCannotClearAStillActiveSlotBeforeItsFinally() throws Exception {
-        DecodeCoordinator coordinator = new DecodeCoordinator("decode-test-finally-identity");
+    public void runningOldFinallyCannotClearAStillActiveNewRun() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        AtomicInteger terminalCleanupCount = new AtomicInteger();
+        CountDownLatch oldCleanup = new CountDownLatch(1);
+        DecodeCoordinator coordinator = new DecodeCoordinator("decode-test-finally-identity", executor,
+                () -> {
+                    if (terminalCleanupCount.incrementAndGet() == 1) {
+                        oldCleanup.countDown();
+                    }
+                });
         CountDownLatch oldStarted = new CountDownLatch(1);
         CountDownLatch oldFinishedCallback = new CountDownLatch(1);
         CountDownLatch releaseOldFinishedCallback = new CountDownLatch(1);
+        CountDownLatch newStarted = new CountDownLatch(1);
+        CountDownLatch releaseNew = new CountDownLatch(1);
         CountDownLatch newFinished = new CountDownLatch(1);
         try {
             assertTrue(coordinator.submit(token -> {
                 oldStarted.countDown();
-                try {
-                    Thread.sleep(10000);
-                } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
-                }
                 token.throwIfCancelled();
             }, new DecodeCoordinator.Listener() {
                 @Override
@@ -241,29 +248,45 @@ public class DecodeCoordinatorTest {
                 @Override
                 public void onFinished(long epoch, boolean cancelled, Throwable failure) {
                     oldFinishedCallback.countDown();
-                    // The cancelled decode leaves the worker interrupted;
-                    // clear it so this test can hold the terminal callback.
-                    Thread.interrupted();
                     try {
-                        releaseOldFinishedCallback.await(2, TimeUnit.SECONDS);
+                        if (!releaseOldFinishedCallback.await(2, TimeUnit.SECONDS)) {
+                            throw new AssertionError("old terminal callback was not released");
+                        }
                     } catch (InterruptedException interrupted) {
                         Thread.currentThread().interrupt();
+                        throw new AssertionError("old terminal callback was interrupted", interrupted);
                     }
                 }
             }));
             assertTrue(oldStarted.await(2, TimeUnit.SECONDS));
-            coordinator.cancelActive();
             assertTrue(oldFinishedCallback.await(2, TimeUnit.SECONDS));
-            assertFalse("running old Future released the slot before finally", coordinator.submit(
-                    token -> { }, noOpListener(newFinished)));
+            assertTrue("new decode was not admitted after old body terminated", coordinator.submit(
+                    token -> {
+                        newStarted.countDown();
+                        if (!releaseNew.await(2, TimeUnit.SECONDS)) {
+                            throw new AssertionError("new decode was not released");
+                        }
+                    }, noOpListener(newFinished)));
+            assertTrue("new decode did not start while old terminal callback was held",
+                    newStarted.await(2, TimeUnit.SECONDS));
 
             releaseOldFinishedCallback.countDown();
-            awaitInactive(coordinator);
-            assertTrue(coordinator.submit(token -> { }, noOpListener(newFinished)));
+            // The old callback now returns and its finally path runs while
+            // the new task is still active. ActiveRun identity must preserve
+            // the new slot.
+            assertTrue("old terminal cleanup did not finish",
+                    oldCleanup.await(2, TimeUnit.SECONDS));
+            assertTrue(coordinator.isActive());
+            assertFalse("old finally cleared the newly accepted run", coordinator.submit(
+                    token -> { }, noOpListener(new CountDownLatch(1))));
+            releaseNew.countDown();
             assertTrue("new decode did not finish", newFinished.await(2, TimeUnit.SECONDS));
+            awaitInactive(coordinator);
         } finally {
             releaseOldFinishedCallback.countDown();
+            releaseNew.countDown();
             coordinator.stop();
+            executor.shutdownNow();
         }
     }
 

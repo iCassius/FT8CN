@@ -53,6 +53,7 @@ final class DecodeCoordinator {
 
     private final Object lock = new Object();
     private final ExecutorService executor;
+    private final Runnable afterTerminalCleanup;
     private long epoch;
     private boolean active;
     private boolean stopped;
@@ -60,15 +61,21 @@ final class DecodeCoordinator {
     private ActiveRun activeRun;
 
     DecodeCoordinator(String threadName) {
-        executor = Executors.newSingleThreadExecutor(runnable -> {
+        this(threadName, Executors.newSingleThreadExecutor(runnable -> {
             Thread thread = new Thread(runnable, threadName);
             thread.setDaemon(true);
             return thread;
-        });
+        }), () -> { });
     }
 
     DecodeCoordinator(String threadName, ExecutorService executor) {
+        this(threadName, executor, () -> { });
+    }
+
+    DecodeCoordinator(String threadName, ExecutorService executor, Runnable afterTerminalCleanup) {
         this.executor = Objects.requireNonNull(executor, "executor");
+        this.afterTerminalCleanup = Objects.requireNonNull(afterTerminalCleanup,
+                "afterTerminalCleanup");
     }
 
     boolean submit(DecodeTask task, Listener listener) {
@@ -174,6 +181,17 @@ final class DecodeCoordinator {
             }
         } finally {
             if (started) {
+                // The decode body has terminated before the terminal
+                // callback. Release admission for the next decode now, but
+                // retain the ActiveRun identity until this old callback and
+                // its finally path have returned. A late old cleanup must
+                // therefore never clear a newly accepted run.
+                synchronized (lock) {
+                    if (activeRun == run) {
+                        active = false;
+                        activeFuture = null;
+                    }
+                }
                 try {
                     listener.onFinished(token.epoch(), cancelled, failure);
                 } catch (Throwable ignored) {
@@ -182,6 +200,11 @@ final class DecodeCoordinator {
             }
             synchronized (lock) {
                 clearRunLocked(run);
+            }
+            try {
+                afterTerminalCleanup.run();
+            } catch (Throwable ignored) {
+                // Test/diagnostic observers must not change terminal cleanup.
             }
         }
     }

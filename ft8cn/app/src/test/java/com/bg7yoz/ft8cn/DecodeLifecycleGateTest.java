@@ -4,8 +4,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Test;
 
@@ -17,28 +19,35 @@ public class DecodeLifecycleGateTest {
 
         CountDownLatch entryChecked = new CountDownLatch(1);
         CountDownLatch allowAdmission = new CountDownLatch(1);
-        AtomicInteger sideEffects = new AtomicInteger();
-        Thread staleDecode = new Thread(() -> {
+        int[] sideEffects = {0};
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        Future<?> staleDecode = executor.submit(() -> {
             // This is the vulnerable interleave from afterDecode: the old
             // implementation stopped here and then performed side effects.
             if (!gate.isCurrent(41)) return;
             entryChecked.countDown();
             try {
-                assertTrue(allowAdmission.await(2, TimeUnit.SECONDS));
+                if (!allowAdmission.await(2, TimeUnit.SECONDS)) {
+                    throw new AssertionError("duration admission was not released");
+                }
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
-                return;
+                throw new AssertionError("duration admission worker was interrupted", interrupted);
             }
-            gate.runIfCurrent(41, sideEffects::incrementAndGet);
-        }, "decode-lifecycle-race-test");
+            gate.runIfCurrent(41, () -> sideEffects[0]++);
+        });
 
-        staleDecode.start();
-        assertTrue("decode did not reach the entry check", entryChecked.await(2, TimeUnit.SECONDS));
-        gate.close();
-        allowAdmission.countDown();
-        staleDecode.join(TimeUnit.SECONDS.toMillis(2));
+        try {
+            assertTrue("decode did not reach the entry check", entryChecked.await(2, TimeUnit.SECONDS));
+            gate.close();
+            allowAdmission.countDown();
+            staleDecode.get(2, TimeUnit.SECONDS);
+            assertTrue("decode worker did not terminate", staleDecode.isDone());
+        } finally {
+            executor.shutdownNow();
+        }
 
-        assertEquals("stale decode admitted a side effect after close", 0, sideEffects.get());
+        assertEquals("stale decode admitted a side effect after close", 0, sideEffects[0]);
     }
 
     @Test
