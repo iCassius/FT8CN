@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-08-08　v0.93.005-beta.7 持久 beta 签名链修复
+
+### 范围与签名材料
+
+- 基线：`b092598a286a0a51bc59dfc05b18dfb72b892523`；分支：`codex/v0.93.005-beta7-signing`。只在 beta 范围内工作，不 push、不 tag、不创建 beta.7 Release，不改 `release`、formal tag 或 formal Secrets，不删除/移动/覆盖 beta.6。
+- 已检查仓库与既有签名位置，没有可恢复的持久 beta key；新 beta-only keystore 与独立 backup 位于仓库外 `C:\Users\cassi\Documents\FT8CN-signing\beta\20260808-204005`。恢复信息为当前 Windows 用户 DPAPI 加密，边界与用户 ACL 记录在该目录说明中。
+- 新 beta certificate SHA-256 已写入仓库外受 ACL 保护的指纹说明并配置到 beta secret；私钥、密码和 secret 值未进入仓库或输出；formal 签名身份保持独立。
+- 已通过本机 Git Credential Manager 认证的 GitHub API 配置 6 个 `FT8CN_BETA_*` Actions Secrets；仅核对名称和更新时间，未回显值。`gh` CLI 在本机不可用，未用浏览器/manual upload。
+
+### 代码与发布语义
+
+- 普通 `debug` 继续使用 Android Debug certificate；`packageTestApk`/tag prerelease 使用专用 `beta` build type，只接受 beta-only material，缺失、错证书或非 beta.7 版本 fail-fast。
+- beta.7 固定为 `versionName=0.93.005-beta.7`、`versionCode=93007`、包名 `com.bg7yoz.ft8cn.beta`；formal canonical 仍为 `0.93.005`/`93005`。
+- beta workflow 在 `RUNNER_TEMP` materialize keystore，先用 keytool 核证书、构建后用 apksigner 核精确 SHA-256，并 always 清理；metadata/zipalign 与 contract 也必须通过。beta.6 文档只记录已知签名身份问题，beta.6 tag/Release 保持不可变。
+
+### 当前边界
+
+- beta.5/beta.6 用户迁移 beta.7 前需卸载一次；beta.7 后由同一 beta-only certificate 形成覆盖升级链。自动化/AVD 证据不等于真实手机/HIL；本会话不执行真实电台、CAT/PTT/TX。
+- 分层实现提交：`c3d5a47`（beta build/signature/metadata/test）、`18e569e`（workflow/contract）；本条文档随后的 docs commit 只包含说明更新。最终 AUTO_VERIFIED：JVM 21/21，失败 0、错误 0、跳过 0；`scripts.test_release_gates` 14/14；contract 默认与 `--history`、`git diff --check`、`compileDebugAndroidTestJavaWithJavac`、`assembleDebug`、`lintDebug`、两次 beta `packageTestApk` 均通过，lint 0 errors / 330 warnings。
+- 独占 `Pixel_10_Pro_XL` AVD：beta.6 asset 可下载，`adb install -r` beta.7 因签名不一致按预期失败；卸载 beta.6 后 beta.7 clean install、Monkey/进程存活和 crash buffer 无该包记录通过；同一 beta-only key 重建的第二个 beta.7 APK `adb install -r` 覆盖升级通过，随后 Monkey/进程存活和 crash buffer 仍通过；AVD 已关闭。
+- 当前交接结论：代码与证据已完成，等待主会话独立批准是否将该分支合入后再创建 beta.7 tag/Release；本会话没有执行 tag、Release、push、formal 修改或真实电台/CAT/PTT/TX。
+
+---
+
 ## 2026-08-08　v0.93.005-beta.6 配置生命周期阻断修复
 
 ### 基线、分支与提交
