@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-08-08　v0.93.005 发布质量候选复核
+
+### 做了什么
+
+- 以 `codex/v0.93.005-integration@2906dec` 为基线，创建本地分支 `codex/v0.93.005-release-quality`，逐项处理 lint error、正式 release notes 和 formal workflow 审计。
+- 修复 `FT8TransmitSignal` 的 API 24 `ConcurrentHashMap.newKeySet()`，改为兼容 `minSdk 23` 的并发 Set；为本地 TXT/ADIF `file/content` 导入 filter 增加带理由的精准 `AppLinkUrlError` suppression；补齐希腊语、日语和西班牙语的四个新增字符串。
+- formal workflow 保留 tag 指向与 `origin/release` 精确 SHA 校验，并增加 APK 非空校验、`gh release create --verify-tag` 单步携带 APK；未使用 `--clobber`，不再分离执行 `gh release upload`。对应独立提交为 `e533c2d`。
+- 更新 `doc/release-notes/v0.93.005.md`，移除“已批准签名迁移”等未经当前会话证明的表述，明确正式签名、tag、Release、AVD 与 HIL 边界。
+
+### 关键决策
+
+- 每个问题保持独立提交：`354bd18`（minSdk lint）、`532fe6c`（本地文件导入 lint）、`e1b41b1`（缺失翻译）、`e533c2d`（formal workflow 审计/保护）、`30f5de6`（正式 release notes）。
+- 不创建 keystore，不设置 GitHub Secrets，不推送、不合并 `release`、不创建或推送 tag；正式发布仍需专门会话授权。
+
+### 当前状态
+
+- `AUTO_VERIFIED`：`lintDebug` 0 errors / 330 warnings；JVM `testDebugUnitTest` 8/8；`assembleDebug`、`packageTestApk`、debug APK 签名验证通过；release contract 默认扫描与 `--history` 扫描通过；`scripts.test_release_gates` 9/9。
+- 本次生成的 TEST/BETA 产物为 debug 签名，仅证明测试包链路；没有生成正式签名 APK。剩余 lint warnings 为 330，未用 baseline 掩盖。
+- 既有 v0.93.005 集成证据中的 AVD `connectedDebugAndroidTest` 为 43/43；本会话未重跑 AVD。没有真实设备、电台、完整 QSO、长时稳定性、功耗或温升/HIL 证据。
+
+### 下一步
+
+- 主会话验收这些独立 SHA 与测试证据；若进入正式发布，先完成长期 keystore、可信证书 SHA-256、正式批准和真实设备/HIL 门禁，再从 `origin/release` 精确 SHA 创建不可覆盖 tag/Release。
+
+---
+
 ## 2026-08-03　v0.93.005-beta.5 GitHub 预发布自动验收
 
 ### 做了什么
