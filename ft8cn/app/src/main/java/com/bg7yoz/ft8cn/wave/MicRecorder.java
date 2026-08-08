@@ -410,6 +410,7 @@ public class MicRecorder {
         }
 
         @Override
+        @SuppressLint("MissingPermission")
         public AudioRecordHandle create(int bufferSize) {
             return new AndroidAudioRecord(new AudioRecord(MediaRecorder.AudioSource.MIC,
                     SAMPLE_RATE_IN_HZ, CHANNEL_CONFIG, AUDIO_FORMAT, bufferSize));
