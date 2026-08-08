@@ -4,6 +4,39 @@
 
 ---
 
+## 2026-08-08　v0.93.005 最终发布前 P1/P2 风险收口
+
+### 基线与提交
+
+- 精确基线：`codex/v0.93.005-decode-race-fix@7bea59057690146dbaada2352e81de1f8729083d`；工作树初始干净。
+- 分支：`codex/v0.93.005-final-risk-fix`；未推送、未合并 `release`、未打 tag、未创建 Release/Secrets。
+- 代码与测试按问题分层提交：`c5baf64a68dfcd10c133a9e61e06257a28a7b3f6`（P1-1）、`dc20db436fc8c8e8b692ef3a3151827614dc7d73`（P1-2/P2-1）、`c9a304ae9213b5ea85ff1063ac11eb67cf6e9005`（P2-2/P2-3）、`bfd3ea911164d4afb1d372b60a351c456fc2a98f`（lint 权限注解）；本条为独立文档提交。
+
+### 根因与设计
+
+- **P1-1**：解码耗时 UI 更新原先只在 `token.throwIfCancelled()` 后执行，停止或 `onCleared()` 可以插入检查与 `postValue()` 之间。现在耗时发布也通过 `MainViewModel` 的 `DecodeLifecycleGate`/epoch 准入；旧 epoch 被拒绝并转为取消，不再产生耗时副作用。准入锁只保护判定，不跨数据库、网络、电台或其他外部调用。
+- **P1-2/P2-1**：录音前台服务、`AudioRecord` 初始化和启动原先位于调用者的同步路径，失败返回可能留下服务；现在每次开始都有独立 session/generation，阻塞设备初始化和读循环在 worker 执行。只有 `AudioRecord.startRecording()` 成功后才报告运行中；权限、构造、启动、异常和停止均进入单一终态清理，释放本 session 的资源并按 session token 停止服务，旧 session 不能清理新 session。
+- **P2-2**：门控并发测试使用 `Future.get()` 传播 worker 异常并建立明确的完成边界，不再把工作线程断言或未确认的 `join()` 当成通过。
+- **P2-3**：`DecodeCoordinatorTest` 使用可控双线程 executor 与 latch，强制旧任务的 terminal/finally 清理发生在新任务已接纳之后；`ActiveRun` 身份校验确认旧清理不能清除新任务的 active 状态。
+- **P2-4**：保留 `RecorderLifecycleTest` 的拒绝权限 `ContextWrapper` 隔离；新增四个真实逻辑层 instrumentation 用例覆盖权限失败、初始化失败、启动失败和正常停止的服务/资源释放，不撤销系统权限，避免 SIGKILL。
+
+### 验证与边界
+
+- `AUTO_VERIFIED`：JVM 全量 `17/17`（失败 0、错误 0、跳过 0）；`scripts.test_release_gates` `9/9`；release contract 默认与 `--history` 均通过；`assembleDebug`、`packageTestApk`、`lintDebug` 成功，lint `0 errors/330 warnings`；`git diff --check` 通过。新增 MicRecorder instrumentation 为 `4/4`，独占 AVD 连续 `5` 轮；全量 connected 为 `51/51`，失败/错误/跳过均为 0，连续 `2` 轮。
+- `AVD_VERIFIED`：独占 `Pixel_10_Pro_XL` / API 17；最终 beta 包 clean install 成功，Monkey 启动成功，包进程存活，crash buffer 中该包为 0，应用 crash 目录无文件。一次目标类名误指定的 instrumentation 命令得到 ClassNotFound，不计入测试证据；随后正确的 `wave.MicRecorderLifecycleTest` 五轮全部 `4/4` 通过。
+- `HIL`：未连接真实手机或电台，未执行 CAT/PTT/TX、完整 QSO、长时挂机、功耗/温升或用户 HIL；这些边界仍未授权或未完成。
+
+### 产物与发布结论
+
+- beta APK：`ft8cn/.artifacts/FT8CN-v0.93.005-beta-bfd3ea9.apk`，`22,649,435` bytes，SHA-256 `EEB28BF9EA2FCF05B1A921EEF78A8750DF3C534E5F5756717C2EAFCEA744C0B0`；包名 `com.bg7yoz.ft8cn.beta`，版本 `0.93.005-beta`，`versionCode 93005`，min/target SDK `23/34`，Android Debug 证书 SHA-256 `5da76c45b0875913e0a08d7124f49a87bcf2283429c074c1ddc8eb495d3e8db3`。
+- 本地 beta candidate：`GO`（仅限 AUTO/AVD 证据）；`v0.93.005-beta.6`：`NO-GO`，本会话未创建 tag 或 Release；`release`：`NO-GO`，未合并且未推送；`formal`：`NO-GO`，缺少长期 keystore、可信证书指纹和明确批准，且未生成正式签名 APK。
+
+### 下一步
+
+- 主会话复核上述四个代码提交和本条文档提交后再决定是否集成；任何 beta.6、release 或 formal 发布动作均需另行授权并重新满足签名、tag、Release、真实设备/HIL 门禁。
+
+---
+
 ## 2026-08-08　v0.93.005 解码结果竞态修复
 
 ### 做了什么
