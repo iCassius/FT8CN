@@ -33,7 +33,10 @@ public class HamRecorder {
     private static final int audioFormat = AudioFormat.ENCODING_PCM_FLOAT; //量化位数
 
     //private AudioRecord audioRecord = null;//AudioRecord对象
-    private boolean isRunning = false;//是否处于录音的状态。
+    private volatile boolean isRunning = false;//是否处于录音的状态。
+    private volatile boolean isMicRecord = true;
+    private final Object lifecycleLock = new Object();
+    private long activeMicSessionId;
 
     //监听回调列表，在监听回调中获取数据。
     //CopyOnWriteArrayList：音频线程遍历的同时，定时器线程会增删监听器，
@@ -41,22 +44,37 @@ public class HamRecorder {
     private final CopyOnWriteArrayList<VoiceDataMonitor> voiceDataMonitorList = new CopyOnWriteArrayList<>();
     private OnVoiceMonitorChanged onVoiceMonitorChanged=null;
 
-    private boolean isMicRecord=true;
-    private MicRecorder micRecorder=new MicRecorder();
+    private final MicRecorder micRecorder;
 
 
     public HamRecorder(OnVoiceMonitorChanged onVoiceMonitorChanged){
+        this(onVoiceMonitorChanged, new MicRecorder());
+    }
+
+    HamRecorder(OnVoiceMonitorChanged onVoiceMonitorChanged, MicRecorder micRecorder){
         this.onVoiceMonitorChanged=onVoiceMonitorChanged;
+        this.micRecorder=micRecorder;
+        micRecorder.setOnStateListener((sessionId, running) -> {
+            synchronized (lifecycleLock) {
+                if (sessionId == activeMicSessionId && isMicRecord) {
+                    isRunning = running;
+                }
+            }
+        });
     }
 
 
     public void setDataFromMic(){
-        isMicRecord=true;
+        synchronized (lifecycleLock) {
+            isMicRecord=true;
+        }
         startRecord();
     }
     public void setDataFromLan(){
-        isMicRecord=false;
-        micRecorder.stopRecord();
+        synchronized (lifecycleLock) {
+            isMicRecord=false;
+        }
+        stopRecord();
     }
 
     /**
@@ -92,9 +110,11 @@ public class HamRecorder {
      */
     @SuppressLint("MissingPermission")
     public void startRecord() {
-        if (isMicRecord){//如果是用MIC采集声音
-            if (!micRecorder.start()) {
-                isRunning = false;
+        synchronized (lifecycleLock) {
+            if (!isMicRecord) {
+                return;
+            }
+            if (isRunning || activeMicSessionId != 0) {
                 return;
             }
             micRecorder.setOnDataListener(new MicRecorder.OnDataListener() {
@@ -103,8 +123,8 @@ public class HamRecorder {
                     doOnWaveDataReceived(len,data);
                 }
             });
+            activeMicSessionId = micRecorder.startSession();
         }
-        isRunning=true;
 
     }
 
@@ -142,8 +162,13 @@ public class HamRecorder {
      * 停止录音。当录音停止后，监听列表中的监听器全部删除。
      */
     public void stopRecord() {
-        micRecorder.stopRecord();
-        isRunning = false;
+        long sessionId;
+        synchronized (lifecycleLock) {
+            sessionId = activeMicSessionId;
+            activeMicSessionId = 0;
+            isRunning = false;
+        }
+        micRecorder.stopSession(sessionId);
     }
 
     /**
