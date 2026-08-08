@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-08-08　v0.93.005-beta.7 发布文档最终收口
+
+### 范围、基线与当前状态
+
+- 从精确、clean 基线 `f26abf843c37602e5cebfe724d10ef5cc2eb5d8a` 创建分支 `codex/v0.93.005-beta7-doc-final`。本次只修改正式 notes、beta.6 notes、beta.7 notes 和本文件；不修改 production/build/workflow/scripts/tests，不 push、tag、创建 Release 或设置 Secrets。
+- live 的 `v0.93.005-beta.6` tag/Release 与 asset 已存在并保持不可变；beta.6 notes 已改为可直接供最终 publication 会话补丁 live Release body 的来源。beta.5→beta.6 因签名身份不同不能覆盖升级，beta.6→beta.7 也必须卸载一次；beta.7 以后沿用持久 beta-only certificate 才能覆盖升级。
+- beta.7 当前仍未执行 tag/Release；beta-only certificate SHA-256 为 `F12E9AD8D1C2B6EAB407FDA8F8877A33097CF789A6AD9073FF8CE6CB828C5971`，包名/版本/versionCode 为 `com.bg7yoz.ft8cn.beta` / `0.93.005-beta.7` / `93007`。formal gate、formal Secrets、formal tag/Release 与真实手机/电台 HIL 独立。
+- 本条以上为当前状态；下方更早记录中的旧 `10/10` 与“beta.6 tag/Release 未创建”均是各自会话的 HISTORICAL/SUPERSEDED 证据，不得覆盖本条和当前 release notes 的状态。beta.8 维护项：届时单独更新当前只接受 beta.7 的 hardcoded workflow 门禁，本次不扩大 diff。
+
+### 文档验证与下一步
+
+- `python -m unittest scripts.test_release_gates -v`：14/14；`check_release_contract.py` 默认与 `--history`：通过；`git diff --check`：通过。未重新宣称代码/build/AVD/HIL 结果，本次只完成文档纠正。
+- 下一 publication 会话的精确基线是本分支本次文档 commit 的完整 SHA；须先将该 commit 集成到 `codex/v0.93.005-integration`，再按 beta.7 workflow 核验 tag、package/version/code、完整证书指纹、资产和 Release body。beta.6 不得重打 tag、覆盖 asset 或改写历史 tag 内容。
+
+---
+
 ## 2026-08-08　v0.93.005-beta.7 持久 beta 签名链修复
 
 ### 范围与签名材料
@@ -46,7 +62,7 @@
 ### 可复验验证与边界
 
 - **AVD_VERIFIED**：确认无实体设备、无其他 emulator/qemu owner，独占 `Pixel_10_Pro_XL` / API 37。目标 class 连续 10 轮均 2/2；相关配置回归（`MainActivityConfigLifecycleTest`、`DatabaseConfigLoadTest`、`CallsignDatabaseTest`）12/12；全量 `connectedDebugAndroidTest` 连续 2 轮均 61/61，失败 0、错误 0、跳过 0；最终 XML 核对为 61/61/0/0/0。
-- **AUTO_VERIFIED**：JVM 全量 21/21；release contract 默认/`--history` 通过；`scripts.test_release_gates` 10/10；`git diff --check`、`assembleDebug`、`packageTestApk`、`lintDebug` 通过，lint 0 errors / 330 warnings。
+- **AUTO_VERIFIED（HISTORICAL/SUPERSEDED，仅保留历史证据）**：JVM 全量 21/21；release contract 默认/`--history` 通过；`scripts.test_release_gates` 10/10；`git diff --check`、`assembleDebug`、`packageTestApk`、`lintDebug` 通过，lint 0 errors / 330 warnings。
 - **AVD clean beta smoke**：debug beta 以 `pm uninstall --user 0` 后干净安装，Monkey 启动，包进程存活，crash buffer 和应用 crash 目录均无该包记录。
 - **HIL**：无真实手机、无电台；未执行 CAT/PTT/TX、真实录音、完整 QSO、长时挂机、功耗/温升或用户 HIL。AUTO/AVD 不等同于 HIL，也不构成正式发布授权。
 
