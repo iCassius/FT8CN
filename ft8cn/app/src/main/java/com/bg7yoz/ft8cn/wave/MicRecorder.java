@@ -502,13 +502,19 @@ public class MicRecorder {
                 return false;
             }
             try {
-                Intent intent = AudioForegroundService.createStartIntent(context, sessionId);
+                AudioForegroundService.StartAck ack = new AudioForegroundService.StartAck();
+                Intent intent = AudioForegroundService.createStartIntent(context, sessionId)
+                        .putExtra("session_ack", ack);
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent);
                 } else {
                     context.startService(intent);
                 }
-                return true;
+                if (ack.await()) {
+                    return true;
+                }
+                stop(sessionId);
+                return false;
             } catch (Throwable error) {
                 Log.w(TAG, "startAudioForegroundService: " + error.getMessage());
                 return false;
