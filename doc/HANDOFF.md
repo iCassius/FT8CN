@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-08-08　v0.93.005-beta.6 配置生命周期阻断修复
+
+### 基线、分支与提交
+
+- 精确基线：`codex/v0.93.005-beta6-ready@be4882a2c94527a038376ff44fc7edbaf8c49207`；fetch 后 HEAD 精确一致，工作树 clean；已阅读 `PROJECT_RULES.md`、本文件和 v0.93.005/beta.6 notes。
+- 分支：`codex/v0.93.005-config-lifecycle-fix`；未 push、未合并 `release`、未创建 tag/Release/Secrets。
+- 分层代码提交：`31e65b3`（仅测试修复：配置完成事件的显式等待与 observer 清理）；没有 production code/test switch 改动。
+
+### 根因、确定性复现与修复
+
+- 根因是测试时序：`MainActivity` 的配置读取在共享单线程 `DatabaseOpr.dbExecutor` 异步执行，`ActivityScenario.launch()` 只等待 Activity 生命周期，不承诺配置读取已经完成；第 75 行立即断言 `configUiCompletionActionCount == 1`，因此在 suite 负载下可在完成事件前观察到 0。
+- 确定性复现：临时未提交 instrumentation 先用 latch 占住共享 `diskIO`，再启动 Activity；基线稳定得到 `expected:<1> but was:<0>`。复现文件随后移除，未进入提交。
+- 产品生命周期未发现需要改动的竞态：配置完成仍由 shared `MainViewModel.configLoadComplete` sticky LiveData 发布，旧 Activity 的 `activityUiActive` 门控阻止其消费，重建 Activity 在 active 后消费同一完成状态。
+- 修复只在 `MainActivityConfigLifecycleTest`：注册 `configLoadComplete` observer，使用 10 秒 bounded latch 等待真实完成事件，finally 在 UI 线程移除 observer；两个测试在初始 Activity/重建 Activity 断言前都经过该边界。无固定 sleep、skip、放宽断言或 production 外部可控 hook。
+
+### 可复验验证与边界
+
+- **AVD_VERIFIED**：确认无实体设备、无其他 emulator/qemu owner，独占 `Pixel_10_Pro_XL` / API 37。目标 class 连续 10 轮均 2/2；相关配置回归（`MainActivityConfigLifecycleTest`、`DatabaseConfigLoadTest`、`CallsignDatabaseTest`）12/12；全量 `connectedDebugAndroidTest` 连续 2 轮均 61/61，失败 0、错误 0、跳过 0；最终 XML 核对为 61/61/0/0/0。
+- **AUTO_VERIFIED**：JVM 全量 21/21；release contract 默认/`--history` 通过；`scripts.test_release_gates` 10/10；`git diff --check`、`assembleDebug`、`packageTestApk`、`lintDebug` 通过，lint 0 errors / 330 warnings。
+- **AVD clean beta smoke**：debug beta 以 `pm uninstall --user 0` 后干净安装，Monkey 启动，包进程存活，crash buffer 和应用 crash 目录均无该包记录。
+- **HIL**：无真实手机、无电台；未执行 CAT/PTT/TX、真实录音、完整 QSO、长时挂机、功耗/温升或用户 HIL。AUTO/AVD 不等同于 HIL，也不构成正式发布授权。
+
+### 发布结论与下一步
+
+- 本会话修复候选在自动/AVD层面可复验；`v0.93.005-beta.6` tag/Release 未创建，`release` 未合并/推送。
+- `formal` 保持 `NO-GO`：缺长期 keystore、可信证书 SHA-256 和明确发布批准；未生成正式签名 APK。
+- 最终文档 HEAD、提交、计数、APK metadata/SHA/Debug 证书和上述边界交还主会话；不 push、不 tag、不创建 Release、不执行真实手机/电台操作。
+
+---
+
 ## 2026-08-08　v0.93.005-beta.6 发布阻断最终收口
 
 ### 基线、分支与分层提交
@@ -22,7 +52,7 @@
 ### 最终验证与边界
 
 - **AUTO_VERIFIED**：最终文档 HEAD 重新执行 JVM `:app:testDebugUnitTest --rerun-tasks`、Java/androidTest Java 编译、`assembleDebug`、`packageTestApk`、`lintDebug`；release contract 默认/`--history`、release gates、`git diff --check` 均以最终输出为准。lint 保留既有 `0 errors / 330 warnings`。
-- **AVD_VERIFIED**：先确认无实体设备、无其他 emulator/qemu owner，独占唯一 `Pixel_10_Pro_XL` / API 37 AVD。受影响目标集合 14/14 连续 5 轮；全量 `connectedDebugAndroidTest` 61/61 连续 2 轮；最终 debug beta clean uninstall/install、Monkey 启动、包进程存活且 crash buffer 无该包记录。首次目标轮次中发现 test Service 未注册到 target manifest，改为 debug-only component 后重新完成全部最终轮次；失败轮次不计入证据。
+- **AVD_VERIFIED（已被后续 live run supersede）**：本条原记录的 14/14 与 61/61 不能作为当前证据。独立 live rerun 在未修改的基线重现 `MainActivityConfigLifecycleTest.blockedLoadIsConsumedOnlyByRecreatedActivity` 第 75 行失败；详见本条以上的 2026-08-08 配置生命周期修复记录。
 - **HIL**：无真实手机、无电台；未执行 CAT/PTT/TX、真实录音、完整 QSO、长时挂机、功耗/温升或用户 HIL。`AUTO_VERIFIED`/`AVD_VERIFIED` 不等同于 HIL，也不构成正式发布授权。
 
 ### 产物与发布结论
