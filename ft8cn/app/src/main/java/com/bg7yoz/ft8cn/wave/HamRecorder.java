@@ -40,6 +40,7 @@ public class HamRecorder {
     private long activeMicSessionId;
     private long nextRecorderGeneration;
     private long activeRecorderGeneration;
+    private volatile Runnable beforeGetVoiceDataLockHookForTest;
 
     //监听回调列表，在监听回调中获取数据。
     //CopyOnWriteArrayList：音频线程遍历的同时，定时器线程会增删监听器，
@@ -268,6 +269,10 @@ public class HamRecorder {
      * @param getVoiceDataDone 当录音数据达到指定的时长后，触发此回调
      */
     public VoiceDataMonitor getVoiceData(int duration, boolean afterDoneRemove, OnGetVoiceDataDone getVoiceDataDone) {
+        Runnable beforeLockHook = beforeGetVoiceDataLockHookForTest;
+        if (beforeLockHook != null) {
+            beforeLockHook.run();
+        }
         List<VoiceDataMonitor> monitorsToForce = new ArrayList<>();
         VoiceDataMonitor dataMonitor;
         int monitorCount;
@@ -297,6 +302,11 @@ public class HamRecorder {
             onVoiceMonitorChanged.onMonitorChanged(monitorCount);
         }
         return dataMonitor;
+    }
+
+    /** Test-only barrier used to exercise a real getVoiceData call in flight. */
+    void setBeforeGetVoiceDataLockHookForTest(Runnable hook) {
+        beforeGetVoiceDataLockHookForTest = hook;
     }
 
     /**

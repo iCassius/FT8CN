@@ -34,21 +34,29 @@ public class HamRecorderSessionLifecycleTest {
                 data -> oldCallbacks.incrementAndGet());
         assertTrue(oldMonitor != null);
 
-        CountDownLatch getReady = new CountDownLatch(1);
-        CountDownLatch allowGet = new CountDownLatch(1);
+        CountDownLatch getEntered = new CountDownLatch(1);
+        CountDownLatch releaseGet = new CountDownLatch(1);
         ExecutorService executor = Executors.newSingleThreadExecutor();
-        Future<HamRecorder.VoiceDataMonitor> concurrentGet = executor.submit(() -> {
-            getReady.countDown();
-            if (!allowGet.await(2, TimeUnit.SECONDS)) {
-                throw new AssertionError("getVoiceData was not released");
+        recorder.setBeforeGetVoiceDataLockHookForTest(() -> {
+            getEntered.countDown();
+            try {
+                if (!releaseGet.await(2, TimeUnit.SECONDS)) {
+                    throw new AssertionError("getVoiceData was not released");
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("getVoiceData barrier was interrupted", interrupted);
             }
-            return recorder.getVoiceData(1, true, data -> { });
         });
+        Future<HamRecorder.VoiceDataMonitor> concurrentGet = executor.submit(
+                () -> recorder.getVoiceData(1, true, data -> { }));
         try {
-            assertTrue(getReady.await(2, TimeUnit.SECONDS));
+            assertTrue("getVoiceData did not enter while the old session was active",
+                    getEntered.await(2, TimeUnit.SECONDS));
             recorder.stopRecord();
-            allowGet.countDown();
+            releaseGet.countDown();
             assertNull("getVoiceData admitted after stop", concurrentGet.get(2, TimeUnit.SECONDS));
+            recorder.setBeforeGetVoiceDataLockHookForTest(null);
 
             oldMonitor.forceComplete();
             assertEquals(0, oldCallbacks.get());
@@ -66,7 +74,8 @@ public class HamRecorderSessionLifecycleTest {
             mic.emitData(newSession, filled(12, 2f));
             assertEquals(1, newCallbacks.get());
         } finally {
-            allowGet.countDown();
+            releaseGet.countDown();
+            recorder.setBeforeGetVoiceDataLockHookForTest(null);
             recorder.onCleared();
             executor.shutdownNow();
             assertTrue(executor.awaitTermination(2, TimeUnit.SECONDS));
