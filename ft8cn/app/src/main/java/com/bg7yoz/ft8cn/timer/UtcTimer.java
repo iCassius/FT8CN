@@ -42,11 +42,14 @@ public class UtcTimer {
     
     private final ExecutorService actionThreadPool = AppExecutors.getInstance().timerTrigger();
     private final Executor heartBeatThreadPool = AppExecutors.getInstance().mainThread();
+    private final HeartbeatLifecycleGate heartbeatLifecycle = new HeartbeatLifecycleGate();
+    private final long heartbeatEpoch = heartbeatLifecycle.currentEpoch();
     
     private final Runnable doHeartBeat = new Runnable() {
         @Override
         public void run() {
-            onUtcTimer.doHeartBeatTimer(utc);
+            heartbeatLifecycle.runIfCurrent(heartbeatEpoch,
+                    () -> onUtcTimer.doHeartBeatTimer(utc));
         }
     };
 
@@ -172,6 +175,7 @@ public class UtcTimer {
 
     public void delete() {
         stop();
+        heartbeatLifecycle.close();
         heartBeatTimer.cancel();
     }
 

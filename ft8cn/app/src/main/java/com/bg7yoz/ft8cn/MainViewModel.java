@@ -94,6 +94,7 @@ import com.bg7yoz.ft8cn.rigs.Yaesu39Rig;
 import com.bg7yoz.ft8cn.rigs.YaesuDX10Rig;
 import com.bg7yoz.ft8cn.spectrum.SpectrumListener;
 import com.bg7yoz.ft8cn.timer.OnUtcTimer;
+import com.bg7yoz.ft8cn.timer.HeartbeatLifecycleGate;
 import com.bg7yoz.ft8cn.timer.UtcTimer;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
 import com.bg7yoz.ft8cn.util.BoundedSerialExecutor;
@@ -145,6 +146,8 @@ public class MainViewModel extends ViewModel {
     private final AtomicLong rigGeneration = new AtomicLong();
     private final AtomicLong qthGeneration = new AtomicLong();
     private final DecodeLifecycleGate decodeLifecycle = new DecodeLifecycleGate();
+    private final HeartbeatLifecycleGate heartbeatLifecycle = new HeartbeatLifecycleGate();
+    private final long heartbeatEpoch = heartbeatLifecycle.currentEpoch();
     private volatile boolean cleared;
 
 
@@ -266,6 +269,7 @@ public class MainViewModel extends ViewModel {
     @Override
     protected void onCleared() {
         decodeLifecycle.close();
+        heartbeatLifecycle.close();
         if (cleared) return;
         cleared = true;
         lifecycleGeneration.incrementAndGet();
@@ -363,9 +367,12 @@ public class MainViewModel extends ViewModel {
         utcTimer = new UtcTimer(10, false, new OnUtcTimer() {
             @Override
             public void doHeartBeatTimer(long utc) {//不触发时的时钟信息
-                timerSec.postValue(utc);//发送当前UTC时间，用于UI刷新
-                mutableIsRecording.postValue(hamRecorder.isRunning());
-                mutableHamRecordIsRunning.postValue(hamRecorder.isRunning());
+                heartbeatLifecycle.runIfCurrent(heartbeatEpoch, () -> {
+                    timerSec.postValue(utc);//发送当前UTC时间，用于UI刷新
+                    boolean recording = hamRecorder.isRunning();
+                    mutableIsRecording.postValue(recording);
+                    mutableHamRecordIsRunning.postValue(recording);
+                });
             }
 
             @Override
