@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-08-08　v0.93.005 解码结果竞态修复
+
+### 做了什么
+
+- 从 `codex/v0.93.005-avd-stability@2a3d1a89501dca7e21a1e0149c784ec6ede1a78e` 创建 `codex/v0.93.005-decode-race-fix`。
+- P1 提交 `5cae51a`：新增 `DecodeLifecycleGate`，把解码 epoch 与 `onCleared`/停止状态的副作用准入线性化；消息列表/UI、关注列表、自动回复解析、QTH 任务、SWL/消息/呼号网格数据库写入均在准入点受保护。门控锁只保护判定，不包住数据库、网络或电台外部调用；`stopListen()` 先关闭门控再取消工作线程。
+- P2 提交 `d82663c`：`DecodeCoordinator` 使用 `ActiveRun` 身份和 `started` 状态；启动前取消会清理 `active/activeFuture`，运行中旧 Future 只能由自身终态清理，不能清掉新任务状态。
+
+### 根因与回归证据
+
+- P1 根因是 `MainViewModel.afterDecode()` 只有入口一次性 epoch 检查；检查通过后 `onCleared()` 仍可插入，旧结果随后执行持久化、UI/列表、QTH 和自动回复等副作用。
+- `DecodeLifecycleGateTest.clearAfterEntryCheckRejectsTheStaleEffect` 用 latch 强制“入口检查后 → close → 副作用准入”，确认旧副作用为 0；相关新 JVM 测试（门控 2 + coordinator 6）连续 5 轮均通过。
+- P2 回归覆盖排队 Future 启动前取消，以及运行中旧任务在 `finally` 前不得释放槽位；均无失败、错误或跳过。
+
+### 当前状态与边界
+
+- `AUTO_VERIFIED`：JVM 全量 `:app:testDebugUnitTest --rerun-tasks` 为 16/16；新增竞态测试 8/8 连续 5 轮；`assembleDebug`、`packageTestApk`、`lintDebug` 成功，lint 为 0 errors/330 warnings；`git diff --check`、release contract 默认与 `--history`、release gates 均通过（9/9）。
+- `AVD_VERIFIED`：独占 `Pixel_10_Pro_XL` / API 17，`:app:connectedDebugAndroidTest --rerun-tasks` 连续 2 次均为 47/47，失败/错误/跳过均为 0；当前 beta `d82663c` 已卸载后干净安装，Monkey 启动成功，进程存活，crash buffer 与应用 crash 目录均为 0。
+- 本会话未连接真实手机或电台，未执行 CAT/PTT/TX、完整 QSO、长时挂机、功耗/温升或用户 HIL；未推送、未合并 `release`、未打 tag、未创建 Release/Secrets。formal release 仍因长期签名材料、可信证书指纹和明确批准缺失而 `NO-GO`。
+
+### 下一步
+
+- 主会话可复核 `5cae51a` 与 `d82663c` 后决定是否集成；若进入正式发布，仍需按签名迁移门禁和真实设备/HIL 流程重新授权验收。
+
+---
+
 ## 2026-08-08　v0.93.005 AVD instrumentation SIGKILL 专项
 
 ### 做了什么
