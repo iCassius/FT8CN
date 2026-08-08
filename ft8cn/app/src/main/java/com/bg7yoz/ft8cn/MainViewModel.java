@@ -144,7 +144,7 @@ public class MainViewModel extends ViewModel {
     private final AtomicLong lifecycleGeneration = new AtomicLong();
     private final AtomicLong rigGeneration = new AtomicLong();
     private final AtomicLong qthGeneration = new AtomicLong();
-    private final AtomicLong latestDecodeEpoch = new AtomicLong(-1);
+    private final DecodeLifecycleGate decodeLifecycle = new DecodeLifecycleGate();
     private volatile boolean cleared;
 
 
@@ -265,12 +265,12 @@ public class MainViewModel extends ViewModel {
 
     @Override
     protected void onCleared() {
+        decodeLifecycle.close();
         if (cleared) return;
         cleared = true;
         lifecycleGeneration.incrementAndGet();
         rigGeneration.incrementAndGet();
         qthGeneration.incrementAndGet();
-        latestDecodeEpoch.incrementAndGet();
         getQTHThreadPool.cancelPending();
         sendWaveDataThreadPool.cancelPending();
         getQTHThreadPool.shutdown();
@@ -384,42 +384,50 @@ public class MainViewModel extends ViewModel {
         ft8SignalListener = new FT8SignalListener(databaseOpr, new OnFt8Listen() {
             @Override
             public void beforeListen(long utc, long epoch) {
-                if (cleared) return;
-                latestDecodeEpoch.set(epoch);
-                currentDecodeCount = 0;
-                currentMessages = new ArrayList<>();
-                mutableIsDecoding.postValue(true);
+                decodeLifecycle.begin(epoch);
+                runDecodeEffect(epoch, () -> {
+                    currentDecodeCount = 0;
+                    currentMessages = new ArrayList<>();
+                    mutableIsDecoding.postValue(true);
+                });
             }
 
             @Override
             public void afterDecode(long utc, float time_sec, int sequential
                     , ArrayList<Ft8Message> messages, boolean isDeep, long epoch) {
                 if (!isCurrentDecode(epoch)) return;
-                if (messages == null) messages = new ArrayList<>();
-                currentMessages = messages;
-                if (messages.isEmpty()) {
-                    if (!isDeep) currentDecodeCount = 0;
-                    mutable_Decoded_Counter.postValue(currentDecodeCount);
+                final ArrayList<Ft8Message> decodeMessages = messages == null
+                        ? new ArrayList<>() : messages;
+                if (!runDecodeEffect(epoch, () -> currentMessages = decodeMessages)) return;
+                if (decodeMessages.isEmpty()) {
+                    if (!runDecodeEffect(epoch, () -> {
+                        if (!isDeep) currentDecodeCount = 0;
+                        mutable_Decoded_Counter.postValue(currentDecodeCount);
+                    })) return;
                     return;//没有解码出消息，不触发动作
                 }
 
-                synchronized (ft8Messages) {
-                    ft8Messages.addAll(messages);//添加消息到列表
-                    // 核心修复：发送快照，防止 UI 遍历时发生 ConcurrentModificationException
-                    mutableFt8MessageList.postValue(new ArrayList<>(ft8Messages));
-                }
-                GeneralVariables.deleteArrayListMore(ft8Messages);
-                mutableTimerOffset.postValue(time_sec);//本次时间偏移量
+                if (!runDecodeEffect(epoch, () -> {
+                    synchronized (ft8Messages) {
+                        ft8Messages.addAll(decodeMessages);//添加消息到列表
+                        // 核心修复：发送快照，防止 UI 遍历时发生 ConcurrentModificationException
+                        mutableFt8MessageList.postValue(new ArrayList<>(ft8Messages));
+                    }
+                })) return;
+                if (!runDecodeEffect(epoch, () -> GeneralVariables.deleteArrayListMore(ft8Messages))) return;
+                if (!runDecodeEffect(epoch, () -> mutableTimerOffset.postValue(time_sec))) return;
 
 
                 // Candidate filtering depends on JTDX priority. Calculate it before
                 // findIncludedCallsigns; location/UI enrichment remains asynchronous.
-                if (GeneralVariables.callsignDatabase != null) {
-                    CallsignDatabase.getMessagesPriority(
-                            GeneralVariables.callsignDatabase.getDb(), messages);
-                }
+                if (!runDecodeEffect(epoch, () -> {
+                    if (GeneralVariables.callsignDatabase != null) {
+                        CallsignDatabase.getMessagesPriority(
+                                GeneralVariables.callsignDatabase.getDb(), decodeMessages);
+                    }
+                })) return;
 
-                findIncludedCallsigns(messages);//查找符合条件的消息，放到呼叫列表中
+                if (!runDecodeEffect(epoch, () -> findIncludedCallsigns(decodeMessages))) return;
 
                 //检查发射程序。从消息列表中解析发射的程序
                 //超出周期2秒钟，就不应该解析了
@@ -429,44 +437,56 @@ public class MainViewModel extends ViewModel {
                         && (ft8SignalListener.timeSec
                         + GeneralVariables.pttDelay
                         + GeneralVariables.transmitDelay <= 2000)) {//考虑网络模式，发射时长是13秒
-                    ft8TransmitSignal.parseMessageToFunction(messages);//解析消息，并处理
+                    if (!runDecodeEffect(epoch,
+                            () -> ft8TransmitSignal.parseMessageToFunction(decodeMessages))) return;
                 }
 
-                currentMessages = messages;
-
-                if (isDeep) {
-                    currentDecodeCount += messages.size();
-                } else {
-                    currentDecodeCount = messages.size();
-                }
+                if (!runDecodeEffect(epoch, () -> {
+                    currentMessages = decodeMessages;
+                    if (isDeep) {
+                        currentDecodeCount += decodeMessages.size();
+                    } else {
+                        currentDecodeCount = decodeMessages.size();
+                    }
+                })) return;
 
                 long lifecycle = lifecycleGeneration.get();
                 long qth = qthGeneration.get();
-                submitQthTask(new GetQTHRunnable(MainViewModel.this, messages, lifecycle, qth));//用线程池的方式查询归属地
+                GetQTHRunnable qthTask = new GetQTHRunnable(MainViewModel.this,
+                        decodeMessages, lifecycle, qth, epoch);
+                if (!runDecodeEffect(epoch, () -> submitQthTask(qthTask))) return;
 
                 //此变量也是告诉消息列表变化的
-                mutable_Decoded_Counter.postValue(
-                        currentDecodeCount);//告知界面消息的总数量
+                if (!runDecodeEffect(epoch, () -> mutable_Decoded_Counter.postValue(
+                        currentDecodeCount))) return;//告知界面消息的总数量
 
                 if (GeneralVariables.saveSWLMessage) {
-                    databaseOpr.writeMessage(messages);//把SWL消息写到数据库
+                    if (!runDecodeEffect(epoch, () -> databaseOpr.writeMessage(
+                            decodeMessages))) return;//把SWL消息写到数据库
                 }
                 //检查QSO of SWL,并保存到SWLQSOTable中的通联列表qsoList中
                 if (GeneralVariables.saveSWL_QSO) {
-                    swlQsoList.findSwlQso(messages, ft8Messages, record -> {
-                        databaseOpr.addSWL_QSO(record);//把SWL QSO保存到数据库
-                        ToastMessage.show(record.swlQSOInfo());
-                    });
+                    if (!runDecodeEffect(epoch, () -> swlQsoList.findSwlQso(
+                            decodeMessages, ft8Messages, record -> runDecodeEffect(epoch, () -> {
+                                databaseOpr.addSWL_QSO(record);//把SWL QSO保存到数据库
+                                ToastMessage.show(record.swlQSOInfo());
+                            })))) return;
                 }
                 //从列表中查找呼号和网格对应关系，并添加到表中
-                getCallsignAndGrid(messages);
+                if (!runDecodeEffect(epoch, () -> getCallsignAndGrid(decodeMessages))) return;
             }
 
             @Override
             public void onDecodeFinished(long utc, long epoch, boolean cancelled, Throwable failure) {
-                if (!isCurrentDecode(epoch)) return;
-                mutableIsDecoding.postValue(false);//所有成功、空结果、异常和取消都在此复位
-                mutable_Decoded_Counter.postValue(currentDecodeCount);
+                runDecodeEffect(epoch, () -> {
+                    mutableIsDecoding.postValue(false);//所有成功、空结果、异常和取消都在此复位
+                    mutable_Decoded_Counter.postValue(currentDecodeCount);
+                });
+            }
+
+            @Override
+            public void onListenStopped() {
+                decodeLifecycle.close();
             }
         });
 
@@ -1228,27 +1248,32 @@ public class MainViewModel extends ViewModel {
         private final ArrayList<Ft8Message> messages;
         private final long lifecycleGeneration;
         private final long qthGeneration;
+        private final long decodeEpoch;
 
         GetQTHRunnable(MainViewModel mainViewModel, ArrayList<Ft8Message> messages,
-                       long lifecycleGeneration, long qthGeneration) {
+                       long lifecycleGeneration, long qthGeneration, long decodeEpoch) {
             this.mainViewModel = mainViewModel;
             this.messages = new ArrayList<>(messages);
             this.lifecycleGeneration = lifecycleGeneration;
             this.qthGeneration = qthGeneration;
+            this.decodeEpoch = decodeEpoch;
         }
 
 
         @Override
         public void run() {
-            if (!mainViewModel.isCurrentQth(lifecycleGeneration, qthGeneration)) return;
+            if (!mainViewModel.isCurrentQth(lifecycleGeneration, qthGeneration)
+                    || !mainViewModel.isCurrentDecode(decodeEpoch)) return;
             CallsignDatabase.getMessagesLocationWithoutPriority(
                     GeneralVariables.callsignDatabase.getDb(), messages);
             if (!mainViewModel.isCurrentQth(lifecycleGeneration, qthGeneration)) return;
-            synchronized (mainViewModel.ft8Messages) {
-                mainViewModel.mutableFt8MessageList.postValue(new ArrayList<>(mainViewModel.ft8Messages));
-            }
-            // 核心修复：通知界面刷新，以显示刚查询到的归属地信息
-            mainViewModel.mutable_Decoded_Counter.postValue(mainViewModel.currentDecodeCount);
+            mainViewModel.runDecodeEffect(decodeEpoch, () -> {
+                synchronized (mainViewModel.ft8Messages) {
+                    mainViewModel.mutableFt8MessageList.postValue(new ArrayList<>(mainViewModel.ft8Messages));
+                }
+                // 核心修复：通知界面刷新，以显示刚查询到的归属地信息
+                mainViewModel.mutable_Decoded_Counter.postValue(mainViewModel.currentDecodeCount);
+            });
         }
     }
 
@@ -1293,7 +1318,11 @@ public class MainViewModel extends ViewModel {
     }
 
     private boolean isCurrentDecode(long epoch) {
-        return !cleared && latestDecodeEpoch.get() == epoch;
+        return !cleared && decodeLifecycle.isCurrent(epoch);
+    }
+
+    private boolean runDecodeEffect(long epoch, Runnable effect) {
+        return !cleared && decodeLifecycle.runIfCurrent(epoch, effect);
     }
 
 }

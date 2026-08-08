@@ -74,6 +74,12 @@ public class FT8SignalListener {
     }
 
     public void stopListen() {
+        if (onFt8Listen != null) {
+            // Close the consumer's lifecycle gate before cancelling the
+            // worker, because a cancelled native task may still return a
+            // callback on this thread.
+            onFt8Listen.onListenStopped();
+        }
         utcTimer.stop();
         utcTimer.delete();
         decodeCoordinator.stop();

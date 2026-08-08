@@ -48,4 +48,8 @@ public interface OnFt8Listen {
      */
     default void onDecodeFinished(long utc, long epoch, boolean cancelled, Throwable failure) {
     }
+
+    /** Called before the listener rejects all further decode-result effects. */
+    default void onListenStopped() {
+    }
 }
