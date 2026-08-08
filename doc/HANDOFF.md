@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-08-08　v0.93.005 最终集成与验收证据
+
+### 做了什么
+
+- 以干净基线 `codex/v0.93.005-integration@2906decc85ce7e4ac79d9f9443a23e0cc2bd49d9` 创建 `codex/v0.93.005-final-integration`；逐个检查了待集成提交的内容、父提交和来源工作树，未推送、未合并 `release`、未创建或推送 tag/Release，未创建 keystore 或设置 Secrets。
+- 集成 P0-D `60901df028c2f8f49f0cf10963e3336202d27da0`、P1 `ed8a996`/`6d78cf6`/`ad86bb5`/`58fcdd6`，以及发布质量 `354bd18`/`532fe6c`/`e1b41b1`/`e533c2d`/`30f5de6`；对应实现已落在最终分支的独立 cherry-pick 提交中。
+- 三个来源 HANDOFF 提交 `f1093cc`、`f8b180c`、`71faabb` 均基于同一旧文档头，未机械叠加冲突版本；本条整合记录保留了三者关于 P0-D、录音/FT-710/Wavelog/JTDX 和发布质量的全部事实。
+
+### 关键决策与独立复核
+
+- `MainViewModel` 的 P0-D epoch/终态门与 P1 JTDX priority 前置计算语义合并：priority 在 `findIncludedCallsigns` 前同步计算，异步位置查询使用无 priority 版本；旧 epoch 不进入消息、自动通联、PTT 或后续任务。P0-D 保持单飞、重叠跳过和取消中的 native 任务退出协调器后才允许下一任务进入；既有快速/深度解码、JNI、音频采集和自动通联规则未重写。
+- 复核确认既有 P0-A/B/C/E 的 SubmissionResult、网络 EOF/断连、PTT/SCO 终态、配置生命周期和发布签名门禁路径未被这些变更移除；FT-710 USB CAT 只写核心未改，Yaesu Timer 仅在 rig 生命周期结束时停止；录音启动失败不再报告运行中，Wavelog station ID 使用精确 JSON token 匹配。
+- formal workflow 继续要求 tag 与 `origin/release` 精确 SHA，增加 APK 非空检查，并用带 `--verify-tag` 的单步 `gh release create` 携带资产；不使用 `--clobber`，不再分离 `gh release upload`。release notes 保留正式签名、tag、Release、AVD 与 HIL 未完成边界。
+
+### 当前状态
+
+- `AUTO_VERIFIED`：`git diff --check` 通过；`check_release_contract.py` 默认与 `--history` 均通过；`python -m unittest scripts.test_release_gates -v` 为 9/9；最终集成代码的 `:app:testDebugUnitTest` 为 12/12（失败 0、错误 0、跳过 0）；`assembleDebug`、`packageTestApk`、`lintDebug` 均成功，lint 为 0 errors/330 warnings。
+- beta APK 已构建并验证为包名 `com.bg7yoz.ft8cn.beta`、版本 `0.93.005-beta`、`versionCode` `93005`、Android Debug 签名；正式签名 APK 未生成。
+- 已确认无实体设备、无其他 emulator/qemu 进程后独占启动 `Pixel_10_Pro_XL`（API 17），beta 包先卸载后干净安装成功。三次全量 `connectedDebugAndroidTest` 均因 instrumentation 进程被 SIGKILL 而失败：第一次完成 46/47、X6100 用例失败；第二次完成 45/47、录音权限用例失败；最终 HEAD beta APK 的第三次仍完成 45/47、录音权限用例失败。两个失败用例单独运行均通过，crash buffer 无应用崩溃；因此当前没有全量 AVD 通过证据。
+- beta `Monkey` 启动 smoke 成功，`MainActivity` 进程存活且 crash buffer 为空；首次安装的录音权限提示仍在。没有连接真实手机、电台，没有 CAT/PTT/TX、完整 QSO、长时稳定性、功耗或温升/HIL 证据。
+
+### 下一步
+
+- 该分支可供后续专门会话继续定位全量 AVD instrumentation SIGKILL，但不能作为“AVD 全量通过”或正式发布授权。正式发布仍需长期 keystore、可信证书 SHA-256、明确批准和真实设备/HIL 门禁；不得覆盖既有 tag 或 Release。
+
+---
+
 ## 2026-08-03　v0.93.005-beta.5 GitHub 预发布自动验收
 
 ### 做了什么
