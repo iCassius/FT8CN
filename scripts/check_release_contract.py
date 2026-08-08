@@ -20,6 +20,17 @@ SECRET_FILE_NAMES = {
     "keystore.properties",
 }
 PLACEHOLDER_RE = re.compile(r"(?i)(replace-with|your[-_]|<secret>|<key_|example|changeme)")
+BETA_TAG = "v0.93.005-beta.7"
+BETA_VERSION_NAME = "0.93.005-beta.7"
+BETA_VERSION_CODE = "93007"
+BETA_SECRET_NAMES = (
+    "FT8CN_BETA_KEYSTORE_B64",
+    "FT8CN_BETA_STORE_FILE",
+    "FT8CN_BETA_STORE_PASSWORD",
+    "FT8CN_BETA_KEY_ALIAS",
+    "FT8CN_BETA_KEY_PASSWORD",
+    "FT8CN_BETA_CERT_SHA256",
+)
 SECRET_LINE_PATTERNS = (
     re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----"),
     re.compile(r"(?i)\b(?:ghp|github_pat|xox[baprs])-[-_a-z0-9]{20,}\b"),
@@ -167,8 +178,21 @@ def main() -> None:
         fail("release build type may not use the debug signing config")
     if "FT8CN_RELEASE_CERT_SHA256" not in app_gradle or "releaseCertSha256" not in app_gradle:
         fail("formal release signing must require the trusted certificate SHA-256")
+    build_types = app_gradle.split("buildTypes {", 1)[-1]
+    beta_block = re.search(r"\bbeta\s*\{(?P<body>.*?)\n\s*}\s*release\s*\{", build_types, re.S)
+    if not beta_block:
+        fail("app/build.gradle must define a dedicated beta build type")
+    if "signingConfig signingConfigs.beta" not in beta_block.group("body"):
+        fail("beta build type must select the beta-only signing config")
+    if "signingConfig signingConfigs.debug" in beta_block.group("body"):
+        fail("beta build type may not use the Android Debug signing config")
+    if "applicationIdSuffix '.beta'" not in beta_block.group("body"):
+        fail("beta build type must use the isolated beta package suffix")
+    if "dependsOn(\"assembleBeta\")" not in app_gradle or "outputs/apk/beta/app-beta.apk" not in app_gradle:
+        fail("packageTestApk must package the dedicated beta variant")
 
     ci = (ROOT / ".github" / "workflows" / "android.yml").read_text(encoding="utf-8")
+    beta_ci = (ROOT / ".github" / "workflows" / "android-prerelease.yml").read_text(encoding="utf-8")
     release_ci = (ROOT / ".github" / "workflows" / "android-release.yml").read_text(encoding="utf-8")
     root_ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
     for pattern in ("**/*.jks", "**/*.keystore", "**/*.p12", "**/*.pfx", "**/*.apk"):
@@ -184,12 +208,19 @@ def main() -> None:
         ROOT / "doc" / "RELEASES.md",
         ROOT / "doc" / "RELEASE_SIGNING.md",
         ROOT / "doc" / "release-notes" / f"v{version}.md",
+        ROOT / "doc" / "release-notes" / f"{BETA_TAG}.md",
     ):
         if not required.is_file():
             fail(f"required release document is missing: {required.relative_to(ROOT)}")
     notes = (ROOT / "doc" / "release-notes" / f"v{version}.md").read_text(encoding="utf-8")
     if not re.search(rf"^# FT8CN v{re.escape(version)} Release Notes$", notes, re.M):
         fail(f"version-specific notes do not have the exact v{version} heading")
+    beta_notes = (ROOT / "doc" / "release-notes" / f"{BETA_TAG}.md").read_text(encoding="utf-8")
+    if not re.search(rf"^# FT8CN {re.escape(BETA_TAG)} Pre-release Notes$", beta_notes, re.M):
+        fail(f"beta notes do not have the exact {BETA_TAG} heading")
+    for marker in (BETA_VERSION_NAME, BETA_VERSION_CODE, "com.bg7yoz.ft8cn.beta", "beta-only", "HIL", "卸载"):
+        if marker not in beta_notes:
+            fail(f"beta notes are missing required boundary/version marker: {marker}")
     if "FT8CN_FORMAL_RELEASE_APPROVED" not in release_ci:
         fail("formal release workflow must remain blocked until explicit approval")
     if "FT8CN_RELEASE_CERT_SHA256" not in release_ci:
@@ -198,6 +229,31 @@ def main() -> None:
         fail("formal keystore cleanup must be an always-run step in a fixed temp directory")
     if "git ls-remote" not in release_ci or "gh release view" not in release_ci:
         fail("release workflow must check immutable remote tags and existing Releases")
+    if "packageTestApk" in ci:
+        fail("ordinary CI may not require beta-only signing secrets")
+    for name in BETA_SECRET_NAMES:
+        if f"secrets.{name}" not in beta_ci or f"Missing secret {name}" not in beta_ci:
+            fail(f"beta workflow must require the {name} secret without printing its value")
+    for required in (
+        '"v*.*.*-beta.*"',
+        "^v([0-9]+\\.[0-9]+\\.[0-9]{3})-beta\\.([0-9]+)$",
+        "-Pft8cn.versionName",
+        "-Pft8cn.versionCode",
+        "keytool",
+        "apksigner",
+        "ft8cn-beta-signing",
+        "if: ${{ always() }}",
+        "--expect beta",
+        "com.bg7yoz.ft8cn.beta",
+        BETA_VERSION_NAME,
+        BETA_VERSION_CODE,
+    ):
+        if required not in beta_ci:
+            fail(f"beta workflow is missing required signing/version/package contract: {required}")
+    if "FT8CN_RELEASE_" in beta_ci:
+        fail("beta workflow must not consume formal release signing secrets")
+    if "FT8CN_BETA_" in release_ci:
+        fail("formal release workflow must remain independent of beta signing secrets")
 
     scan_tracked_files()
     scan_staged_diff()

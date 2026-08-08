@@ -29,15 +29,8 @@ jobs:
     - name: Test release certificate gates
       run: python -m unittest scripts.test_release_gates
 
-    - name: Run JVM unit tests
-      working-directory: ft8cn
-      run: ./gradlew :app:testDebugUnitTest
-
-    - name: Build TEST/BETA APK
-      working-directory: ft8cn
-      run: ./gradlew :app:packageTestApk
-
-    - name: Verify TEST/BETA APK signature
+    - name: Resolve canonical Gradle version
+      shell: bash
       run: |
         set -euo pipefail
         gradle_output="$(./ft8cn/gradlew -p ./ft8cn -q :app:printVersion)"
@@ -47,12 +40,22 @@ jobs:
           echo "Could not read one canonical Gradle version from printVersion output." >&2
           exit 1
         fi
-        VERSION="${gradle_version%%:*}"
-        python scripts/verify_apk_signature.py --apk "ft8cn/.artifacts/FT8CN-v${VERSION}-beta-${GITHUB_SHA:0:7}.apk" --expect debug
 
-    - name: Upload TEST/BETA APK
+    - name: Run JVM unit tests
+      working-directory: ft8cn
+      run: ./gradlew :app:testDebugUnitTest
+
+    - name: Build ordinary debug APK
+      working-directory: ft8cn
+      run: ./gradlew :app:assembleDebug
+
+    - name: Verify ordinary debug APK signature
+      run: |
+        python scripts/verify_apk_signature.py --apk "ft8cn/app/build/outputs/apk/debug/app-debug.apk" --expect debug
+
+    - name: Upload ordinary debug APK
       uses: actions/upload-artifact@v4
       with:
-        name: FT8CN-test-beta-${{ github.sha }}
-        path: ft8cn/.artifacts/*.apk
+        name: FT8CN-debug-${{ github.sha }}
+        path: ft8cn/app/build/outputs/apk/debug/app-debug.apk
         if-no-files-found: error
