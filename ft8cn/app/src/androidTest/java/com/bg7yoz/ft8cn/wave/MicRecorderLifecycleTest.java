@@ -162,7 +162,22 @@ public class MicRecorderLifecycleTest {
             assertTrue("old callback did not reach its interleave point",
                     firstCallbackEntered.await(2, TimeUnit.SECONDS));
 
-            recorder.stopSession(firstSession);
+            CountDownLatch stopReturned = new CountDownLatch(1);
+            AtomicReference<Throwable> stopFailure = new AtomicReference<>();
+            Thread stopper = new Thread(() -> {
+                try {
+                    recorder.stopSession(firstSession);
+                } catch (Throwable error) {
+                    stopFailure.set(error);
+                } finally {
+                    stopReturned.countDown();
+                }
+            }, "MicRecorderLifecycleTest-stop");
+            stopper.start();
+            assertTrue("stop blocked behind the old delivery callback",
+                    stopReturned.await(2, TimeUnit.SECONDS));
+            assertTrue("stopSession failed", stopFailure.get() == null);
+
             long secondSession = recorder.startSession();
             assertTrue(secondSession > firstSession);
             newRecord.sampleReady.countDown();
@@ -172,6 +187,7 @@ public class MicRecorderLifecycleTest {
             releaseFirstCallback.countDown();
             assertTrue("old callback did not return",
                     firstCallbackReturned.await(2, TimeUnit.SECONDS));
+            stopper.join(2000);
             assertEquals(Arrays.asList(firstSession, secondSession), deliveredSessionIds);
             assertTrue("callback failure escaped", callbackFailure.get() == null);
         } finally {

@@ -71,6 +71,12 @@ public class MicRecorder {
         final long id;
         final OnDataListener dataListener;
         final AtomicBoolean cleaned = new AtomicBoolean();
+        /**
+         * A delivery lease is admitted under lifecycleLock and released after
+         * the session-owned listener returns.  Stop may retire the session and
+         * release AudioRecord immediately, but it must not interrupt a leased
+         * callback: the callback is the old session's final delivery boundary.
+         */
         final AtomicInteger activeDeliveries = new AtomicInteger();
         volatile boolean cancelled;
         volatile boolean serviceStarted;
@@ -399,6 +405,7 @@ public class MicRecorder {
 
     void stopSession(long sessionId) {
         Session session;
+        boolean interruptWorker;
         synchronized (lifecycleLock) {
             session = currentSession;
             if (session == null || session.id != sessionId) {
@@ -407,9 +414,16 @@ public class MicRecorder {
             session.cancelled = true;
             currentSession = null;
             isRunning = false;
+            // The reader owns the callback stack.  An admitted delivery must
+            // be allowed to return naturally; interrupting here turns a
+            // listener's bounded wait into a partial delivery.  If no lease
+            // is active, interrupting a blocked setup/read is safe and keeps
+            // stop responsive.  The AudioRecord release below is the normal
+            // unblock path for a native read.
+            interruptWorker = session.activeDeliveries.get() == 0;
         }
         Thread worker = session.worker;
-        if (worker != null) {
+        if (interruptWorker && worker != null) {
             worker.interrupt();
         }
         cleanupSession(session);
