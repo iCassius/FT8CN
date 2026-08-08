@@ -155,7 +155,9 @@ jobs:
           APK_NAME="FT8CN-v${VERSION}-release-${{ steps.version.outputs.short_sha }}.apk"
           APK_PATH="ft8cn/.artifacts/${APK_NAME}"
           mkdir -p ft8cn/.artifacts
+          test -s ft8cn/app/build/outputs/apk/release/app-release.apk
           cp ft8cn/app/build/outputs/apk/release/app-release.apk "${APK_PATH}"
+          test -s "${APK_PATH}"
           echo "apk_path=${APK_PATH}" >> "${GITHUB_OUTPUT}"
           echo "apk_name=${APK_NAME}" >> "${GITHUB_OUTPUT}"
 
@@ -180,8 +182,7 @@ jobs:
         run: |
           NOTES_FILE="${{ steps.version.outputs.notes_file }}"
           test -f "${NOTES_FILE}"
-          gh release create "${TAG_NAME}" --title "FT8CN ${TAG_NAME}" --notes-file "${NOTES_FILE}"
-          gh release upload "${TAG_NAME}" "${APK_PATH}"
+          gh release create "${TAG_NAME}" --verify-tag --title "FT8CN ${TAG_NAME}" --notes-file "${NOTES_FILE}" "${APK_PATH}"
 
       - name: Cleanup formal keystore
         if: ${{ always() }}
