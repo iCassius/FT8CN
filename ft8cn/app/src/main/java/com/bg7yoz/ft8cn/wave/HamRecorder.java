@@ -93,7 +93,10 @@ public class HamRecorder {
     @SuppressLint("MissingPermission")
     public void startRecord() {
         if (isMicRecord){//如果是用MIC采集声音
-            micRecorder.start();
+            if (!micRecorder.start()) {
+                isRunning = false;
+                return;
+            }
             micRecorder.setOnDataListener(new MicRecorder.OnDataListener() {
                 @Override
                 public void onDataReceived(float[] data, int len) {
@@ -101,7 +104,7 @@ public class HamRecorder {
                 }
             });
         }
-            isRunning=true;
+        isRunning=true;
 
     }
 

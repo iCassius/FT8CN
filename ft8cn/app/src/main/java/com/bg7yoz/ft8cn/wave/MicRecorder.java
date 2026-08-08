@@ -90,7 +90,6 @@ public class MicRecorder {
             } else {
                 context.startService(intent);
             }
-            Thread.sleep(100);
             return true;
         } catch (Exception e) {
             Log.w(TAG, "startAudioForegroundService: " + e.getMessage());
@@ -127,14 +126,14 @@ public class MicRecorder {
         }
     }
 
-    public synchronized void start() {
-        if (isRunning) return;
+    public synchronized boolean start() {
+        if (isRunning) return true;
 
         if (!startRecordingInternal()) {
             ToastMessage.show(String.format(GeneralVariables.getStringFromResource(
                     R.string.recorder_cannot_record), "AudioRecord is not initialized"));
             Log.d(TAG, "startRecord: AudioRecord is not initialized");
-            return;
+            return false;
         }
 
         isRunning = true;
@@ -186,6 +185,7 @@ public class MicRecorder {
                 releaseAudioRecord();
             }
         }, "FT8CN-MicRecorder").start();
+        return true;
     }
 
     public synchronized void stopRecord() {
