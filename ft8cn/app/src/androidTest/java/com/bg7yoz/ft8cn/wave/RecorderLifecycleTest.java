@@ -4,6 +4,7 @@ import static org.junit.Assert.assertFalse;
 
 import android.Manifest;
 import android.content.Context;
+import android.content.ContextWrapper;
 import android.content.pm.PackageManager;
 
 import androidx.test.core.app.ApplicationProvider;
@@ -14,31 +15,43 @@ import com.bg7yoz.ft8cn.GeneralVariables;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import android.app.UiAutomation;
-import androidx.test.platform.app.InstrumentationRegistry;
-
 @RunWith(AndroidJUnit4.class)
 public class RecorderLifecycleTest {
     @Test
     public void microphonePermissionFailureDoesNotReportRecorderRunning() {
         Context context = ApplicationProvider.getApplicationContext();
-        GeneralVariables.getInstance().setMainContext(context);
-        UiAutomation automation = InstrumentationRegistry.getInstrumentation().getUiAutomation();
-        boolean wasGranted = context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)
-                == PackageManager.PERMISSION_GRANTED;
-        try {
-            automation.revokeRuntimePermission(context.getPackageName(), Manifest.permission.RECORD_AUDIO);
+        Context deniedPermissionContext = new ContextWrapper(context) {
+            @Override
+            public Context getApplicationContext() {
+                return this;
+            }
 
-            HamRecorder recorder = new HamRecorder(null);
+            @Override
+            public int checkSelfPermission(String permission) {
+                if (Manifest.permission.RECORD_AUDIO.equals(permission)) {
+                    return PackageManager.PERMISSION_DENIED;
+                }
+                return super.checkSelfPermission(permission);
+            }
+
+            @Override
+            public int checkPermission(String permission, int pid, int uid) {
+                if (Manifest.permission.RECORD_AUDIO.equals(permission)) {
+                    return PackageManager.PERMISSION_DENIED;
+                }
+                return super.checkPermission(permission, pid, uid);
+            }
+        };
+        GeneralVariables.getInstance().setMainContext(deniedPermissionContext);
+        HamRecorder recorder = new HamRecorder(null);
+        try {
             recorder.startRecord();
 
             assertFalse("failed MicRecorder startup must not report HamRecorder running",
                     recorder.isRunning());
-            recorder.stopRecord();
         } finally {
-            if (wasGranted) {
-                automation.grantRuntimePermission(context.getPackageName(), Manifest.permission.RECORD_AUDIO);
-            }
+            recorder.stopRecord();
+            GeneralVariables.getInstance().setMainContext(context);
         }
     }
 }
