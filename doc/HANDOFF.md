@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-08-08　P0-D FT8 解码单飞与状态终态
+
+### 做了什么
+
+- 基于 `codex/v0.93.005-integration@2906dec` 完成 P0-D，提交 `60901df028c2f8f49f0cf10963e3336202d27da0`：新增专用单线程 `DecodeCoordinator`，移除 `FT8SignalListener` 每时隙裸线程。
+- 重叠时隙直接跳过；停止时取消活动任务并递增 epoch；旧 token 在 JNI 阶段、结果发布和终态前均失效，不能回写新周期。
+- `MainViewModel` 的解码状态改由统一终态回调复位；空结果发布零计数，异常和取消也会清理状态；epoch 不匹配的结果不进入消息、自动通联或后续任务入口。
+- 新增 `DecodeCoordinatorTest`，覆盖空结果、异常、重叠时隙、取消后的旧 epoch 回写，共 4 个用例。
+
+### 关键决策
+
+- 采用“单飞 + 重叠跳过”策略，不排队累积时隙；取消中的 native 调用即使延迟返回，也必须先退出协调器后才允许下一周期进入。
+- 保留既有快速/深度解码流程，只在阶段边界增加取消检查和 epoch 发布门；没有改 JNI、音频采集或自动通联规则。
+
+### 当前状态
+
+- `AUTO_VERIFIED`：`pwsh -NoLogo -NoProfile -Command '& .\gradlew.bat :app:testDebugUnitTest --no-daemon'` 通过；JVM 12/12，失败 0、错误 0、跳过 0。
+- 本次未运行 AVD、未连接真机、未操作 CAT/PTT、未发射；因此没有 AVD/HIL 证据。单线程取消对真实 native 解码的响应时延仍需设备验证。
+- 当前工作树已提交，分支为 `codex/p0-d-decode-lifecycle`；未推送、未合并 `release`、未打 tag。
+
+### 下一步
+
+- 主会话核对 `60901df` 并择机合入集成基线；之后在独占 AVD 上做无发射 instrumented smoke，再由用户进行真实音频连续解码和长时挂机验证。
+
+---
+
 ## 2026-08-03　v0.93.005-beta.5 GitHub 预发布自动验收
 
 ### 做了什么
