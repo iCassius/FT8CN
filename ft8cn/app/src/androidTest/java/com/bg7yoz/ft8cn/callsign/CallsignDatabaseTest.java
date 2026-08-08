@@ -11,6 +11,8 @@ import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 import com.bg7yoz.ft8cn.AppExecutors;
+import com.bg7yoz.ft8cn.Ft8Message;
+import com.bg7yoz.ft8cn.GeneralVariables;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -81,5 +83,25 @@ public class CallsignDatabaseTest {
     public void unknownPrefixReturnsNull() {
         //Q 开头的业余前缀未分配；查不到必须返回 null（调用方约定判空）
         assertNull(database.getCallInfo("QQ1QQ"));
+    }
+
+    @Test
+    public void priorityIsAvailableBeforeCandidateFiltering() {
+        GeneralVariables.dxccMap.clear();
+        GeneralVariables.workedBandsByDxcc.clear();
+        GeneralVariables.workedPrefixes.clear();
+        GeneralVariables.sessionDxccCount.clear();
+        GeneralVariables.sessionPrefixCount.clear();
+        GeneralVariables.sessionCallCount.clear();
+
+        Ft8Message message = new Ft8Message(0);
+        message.i3 = 1;
+        message.callsignFrom = "BG7YOZ";
+        message.band = 14074000L;
+
+        CallsignDatabase.getMessagesPriority(database.getDb(),
+                new java.util.ArrayList<>(java.util.Collections.singletonList(message)));
+
+        assertEquals(Ft8Message.Priority.NEW_DXCC, message.priority);
     }
 }

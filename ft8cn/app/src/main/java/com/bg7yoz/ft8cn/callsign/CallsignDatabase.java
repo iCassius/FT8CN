@@ -97,6 +97,34 @@ public class CallsignDatabase extends android.database.sqlite.SQLiteOpenHelper {
     }
 
     public static synchronized void getMessagesLocation(SQLiteDatabase db, ArrayList<Ft8Message> ft8Messages) {
+        getMessagesLocation(db, ft8Messages, true);
+    }
+
+    public static synchronized void getMessagesLocationWithoutPriority(
+            SQLiteDatabase db, ArrayList<Ft8Message> ft8Messages) {
+        getMessagesLocation(db, ft8Messages, false);
+    }
+
+    public static synchronized void getMessagesPriority(SQLiteDatabase db,
+                                                         ArrayList<Ft8Message> ft8Messages) {
+        if (ft8Messages == null) return;
+        ArrayList<Ft8Message> messages = new ArrayList<>(ft8Messages);//防止线程访问冲突
+
+        for (Ft8Message msg : messages) {
+            if (msg.i3 == 0 && msg.n3 == 0) continue;//如果是自由文本，就不查了
+            if (msg.callsignFrom != null) {
+                CallsignInfo fromCallsignInfo = getCallsignInfo(db,
+                        msg.callsignFrom.replace("<", "").replace(">", ""));
+                if (fromCallsignInfo != null) {
+                    updateMessagePriority(msg, fromCallsignInfo);
+                }
+            }
+        }
+    }
+
+    private static synchronized void getMessagesLocation(SQLiteDatabase db,
+                                                           ArrayList<Ft8Message> ft8Messages,
+                                                           boolean calculatePriority) {
         if (ft8Messages == null) return;
         ArrayList<Ft8Message> messages = new ArrayList<>(ft8Messages);//防止线程访问冲突
 
@@ -118,8 +146,9 @@ public class CallsignDatabase extends android.database.sqlite.SQLiteOpenHelper {
                     msg.fromLatLng = new com.google.android.gms.maps.model.LatLng(
                             fromCallsignInfo.Latitude, fromCallsignInfo.Longitude * -1);
 
-                    // Calculate Priority and Session Stats
-                    updateMessagePriority(msg, fromCallsignInfo);
+                    if (calculatePriority) {
+                        updateMessagePriority(msg, fromCallsignInfo);
+                    }
                 }
             }
 

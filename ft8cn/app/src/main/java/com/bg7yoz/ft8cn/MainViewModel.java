@@ -399,6 +399,13 @@ public class MainViewModel extends ViewModel {
                 mutableTimerOffset.postValue(time_sec);//本次时间偏移量
 
 
+                // Candidate filtering depends on JTDX priority. Calculate it before
+                // findIncludedCallsigns; location/UI enrichment remains asynchronous.
+                if (GeneralVariables.callsignDatabase != null) {
+                    CallsignDatabase.getMessagesPriority(
+                            GeneralVariables.callsignDatabase.getDb(), messages);
+                }
+
                 findIncludedCallsigns(messages);//查找符合条件的消息，放到呼叫列表中
 
                 //检查发射程序。从消息列表中解析发射的程序
@@ -1217,7 +1224,7 @@ public class MainViewModel extends ViewModel {
         @Override
         public void run() {
             if (!mainViewModel.isCurrentQth(lifecycleGeneration, qthGeneration)) return;
-            CallsignDatabase.getMessagesLocation(
+            CallsignDatabase.getMessagesLocationWithoutPriority(
                     GeneralVariables.callsignDatabase.getDb(), messages);
             if (!mainViewModel.isCurrentQth(lifecycleGeneration, qthGeneration)) return;
             synchronized (mainViewModel.ft8Messages) {
