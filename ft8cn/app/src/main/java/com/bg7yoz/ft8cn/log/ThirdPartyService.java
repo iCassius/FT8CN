@@ -253,19 +253,40 @@ public class ThirdPartyService {
         return baseUrl;
     }
 
-    private static boolean responseContainsStationId(String body, String stationId) {
+    static boolean responseContainsStationId(String body, String stationId) {
         if (body == null || stationId == null) return false;
-        String normalizedBody = body.replace(" ", "").replace("\n", "").replace("\r", "");
+        String normalizedBody = body.replaceAll("\\s+", "");
         String normalizedStationId = stationId.trim();
         if (normalizedStationId.isEmpty()) return false;
-        String quotedId = "\"station_id\":\"" + normalizedStationId + "\"";
-        String numericId = "\"station_id\":" + normalizedStationId;
-        String quotedProfileId = "\"station_profile_id\":\"" + normalizedStationId + "\"";
-        String numericProfileId = "\"station_profile_id\":" + normalizedStationId;
-        return normalizedBody.contains(quotedId)
-                || normalizedBody.contains(quotedProfileId)
-                || normalizedBody.toLowerCase(Locale.ROOT).contains(numericProfileId.toLowerCase(Locale.ROOT))
-                || normalizedBody.toLowerCase(Locale.ROOT).contains(numericId.toLowerCase(Locale.ROOT));
+        return containsJsonId(normalizedBody, "station_id", normalizedStationId)
+                || containsJsonId(normalizedBody, "station_profile_id", normalizedStationId);
+    }
+
+    private static boolean containsJsonId(String body, String field, String value) {
+        String fieldPrefix = "\"" + field + "\":";
+        if (body.contains(fieldPrefix + "\"" + value + "\"")) {
+            return true;
+        }
+        if (!value.matches("[0-9]+")) {
+            return false;
+        }
+
+        String numericToken = fieldPrefix + value;
+        int searchFrom = 0;
+        while (true) {
+            int tokenStart = body.indexOf(numericToken, searchFrom);
+            if (tokenStart < 0) {
+                return false;
+            }
+            int tokenEnd = tokenStart + numericToken.length();
+            if (tokenEnd == body.length()
+                    || body.charAt(tokenEnd) == ','
+                    || body.charAt(tokenEnd) == '}'
+                    || body.charAt(tokenEnd) == ']') {
+                return true;
+            }
+            searchFrom = tokenStart + 1;
+        }
     }
 
     private static HttpResult getStationInfoByUrl(String address, String apiKey) throws IOException {
