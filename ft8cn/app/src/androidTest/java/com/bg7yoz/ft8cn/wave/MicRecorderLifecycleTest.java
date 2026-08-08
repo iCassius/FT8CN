@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -115,6 +116,68 @@ public class MicRecorderLifecycleTest {
             assertEquals(1, service.stopCalls.get());
             assertEquals(service.startedIds, service.stoppedIds);
         } finally {
+            recorder.stopRecord();
+        }
+    }
+
+    @Test
+    public void stopThenStartCannotRetagAnInFlightOldDeliveryAsTheNewSession() throws Exception {
+        FakeService service = new FakeService(true);
+        FakeFactory factory = new FakeFactory();
+        ControlledAudioRecord oldRecord = new ControlledAudioRecord((short) 11);
+        ControlledAudioRecord newRecord = new ControlledAudioRecord((short) 22);
+        factory.results.addAll(Arrays.asList(oldRecord, newRecord));
+        List<Long> deliveredSessionIds = new java.util.concurrent.CopyOnWriteArrayList<>();
+        CountDownLatch firstCallbackEntered = new CountDownLatch(1);
+        CountDownLatch secondCallbackEntered = new CountDownLatch(1);
+        CountDownLatch firstCallbackReturned = new CountDownLatch(1);
+        CountDownLatch releaseFirstCallback = new CountDownLatch(1);
+        AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
+        AtomicInteger callbackCount = new AtomicInteger();
+        MicRecorder recorder = new MicRecorder(factory, service);
+        recorder.setOnDataListener((sessionId, data, len) -> {
+            deliveredSessionIds.add(sessionId);
+            if (callbackCount.getAndIncrement() == 0) {
+                firstCallbackEntered.countDown();
+                try {
+                    if (!releaseFirstCallback.await(2, TimeUnit.SECONDS)) {
+                        throw new AssertionError("old delivery was not released");
+                    }
+                } catch (Throwable error) {
+                    callbackFailure.set(error);
+                } finally {
+                    firstCallbackReturned.countDown();
+                }
+            } else {
+                secondCallbackEntered.countDown();
+            }
+        });
+
+        try {
+            long firstSession = recorder.startSession();
+            assertTrue(firstSession > 0);
+            assertTrue("old reader did not produce a delivery",
+                    oldRecord.readStarted.await(2, TimeUnit.SECONDS));
+            oldRecord.sampleReady.countDown();
+            assertTrue("old callback did not reach its interleave point",
+                    firstCallbackEntered.await(2, TimeUnit.SECONDS));
+
+            recorder.stopSession(firstSession);
+            long secondSession = recorder.startSession();
+            assertTrue(secondSession > firstSession);
+            newRecord.sampleReady.countDown();
+            assertTrue("new session did not produce a delivery",
+                    secondCallbackEntered.await(2, TimeUnit.SECONDS));
+
+            releaseFirstCallback.countDown();
+            assertTrue("old callback did not return",
+                    firstCallbackReturned.await(2, TimeUnit.SECONDS));
+            assertEquals(Arrays.asList(firstSession, secondSession), deliveredSessionIds);
+            assertTrue("callback failure escaped", callbackFailure.get() == null);
+        } finally {
+            releaseFirstCallback.countDown();
+            oldRecord.sampleReady.countDown();
+            newRecord.sampleReady.countDown();
             recorder.stopRecord();
         }
     }
@@ -238,6 +301,37 @@ public class MicRecorderLifecycleTest {
         public void release() {
             super.release();
             released.countDown();
+        }
+    }
+
+    private static final class ControlledAudioRecord extends FakeAudioRecord {
+        final CountDownLatch readStarted = new CountDownLatch(1);
+        final CountDownLatch sampleReady = new CountDownLatch(1);
+        private final short sample;
+        private boolean sampleReturned;
+
+        ControlledAudioRecord(short sample) {
+            super(true);
+            this.sample = sample;
+        }
+
+        @Override
+        public int read(short[] buffer, int offset, int size) {
+            if (!sampleReturned) {
+                readStarted.countDown();
+                try {
+                    if (!sampleReady.await(2, TimeUnit.SECONDS)) {
+                        return AudioRecord.ERROR_DEAD_OBJECT;
+                    }
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return AudioRecord.ERROR_DEAD_OBJECT;
+                }
+                sampleReturned = true;
+                buffer[offset] = sample;
+                return 1;
+            }
+            return AudioRecord.ERROR_DEAD_OBJECT;
         }
     }
 }

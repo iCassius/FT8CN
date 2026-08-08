@@ -93,6 +93,10 @@ public class HamRecorder {
         //doDataMonitorChanged();
     }
 
+    void doOnWaveDataReceived(long sessionId, int bufferLen, float[] buffer) {
+        doOnWaveDataReceived(bufferLen, buffer);
+    }
+
 
     /**
      * 是否处于录音状态
@@ -119,8 +123,8 @@ public class HamRecorder {
             }
             micRecorder.setOnDataListener(new MicRecorder.OnDataListener() {
                 @Override
-                public void onDataReceived(float[] data, int len) {
-                    doOnWaveDataReceived(len,data);
+                public void onDataReceived(long sessionId, float[] data, int len) {
+                    doOnWaveDataReceived(sessionId, len, data);
                 }
             });
             activeMicSessionId = micRecorder.startSession();

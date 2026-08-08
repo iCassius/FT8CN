@@ -16,6 +16,7 @@ import com.bg7yoz.ft8cn.R;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 interface AudioRecordFactory {
     int getMinBufferSize();
@@ -57,10 +58,9 @@ public class MicRecorder {
     private volatile boolean isRunning;
     private volatile OnDataListener onDataListener;
     private volatile OnStateListener onStateListener;
-    private volatile float[] reusableFloatBuffer;
 
     public interface OnDataListener {
-        void onDataReceived(float[] data, int len);
+        void onDataReceived(long sessionId, float[] data, int len);
     }
 
     interface OnStateListener {
@@ -69,15 +69,19 @@ public class MicRecorder {
 
     private static final class Session {
         final long id;
+        final OnDataListener dataListener;
         final AtomicBoolean cleaned = new AtomicBoolean();
+        final AtomicInteger activeDeliveries = new AtomicInteger();
         volatile boolean cancelled;
         volatile boolean serviceStarted;
         volatile AudioRecordHandle audioRecord;
         volatile Thread worker;
+        float[] reusableFloatBuffer;
         int bufferSize;
 
-        Session(long id) {
+        Session(long id, OnDataListener dataListener) {
             this.id = id;
+            this.dataListener = dataListener;
         }
     }
 
@@ -108,7 +112,7 @@ public class MicRecorder {
                 return currentSession.id;
             }
 
-            Session session = new Session(++nextSessionId);
+            Session session = new Session(++nextSessionId, onDataListener);
             currentSession = session;
             Thread worker = new Thread(() -> runSession(session), "FT8CN-MicRecorder");
             session.worker = worker;
@@ -271,24 +275,48 @@ public class MicRecorder {
                 continue;
             }
 
-            if (reusableFloatBuffer == null || reusableFloatBuffer.length < bufferReadResult) {
-                reusableFloatBuffer = new float[bufferReadResult];
+            if (session.reusableFloatBuffer == null
+                    || session.reusableFloatBuffer.length < bufferReadResult) {
+                session.reusableFloatBuffer = new float[bufferReadResult];
             }
 
             float sum = 0;
             for (int i = 0; i < bufferReadResult; i++) {
-                reusableFloatBuffer[i] = buffer[i] / 32768.0f;
-                sum += Math.abs(reusableFloatBuffer[i]);
+                session.reusableFloatBuffer[i] = buffer[i] / 32768.0f;
+                sum += Math.abs(session.reusableFloatBuffer[i]);
             }
             if (sum == 0) {
                 Log.w(TAG, "run: Received SILENT data (all zeros)");
             }
 
-            OnDataListener listener = onDataListener;
-            if (listener != null && isCurrent(session)) {
-                listener.onDataReceived(reusableFloatBuffer, bufferReadResult);
+            OnDataListener listener = session.dataListener;
+            if (listener != null && acquireDeliveryLease(session)) {
+                try {
+                    listener.onDataReceived(session.id, session.reusableFloatBuffer, bufferReadResult);
+                } finally {
+                    releaseDeliveryLease(session);
+                }
             }
         }
+    }
+
+    /**
+     * Admission is linearized with stop/start. The listener is invoked without
+     * the lifecycle lock; its session identity is the delivery-side fence owned
+     * by the consumer (HamRecorder).
+     */
+    private boolean acquireDeliveryLease(Session session) {
+        synchronized (lifecycleLock) {
+            if (currentSession != session || session.cancelled) {
+                return false;
+            }
+            session.activeDeliveries.incrementAndGet();
+            return true;
+        }
+    }
+
+    private void releaseDeliveryLease(Session session) {
+        session.activeDeliveries.decrementAndGet();
     }
 
     private boolean isCurrent(Session session) {
