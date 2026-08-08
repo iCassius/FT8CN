@@ -9,6 +9,8 @@ import static org.junit.Assert.assertTrue;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -173,6 +175,94 @@ public class DecodeCoordinatorTest {
             assertEquals(1, writes.size());
             assertEquals("new", writes.get(0));
         } finally {
+            coordinator.stop();
+        }
+    }
+
+    @Test
+    public void cancelBeforeTaskStartsClearsTheSlotAndDoesNotRunTheOldTask() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        CountDownLatch blockerStarted = new CountDownLatch(1);
+        CountDownLatch releaseBlocker = new CountDownLatch(1);
+        executor.submit(() -> {
+            blockerStarted.countDown();
+            try {
+                releaseBlocker.await(2, TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        DecodeCoordinator coordinator = new DecodeCoordinator("decode-test-queued-cancel", executor);
+        CountDownLatch newFinished = new CountDownLatch(1);
+        AtomicInteger oldRuns = new AtomicInteger();
+        try {
+            assertTrue(blockerStarted.await(2, TimeUnit.SECONDS));
+            assertTrue(coordinator.submit(token -> oldRuns.incrementAndGet(), noOpListener(
+                    new CountDownLatch(1))));
+
+            coordinator.cancelActive();
+            assertFalse("queued cancellation left the coordinator active", coordinator.isActive());
+            assertTrue("new decode was blocked by a cancelled queued Future", coordinator.submit(
+                    token -> { }, noOpListener(newFinished)));
+
+            releaseBlocker.countDown();
+            assertTrue("new decode did not finish", newFinished.await(2, TimeUnit.SECONDS));
+            assertEquals("cancelled queued decode still ran", 0, oldRuns.get());
+            awaitInactive(coordinator);
+        } finally {
+            releaseBlocker.countDown();
+            coordinator.stop();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void runningOldTaskCannotClearAStillActiveSlotBeforeItsFinally() throws Exception {
+        DecodeCoordinator coordinator = new DecodeCoordinator("decode-test-finally-identity");
+        CountDownLatch oldStarted = new CountDownLatch(1);
+        CountDownLatch oldFinishedCallback = new CountDownLatch(1);
+        CountDownLatch releaseOldFinishedCallback = new CountDownLatch(1);
+        CountDownLatch newFinished = new CountDownLatch(1);
+        try {
+            assertTrue(coordinator.submit(token -> {
+                oldStarted.countDown();
+                try {
+                    Thread.sleep(10000);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+                token.throwIfCancelled();
+            }, new DecodeCoordinator.Listener() {
+                @Override
+                public void onStarted(long epoch) {
+                }
+
+                @Override
+                public void onFinished(long epoch, boolean cancelled, Throwable failure) {
+                    oldFinishedCallback.countDown();
+                    // The cancelled decode leaves the worker interrupted;
+                    // clear it so this test can hold the terminal callback.
+                    Thread.interrupted();
+                    try {
+                        releaseOldFinishedCallback.await(2, TimeUnit.SECONDS);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }));
+            assertTrue(oldStarted.await(2, TimeUnit.SECONDS));
+            coordinator.cancelActive();
+            assertTrue(oldFinishedCallback.await(2, TimeUnit.SECONDS));
+            assertFalse("running old Future released the slot before finally", coordinator.submit(
+                    token -> { }, noOpListener(newFinished)));
+
+            releaseOldFinishedCallback.countDown();
+            awaitInactive(coordinator);
+            assertTrue(coordinator.submit(token -> { }, noOpListener(newFinished)));
+            assertTrue("new decode did not finish", newFinished.await(2, TimeUnit.SECONDS));
+        } finally {
+            releaseOldFinishedCallback.countDown();
             coordinator.stop();
         }
     }

@@ -46,12 +46,18 @@ final class DecodeCoordinator {
         }
     }
 
+    private static final class ActiveRun {
+        private Future<?> future;
+        private boolean started;
+    }
+
     private final Object lock = new Object();
     private final ExecutorService executor;
     private long epoch;
     private boolean active;
     private boolean stopped;
     private Future<?> activeFuture;
+    private ActiveRun activeRun;
 
     DecodeCoordinator(String threadName) {
         executor = Executors.newSingleThreadExecutor(runnable -> {
@@ -59,6 +65,10 @@ final class DecodeCoordinator {
             thread.setDaemon(true);
             return thread;
         });
+    }
+
+    DecodeCoordinator(String threadName, ExecutorService executor) {
+        this.executor = Objects.requireNonNull(executor, "executor");
     }
 
     boolean submit(DecodeTask task, Listener listener) {
@@ -73,12 +83,14 @@ final class DecodeCoordinator {
             active = true;
             long taskEpoch = ++epoch;
             DecodeToken token = new DecodeToken(this, taskEpoch);
+            ActiveRun run = new ActiveRun();
+            activeRun = run;
             try {
-                activeFuture = executor.submit(() -> runTask(task, listener, token));
+                run.future = executor.submit(() -> runTask(task, listener, token, run));
+                activeFuture = run.future;
                 return true;
             } catch (RuntimeException rejected) {
-                active = false;
-                activeFuture = null;
+                clearRunLocked(run);
                 return false;
             }
         }
@@ -87,8 +99,17 @@ final class DecodeCoordinator {
     void cancelActive() {
         synchronized (lock) {
             epoch++;
-            if (activeFuture != null) {
-                activeFuture.cancel(true);
+            ActiveRun run = activeRun;
+            if (run != null) {
+                if (run.future != null) {
+                    run.future.cancel(true);
+                }
+                // A Future cancelled before runTask acquires the lock never
+                // reaches runTask's finally block, so release that slot here.
+                // A started task must retain the slot until its own finally.
+                if (!run.started) {
+                    clearRunLocked(run);
+                }
             }
         }
     }
@@ -100,8 +121,14 @@ final class DecodeCoordinator {
             }
             stopped = true;
             epoch++;
-            if (activeFuture != null) {
-                activeFuture.cancel(true);
+            ActiveRun run = activeRun;
+            if (run != null) {
+                if (run.future != null) {
+                    run.future.cancel(true);
+                }
+                if (!run.started) {
+                    clearRunLocked(run);
+                }
             }
         }
         executor.shutdownNow();
@@ -119,13 +146,21 @@ final class DecodeCoordinator {
         }
     }
 
-    private void runTask(DecodeTask task, Listener listener, DecodeToken token) {
-        boolean started = false;
+    private void runTask(DecodeTask task, Listener listener, DecodeToken token, ActiveRun run) {
+        boolean started;
         boolean cancelled = false;
         Throwable failure = null;
+
+        synchronized (lock) {
+            if (activeRun != run || stopped) {
+                return;
+            }
+            run.started = true;
+            started = true;
+        }
+
         try {
             token.throwIfCancelled();
-            started = true;
             listener.onStarted(token.epoch());
             token.throwIfCancelled();
             task.run(token);
@@ -146,9 +181,16 @@ final class DecodeCoordinator {
                 }
             }
             synchronized (lock) {
-                active = false;
-                activeFuture = null;
+                clearRunLocked(run);
             }
+        }
+    }
+
+    private void clearRunLocked(ActiveRun run) {
+        if (activeRun == run) {
+            active = false;
+            activeFuture = null;
+            activeRun = null;
         }
     }
 }
