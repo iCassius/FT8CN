@@ -4,6 +4,38 @@
 
 ---
 
+## 2026-08-08　v0.93.005 音频会话最终并发收口
+
+### 基线、分支与分层提交
+
+- 精确基线：`codex/v0.93.005-final-risk-fix@9fcfeb81fd9c3620c7c620ff89926a4164d17419`；已核对 `PROJECT_RULES.md`、本文件、无 notes 目录、初始 clean tree。
+- 分支：`codex/v0.93.005-audio-session-fix`；未推送、未合并 `release`、未创建 tag/Release/Secrets；未修改 `local.properties` 或提交构建产物。
+- 分层提交：`8e85194`（Mic session delivery + stop→start 交错测试）、`6210548`（HamRecorder monitor generation/终态 + 并发测试）、`a1b0800`（前台服务 session/startId/ACK + 生命周期测试）、`b7aaa5b`（正常 current epoch duration publication）、`db01402`（MainViewModel/UtcTimer heartbeat epoch fence）、`c4ef5a5`（Decode executor terminal 幂等测试）。本条与正式 notes 为独立文档提交。
+
+### 根因与设计
+
+- **MicRecorder P1**：旧 worker 在 `isCurrent` 检查后仍可跨 stop→start 调用全局 listener，且共享 float buffer 可重叠。现在 Session 捕获自己的 listener/buffer，交付准入带 session ID 和 in-flight lease；HamRecorder 在交付侧再次验证 session/generation，因此旧数据最多完成旧 session 的已准入回调，不能被新 monitor 接收。
+- **HamRecorder P1**：monitor 原来无 generation，stop 后可被新 session 音频或 `forceComplete` 触发。现在 monitor 绑定 recorder generation；get/stop/start 用 lifecycle lock 做准入与摘除，terminal close 不调用旧回调，forceComplete/receiveData 与 monitor terminal 锁串行，异常经 Future/调用方传播。
+- **AudioForegroundService P1**：startService 返回不代表 startForeground 成功，stale STOP 还可能在无 active 时留下 started service。现在使用 session + Android startId 状态机；matching STOP 才清 active，stale STOP 不 self-stop 新 session，无 active STOP 用 `stopSelfResult`，startForeground 异常清理并通过 ResultReceiver ACK 返回失败。
+- **P2**：duration 正常准入路径有正向回归；MainViewModel 与 UtcTimer 的 heartbeat 由 cleared/epoch gate 保护；owned decode/bounded executors 已检查终态 shutdown，shared AppExecutors 只由应用级 owner 管理，重复 terminal 调用保持幂等。
+
+### 验证与边界
+
+- `AUTO_VERIFIED`：JVM 全量 `:app:testDebugUnitTest --rerun-tasks` 为 `21/21`，失败 0、错误 0、跳过 0；Java 与 androidTest Java 编译通过；release contract 默认/`--history` 通过；release gates `9/9`；`git diff --check` 通过。
+- `PAUSED_AVD`：只读检查发现 `emulator-5554` 已被 `Pixel_10_Pro_XL` / API 37 进程占用，无法证明属于本任务或已结束会话；未安装、未重启、未运行 connected tests/instrumentation 轮次/clean beta smoke，不把历史 AVD 结果计入本会话。
+- `HIL`：未连接真实手机或电台，未执行 CAT/PTT/TX、完整 QSO、长时挂机、功耗/温升或用户 HIL。
+
+### 产物与发布结论
+
+- 最终 debug beta APK 将由文档提交后的最终 HEAD 重新执行 `assembleDebug/packageTestApk`；包名应为 `com.bg7yoz.ft8cn.beta`、版本 `0.93.005-beta`、`versionCode 93005`，APK metadata/SHA 以最终验证输出为准。
+- beta 完整候选验收：`NO-GO`（AVD paused，仅 AUTO/JVM/静态门禁可 GO）；`v0.93.005-beta.6`：`NO-GO`，未创建 tag/Release；`release`：`NO-GO`，未合并/推送；`formal`：`NO-GO`，缺长期 keystore、可信证书指纹和明确批准，未生成正式签名 APK。
+
+### 下一步
+
+- 在确认 `Pixel_10_Pro_XL` 独占且无其他活动会话后，另行运行指定 instrumentation 5 轮、full connected 连续 2 轮和 clean beta smoke；随后再由主会话决定是否集成，任何 tag/Release、真实设备/HIL 或正式签名动作均需另行授权。
+
+---
+
 ## 2026-08-08　v0.93.005 最终发布前 P1/P2 风险收口
 
 ### 基线与提交
