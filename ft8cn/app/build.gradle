@@ -12,13 +12,21 @@ if (!versionNameValue || !versionCodeValue) {
     throw new GradleException("Missing canonical ft8cn.versionName/ft8cn.versionCode in ft8cn/gradle.properties")
 }
 
-def versionMatch = versionNameValue =~ /^(\d+)\.(\d+)\.(\d{3})$/
-if (!versionMatch.matches()) {
-    throw new GradleException("ft8cn.versionName must use MAJOR.MINOR.BUILD with a three-digit build: ${versionNameValue}")
+def canonicalVersionMatch = versionNameValue =~ /^(\d+)\.(\d+)\.(\d{3})$/
+def betaVersionMatch = versionNameValue =~ /^(\d+)\.(\d+)\.(\d{3})-beta\.(\d+)$/
+def isCanonicalVersion = canonicalVersionMatch.matches()
+def isBetaVersion = betaVersionMatch.matches()
+if (!isCanonicalVersion && !isBetaVersion) {
+    throw new GradleException("ft8cn.versionName must use MAJOR.MINOR.BUILD or MAJOR.MINOR.BUILD-beta.N: ${versionNameValue}")
 }
-def expectedVersionCode = (versionMatch[0][1] as int) * 10000 + (versionMatch[0][2] as int) * 1000 + (versionMatch[0][3] as int)
-if (!(versionCodeValue ==~ /^\d+$/) || versionCodeValue.toInteger() != expectedVersionCode) {
-    throw new GradleException("ft8cn.versionCode ${versionCodeValue} does not match ft8cn.versionName ${versionNameValue}; expected ${expectedVersionCode}")
+if (!(versionCodeValue ==~ /^\d+$/)) {
+    throw new GradleException("ft8cn.versionCode must contain only decimal digits: ${versionCodeValue}")
+}
+if (isCanonicalVersion) {
+    def expectedVersionCode = (canonicalVersionMatch[0][1] as int) * 10000 + (canonicalVersionMatch[0][2] as int) * 1000 + (canonicalVersionMatch[0][3] as int)
+    if (versionCodeValue.toInteger() != expectedVersionCode) {
+        throw new GradleException("ft8cn.versionCode ${versionCodeValue} does not match ft8cn.versionName ${versionNameValue}; expected ${expectedVersionCode}")
+    }
 }
 
 def currentTime = getCurrentTime()
@@ -44,6 +52,11 @@ def releaseStorePassword = envOrProperty("FT8CN_RELEASE_STORE_PASSWORD", "storeP
 def releaseKeyAlias = envOrProperty("FT8CN_RELEASE_KEY_ALIAS", "keyAlias")
 def releaseKeyPassword = envOrProperty("FT8CN_RELEASE_KEY_PASSWORD", "keyPassword")
 def releaseCertSha256 = envOrProperty("FT8CN_RELEASE_CERT_SHA256", "releaseCertSha256")
+def betaStoreFile = envOrProperty("FT8CN_BETA_STORE_FILE", "betaStoreFile")
+def betaStorePassword = envOrProperty("FT8CN_BETA_STORE_PASSWORD", "betaStorePassword")
+def betaKeyAlias = envOrProperty("FT8CN_BETA_KEY_ALIAS", "betaKeyAlias")
+def betaKeyPassword = envOrProperty("FT8CN_BETA_KEY_PASSWORD", "betaKeyPassword")
+def betaCertSha256 = envOrProperty("FT8CN_BETA_CERT_SHA256", "betaCertSha256")
 def hasReleaseSigning = [
         releaseStoreFile,
         releaseStorePassword,
@@ -52,15 +65,37 @@ def hasReleaseSigning = [
         releaseCertSha256
 ].every { it != null && !it.toString().trim().isEmpty() } &&
         releaseCertSha256.toString() ==~ /(?i)[0-9a-f]{64}/
+def hasBetaSigning = [
+        betaStoreFile,
+        betaStorePassword,
+        betaKeyAlias,
+        betaKeyPassword,
+        betaCertSha256
+].every { it != null && !it.toString().trim().isEmpty() } &&
+        betaCertSha256.toString() ==~ /(?i)[0-9a-f]{64}/
 def releaseStorePath = hasReleaseSigning ? rootProject.file(releaseStoreFile.toString()) : null
+def betaStorePath = hasBetaSigning ? rootProject.file(betaStoreFile.toString()) : null
 def releaseTaskRequested = gradle.startParameter.taskNames.any {
     it.toLowerCase(Locale.ROOT).contains("release")
 }
+def betaTaskRequested = gradle.startParameter.taskNames.any {
+    def taskName = it.toLowerCase(Locale.ROOT)
+    taskName.contains("packagetestapk") || taskName.contains("assemblebeta") || taskName.contains("lintbeta") || taskName.contains("compilebeta")
+} || rootProject.findProperty("ft8cn.betaBuild")?.toString() == "true"
 if (releaseTaskRequested && !hasReleaseSigning) {
     throw new GradleException("Release signing is required. Set the four FT8CN_RELEASE_* signing values plus FT8CN_RELEASE_CERT_SHA256, or provide a complete ft8cn/keystore.properties. Debug signing or an untrusted certificate is never valid for release.")
 }
 if (releaseTaskRequested && !releaseStorePath.isFile()) {
     throw new GradleException("Release keystore does not exist: ${releaseStorePath.absolutePath}")
+}
+if (betaTaskRequested && !isBetaVersion) {
+    throw new GradleException("Beta prerelease builds require -Pft8cn.versionName=MAJOR.MINOR.BUILD-beta.N and -Pft8cn.versionCode=<beta version code>; canonical formal version properties remain unchanged.")
+}
+if (betaTaskRequested && !hasBetaSigning) {
+    throw new GradleException("Beta prerelease signing is required. Set FT8CN_BETA_STORE_FILE, FT8CN_BETA_STORE_PASSWORD, FT8CN_BETA_KEY_ALIAS, FT8CN_BETA_KEY_PASSWORD, and FT8CN_BETA_CERT_SHA256. Android Debug signing is not valid for a tagged beta.")
+}
+if (betaTaskRequested && !betaStorePath.isFile()) {
+    throw new GradleException("Beta keystore does not exist: ${betaStorePath.absolutePath}")
 }
 gradle.taskGraph.whenReady { graph ->
     def releaseInGraph = graph.allTasks.any {
@@ -68,6 +103,13 @@ gradle.taskGraph.whenReady { graph ->
     }
     if (releaseInGraph && !hasReleaseSigning) {
         throw new GradleException("A formal release task was requested without complete signing configuration. Debug signing is never valid for release.")
+    }
+    def betaInGraph = graph.allTasks.any {
+        def taskName = it.path.toLowerCase(Locale.ROOT)
+        taskName.contains("packagetestapk") || taskName.contains("assemblebeta") || taskName.contains("lintbeta") || taskName.contains("compilebeta")
+    }
+    if (betaInGraph && (!isBetaVersion || !hasBetaSigning || !betaStorePath.isFile())) {
+        throw new GradleException("A beta prerelease task requires a beta.N version and a complete beta-only keystore configuration. Debug signing is never valid for a tagged beta.")
     }
 }
 
@@ -95,6 +137,14 @@ android {
                 keyPassword releaseKeyPassword
             }
         }
+        if (hasBetaSigning) {
+            beta {
+                storeFile rootProject.file(betaStoreFile)
+                storePassword betaStorePassword
+                keyAlias betaKeyAlias
+                keyPassword betaKeyPassword
+            }
+        }
     }
 
     defaultConfig {
@@ -120,6 +170,17 @@ android {
             signingConfig signingConfigs.debug
             applicationIdSuffix '.beta'
             versionNameSuffix '-beta'
+            manifestPlaceholders = [appLabel: "FT8CN测试版"]
+            buildConfigField("String", "apkBuildTime", "\"${currentTime}\"")
+        }
+        beta {
+            // Tagged prerelease artifacts use a dedicated persistent beta identity.
+            initWith debug
+            if (hasBetaSigning) {
+                signingConfig signingConfigs.beta
+            }
+            applicationIdSuffix '.beta'
+            versionNameSuffix ''
             manifestPlaceholders = [appLabel: "FT8CN测试版"]
             buildConfigField("String", "apkBuildTime", "\"${currentTime}\"")
         }
@@ -153,6 +214,31 @@ android {
     namespace 'com.bg7yoz.ft8cn'
 }
 
+def verifyBetaSigning = tasks.register("verifyBetaSigning") {
+    group = "verification"
+    description = "Fail if the beta prerelease signing configuration or beta-only keystore is incomplete."
+    doLast {
+        def missing = [
+                "FT8CN_BETA_STORE_FILE": betaStoreFile,
+                "FT8CN_BETA_STORE_PASSWORD": betaStorePassword,
+                "FT8CN_BETA_KEY_ALIAS": betaKeyAlias,
+                "FT8CN_BETA_KEY_PASSWORD": betaKeyPassword,
+                "FT8CN_BETA_CERT_SHA256": betaCertSha256
+        ].findAll { entry -> entry.value == null || entry.value.toString().trim().isEmpty() }.keySet()
+        if (!missing.isEmpty()) {
+            throw new GradleException("Missing beta signing values: ${missing.join(', ')}. Tagged beta builds cannot use the Android Debug certificate.")
+        }
+        if (!(betaCertSha256.toString() ==~ /(?i)[0-9a-f]{64}/)) {
+            throw new GradleException("FT8CN_BETA_CERT_SHA256 must be exactly 64 hexadecimal characters.")
+        }
+        def store = rootProject.file(betaStoreFile.toString())
+        if (!store.isFile()) {
+            throw new GradleException("Beta keystore does not exist: ${store.absolutePath}")
+        }
+        logger.lifecycle("Beta-only signing configuration is complete; keystore file exists.")
+    }
+}
+
 def verifyReleaseSigning = tasks.register("verifyReleaseSigning") {
     group = "verification"
     description = "Fail if the formal release signing configuration or keystore is incomplete."
@@ -180,6 +266,10 @@ def verifyReleaseSigning = tasks.register("verifyReleaseSigning") {
 
 tasks.matching { it.name == "assembleRelease" }.configureEach {
     dependsOn(verifyReleaseSigning)
+}
+
+tasks.matching { it.name == "assembleBeta" }.configureEach {
+    dependsOn(verifyBetaSigning)
 }
 
 tasks.register("printVersion") {
@@ -212,18 +302,18 @@ def gitShortCommit = {
 
 tasks.register("packageTestApk") {
     group = "build"
-    description = "Build the debug-signed beta APK and copy it to a versioned, commit-addressed artifact."
-    dependsOn("assembleDebug")
+    description = "Build the beta-only signed prerelease APK and copy it to a versioned, commit-addressed artifact."
+    dependsOn("assembleBeta")
     doLast {
-        def source = file("${project.buildDir}/outputs/apk/debug/app-debug.apk")
+        def source = file("${project.buildDir}/outputs/apk/beta/app-beta.apk")
         if (!source.isFile()) {
-            throw new GradleException("Debug APK was not produced: ${source.absolutePath}")
+            throw new GradleException("Beta APK was not produced: ${source.absolutePath}")
         }
         def artifactDir = rootProject.file(".artifacts")
         artifactDir.mkdirs()
-        def target = new File(artifactDir, "FT8CN-v${versionNameValue}-beta-${gitShortCommit()}.apk")
+        def target = new File(artifactDir, "FT8CN-v${versionNameValue}-${gitShortCommit()}.apk")
         java.nio.file.Files.copy(source.toPath(), target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
-        logger.lifecycle("TEST/BETA APK: ${target.absolutePath}")
+        logger.lifecycle("BETA prerelease APK: ${target.absolutePath}")
     }
 }
 

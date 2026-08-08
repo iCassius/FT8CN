@@ -5,14 +5,17 @@ import re
 import subprocess
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 
 try:
     from scripts.check_release_contract import scan_history_batch
-    from scripts.verify_apk_signature import check_certificate
+    from scripts.verify_apk_metadata import parse_package_line
+    from scripts.verify_apk_signature import check_certificate, resolve_expected_sha256
 except ModuleNotFoundError:
     from check_release_contract import scan_history_batch
-    from verify_apk_signature import check_certificate
+    from verify_apk_metadata import parse_package_line
+    from verify_apk_signature import check_certificate, resolve_expected_sha256
 
 
 EXPECTED = "0123456789abcdef" * 4
@@ -39,6 +42,24 @@ class CertificateGateTests(unittest.TestCase):
     def test_malformed_trusted_certificate_fails(self) -> None:
         with self.assertRaisesRegex(ValueError, "exactly 64"):
             check_certificate(APKSIGNER_OUTPUT, "not-a-fingerprint")
+
+    def test_missing_beta_certificate_secret_is_not_accepted(self) -> None:
+        with mock.patch.dict("os.environ", {}, clear=True):
+            self.assertIsNone(resolve_expected_sha256("beta"))
+
+    def test_beta_certificate_secret_is_selected_without_printing_or_rewriting_it(self) -> None:
+        with mock.patch.dict("os.environ", {"FT8CN_BETA_CERT_SHA256": EXPECTED}, clear=True):
+            self.assertEqual(resolve_expected_sha256("beta"), EXPECTED)
+        self.assertIsNone(resolve_expected_sha256("debug"))
+
+    def test_package_version_metadata_parser_requires_exact_one_line(self) -> None:
+        output = "package: name='com.bg7yoz.ft8cn.beta' versionCode='93007' versionName='0.93.005-beta.7'"
+        self.assertEqual(
+            parse_package_line(output),
+            ("com.bg7yoz.ft8cn.beta", "93007", "0.93.005-beta.7"),
+        )
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            parse_package_line(output + "\n" + output)
 
     def test_history_scan_consumes_commit_tree_and_tag_before_blob(self) -> None:
         object_ids = ["a" * 40, "b" * 40, "c" * 40, "d" * 40]
@@ -96,7 +117,10 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
 
     def assert_version_output_is_filtered(self, workflow_name: str) -> None:
         workflow = (REPOSITORY_ROOT / ".github" / "workflows" / workflow_name).read_text(encoding="utf-8")
-        version_pattern = "'^[0-9]+\\.[0-9]+\\.[0-9]{3}:[0-9]+$'"
+        if workflow_name == "android-prerelease.yml":
+            version_pattern = "'^[0-9]+\\.[0-9]+\\.[0-9]{3}-beta\\.[0-9]+:[0-9]+$'"
+        else:
+            version_pattern = "'^[0-9]+\\.[0-9]+\\.[0-9]{3}:[0-9]+$'"
 
         self.assertIn("./ft8cn/gradlew -p ./ft8cn -q :app:printVersion", workflow)
         self.assertIn(f"grep -E {version_pattern} | tail -n 1 || true", workflow)
@@ -144,7 +168,19 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
         self.assertIn("python scripts/check_release_contract.py --history", workflow)
         self.assertIn("./gradlew :app:testDebugUnitTest --rerun-tasks", workflow)
         self.assertIn("./gradlew :app:packageTestApk --rerun-tasks", workflow)
-        self.assertIn("--expect debug", workflow)
+        self.assertIn("--expect beta", workflow)
+        for name in (
+            "FT8CN_BETA_KEYSTORE_B64",
+            "FT8CN_BETA_STORE_FILE",
+            "FT8CN_BETA_STORE_PASSWORD",
+            "FT8CN_BETA_KEY_ALIAS",
+            "FT8CN_BETA_KEY_PASSWORD",
+            "FT8CN_BETA_CERT_SHA256",
+        ):
+            self.assertIn(name, workflow)
+        self.assertIn("0.93.005-beta.7", workflow)
+        self.assertIn("93007", workflow)
+        self.assertIn("com.bg7yoz.ft8cn.beta", workflow)
         self.assertIn('gh release create "${TAG_NAME}" --prerelease', workflow)
         self.assertIn('notes_file="doc/release-notes/${GITHUB_REF_NAME}.md"', workflow)
         self.assertIn('test -s "${notes_file}"', workflow)
@@ -157,6 +193,17 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
         self.assertIn('"${remote_branch_sha}" != "${head_sha}"', workflow)
         self.assertIn('GITHUB_SHA: ${{ steps.version.outputs.head_sha }}', workflow)
         self.assertNotIn("GITHUB_SHA:0:7", workflow)
+
+        beta7_notes = REPOSITORY_ROOT / "doc" / "release-notes" / "v0.93.005-beta.7.md"
+        self.assertTrue(beta7_notes.is_file())
+        beta7_text = beta7_notes.read_text(encoding="utf-8")
+        self.assertIn("# FT8CN v0.93.005-beta.7 Pre-release Notes", beta7_text)
+        self.assertIn("0.93.005-beta.7", beta7_text)
+        self.assertIn("93007", beta7_text)
+        self.assertIn("com.bg7yoz.ft8cn.beta", beta7_text)
+        self.assertIn("beta-only", beta7_text)
+        self.assertIn("卸载", beta7_text)
+        self.assertIn("HIL", beta7_text)
 
         for tag_name in ("v0.93.005-beta.1", "v0.93.005-beta.2", "v0.93.005-beta.3", "v0.93.005-beta.4", "v0.93.005-beta.5"):
             notes = REPOSITORY_ROOT / "doc" / "release-notes" / f"{tag_name}.md"
@@ -181,6 +228,14 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
 
     def test_ci_version_output_is_filtered(self) -> None:
         self.assert_version_output_is_filtered("android.yml")
+
+    def test_formal_workflow_remains_beta_secret_independent(self) -> None:
+        workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "android-release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("FT8CN_FORMAL_RELEASE_APPROVED", workflow)
+        self.assertIn("FT8CN_RELEASE_CERT_SHA256", workflow)
+        self.assertNotIn("FT8CN_BETA_", workflow)
 
 
 if __name__ == "__main__":

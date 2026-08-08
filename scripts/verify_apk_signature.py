@@ -45,20 +45,32 @@ def check_certificate(output: str, expected_sha256: str | None) -> str:
     matches = re.findall(r"certificate SHA-256 digest:\s*([0-9a-fA-F: ]+)", output)
     if not matches:
         raise ValueError("apksigner output did not include a certificate SHA-256 digest")
-    actual = normalize_sha256(matches[0])
+    normalized = {normalize_sha256(match) for match in matches}
+    if len(normalized) != 1:
+        raise ValueError("APK contains more than one certificate SHA-256 digest")
+    actual = normalized.pop()
     if expected_sha256 is not None and actual != normalize_sha256(expected_sha256):
-        raise ValueError("APK certificate does not match the trusted FT8CN release certificate")
+        raise ValueError("APK certificate does not match the expected trusted certificate")
     return actual
+
+
+def resolve_expected_sha256(mode: str, explicit: str | None = None) -> str | None:
+    if explicit is not None:
+        return explicit
+    if mode == "beta":
+        return os.environ.get("FT8CN_BETA_CERT_SHA256")
+    if mode == "release":
+        return os.environ.get("FT8CN_RELEASE_CERT_SHA256")
+    return None
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--apk", required=True, type=Path)
-    parser.add_argument("--expect", choices=("debug", "release"), required=True)
+    parser.add_argument("--expect", choices=("debug", "beta", "release"), required=True)
     parser.add_argument(
         "--expected-sha256",
-        default=os.environ.get("FT8CN_RELEASE_CERT_SHA256"),
-        help="Trusted release certificate SHA-256; required for --expect release.",
+        help="Trusted certificate SHA-256; required for --expect beta/release.",
     )
     args = parser.parse_args()
     if not args.apk.is_file():
@@ -76,16 +88,19 @@ def main() -> None:
     is_debug = "CN=Android Debug" in output
     if args.expect == "debug" and not is_debug:
         raise SystemExit("TEST/BETA APK is not signed by the Android debug certificate")
-    if args.expect == "release" and is_debug:
-        raise SystemExit("formal release APK is signed by the Android debug certificate")
-    if args.expect == "release" and not args.expected_sha256:
-        raise SystemExit("formal release verification requires FT8CN_RELEASE_CERT_SHA256 or --expected-sha256")
+    if args.expect in {"beta", "release"} and is_debug:
+        label = "beta prerelease" if args.expect == "beta" else "formal release"
+        raise SystemExit(f"{label} APK is signed by the Android debug certificate")
+    if args.expected_sha256 is None:
+        args.expected_sha256 = resolve_expected_sha256(args.expect)
+    if args.expect in {"beta", "release"} and not args.expected_sha256:
+        environment_name = "FT8CN_BETA_CERT_SHA256" if args.expect == "beta" else "FT8CN_RELEASE_CERT_SHA256"
+        raise SystemExit(f"{args.expect} verification requires {environment_name} or --expected-sha256")
     try:
         actual_sha256 = check_certificate(output, args.expected_sha256)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
-    print(output.strip())
-    print(f"certificate_sha256_verified={actual_sha256}")
+    print(f"certificate_sha256_verified=true mode={args.expect}")
 
 
 if __name__ == "__main__":
