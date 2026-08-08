@@ -46,6 +46,15 @@ public class YaesuDX10Rig extends BaseRig {
         };
     }
 
+    private synchronized void stopReadFreqTimer() {
+        Timer timer = readFreqTimer;
+        readFreqTimer = null;
+        if (timer != null) {
+            timer.cancel();
+            timer.purge();
+        }
+    }
+
     /**
      * 读取Meter RM;
      */
@@ -183,6 +192,11 @@ public class YaesuDX10Rig extends BaseRig {
     @Override
     public String getName() {
         return "YAESU DX10 series";
+    }
+
+    @Override
+    public void onDisconnecting() {
+        stopReadFreqTimer();
     }
 
     public YaesuDX10Rig() {

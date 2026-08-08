@@ -925,8 +925,14 @@ public class MainViewModel extends ViewModel {
      */
     public void connectRig() {
         rigGeneration.incrementAndGet();
-        if (baseRig != null && baseRig.isConnected()) {
-            baseRig.disconnect();
+        if (baseRig != null) {
+            if (baseRig.isConnected()) {
+                baseRig.disconnect();
+            } else {
+                // A rig can start lifecycle resources in its constructor. Clean those
+                // resources before replacing an unconnected instance as well.
+                baseRig.onDisconnecting();
+            }
         }
 
         baseRig = null;
