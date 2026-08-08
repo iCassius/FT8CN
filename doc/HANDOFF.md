@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-08-08　v0.93.005 AVD instrumentation SIGKILL 专项
+
+### 做了什么
+
+- 从最终集成基线 `afe9d7abc8bdfb9377a95a2a815070068cb7b1cd` 创建 `codex/v0.93.005-avd-stability`，工作树初始干净；只修改了 `RecorderLifecycleTest`，提交 `9dc7be5b33deda6420d851f7a4c32879d5b02451`。
+- 首轮完整 `:app:connectedDebugAndroidTest` 在独占 `Pixel_10_Pro_XL` / API 37 冷启动 AVD 上复现为 45/47；保存 Gradle XML/HTML、全量 logcat、crash buffer、`dumpsys meminfo`、`dumpsys activity exit-info`、ANR/tombstone 目录和 Dropbox 证据到 `ft8cn/.artifacts/avd-stability-20260808/`。
+- 直接在已授予 `RECORD_AUDIO` 的条件下运行录音权限用例，`ApplicationExitInfo` 明确为 `reason=8 (PERMISSION CHANGE)`、`description=permissions revoked`；ActivityManager 记录 `permissions revoked` 后以 signal 9 杀掉 `com.bg7yoz.ft8cn.beta`。没有新的 ANR、tombstone、crash buffer、OOM 或 lmkd 杀进程证据。
+- 全量清点确认 14 个 instrumented 测试类共 47 个 `@Test`；复核测试资源清理和生产生命周期（MainViewModel、FT8TransmitSignal、录音、Timer、线程池、网络 socket、Activity receiver）后，没有发现需要修改的产品生命周期缺陷。原测试用 `UiAutomation.revokeRuntimePermission` 直接改变被测包权限，触发 Android 的合法进程终止；改为不改变系统权限的拒绝权限 `ContextWrapper`，并在 finally 恢复全局 context。
+
+### 关键决策与证据
+
+- 这是测试注入缺陷，不是 AVD RAM/heap、instrumentation runner 或产品 Java/native crash；因此没有调整 AVD 资源、sharding、orchestrator，也没有扩大生产代码改动。
+- 修复后 `RecorderLifecycleTest` 单独 5/5，历史失败点 `X6100CommandSubmissionTest` 单独 5/5；全量 47/47 连续 2 次，失败/错误/跳过均为 0，报告 XML 不再有 `system-err`。
+- beta 先 force-stop 后卸载成功，再以 `FT8CN-v0.93.005-beta-9dc7be5.apk` clean install；Monkey 启动成功，包进程存活，crash buffer 为空，应用 crash 目录不存在（无崩溃文件）。
+
+### 当前状态
+
+- `AUTO_VERIFIED`：JVM 12/12；`assembleDebug`、`packageTestApk`、`lintDebug` 成功；lint 330 warnings / 0 errors；release contract 默认与 `--history` 通过；`python -m unittest scripts.test_release_gates -v` 为 9/9；`git diff --check` 通过。
+- `AVD_VERIFIED`：独占 Pixel_10_Pro_XL、无实体设备，47/47 连续 2 次；未连接真实手机或电台，未执行 CAT/PTT/TX、完整 QSO、长时功耗/温升 HIL。
+- 未推送、未合并 release、未打 tag、未创建 Release/Secrets；专项分支仍保持本地。
+
+### 下一步
+
+- 主会话可按 `9dc7be5` 复核并重新进入最终集成验收；本专项只证明 AVD instrumentation 与 beta smoke 边界，不替代真实设备/HIL 或正式签名发布授权。
+
+---
+
 ## 2026-08-08　v0.93.005 最终集成与验收证据
 
 ### 做了什么
