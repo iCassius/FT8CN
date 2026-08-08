@@ -36,6 +36,8 @@
     <string name="help">Βοήθεια</string>
     <string name="scroll_down">▾</string>
     <string name="about_me">Σχετικά με το FT8CN</string>
+    <string name="sync_time">Συγχρονισμός ώρας</string>
+    <string name="syncing">Συγχρονισμός…</string>
 
     <string name="connectMode">\'Ελεγχος</string>
     <string name="VOX">VOX</string>
@@ -88,6 +90,8 @@
     <string name="exit">Εξοδος</string>>
     <string name="cancel">Ακύρωση</string>>
     <string name="exit_confirmation">Σίγουρα θέλεις έξοδο ;</string>>
+    <string name="qsl_success">Επιτυχία QSO: %s</string>
+    <string name="transmitting_msg">Εκπομπή: %s</string>
 
     <!--   FT8Message-->
     <string name="std_msg">Τυπικό μήνυμα</string>>

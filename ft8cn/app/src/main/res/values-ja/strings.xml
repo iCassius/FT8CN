@@ -72,6 +72,8 @@
     <string name="scroll_down">▾</string>
 
     <string name="about_me">FT8CNについて</string>
+    <string name="sync_time">時刻を同期</string>
+    <string name="syncing">同期中…</string>
 
     <string name="connectMode">PTT方法</string>
 
@@ -168,6 +170,8 @@
     <string name="cancel">キャンセル</string>
     >
     <string name="exit_confirmation">終了しますか？</string>
+    <string name="qsl_success">QSO成功: %s</string>
+    <string name="transmitting_msg">送信中: %s</string>
     >
     <!-- FT8メッセージ -->
 
