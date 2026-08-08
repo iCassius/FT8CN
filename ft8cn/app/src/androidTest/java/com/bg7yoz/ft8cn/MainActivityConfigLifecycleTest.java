@@ -45,13 +45,15 @@ public class MainActivityConfigLifecycleTest {
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
             scenario.onActivity(activity -> {
                 first.set(activity);
-                assertTrue(isConfigUiInitialized(activity));
             });
+            awaitConfigLoadComplete(scenario, getMainViewModel(first.get()));
+            scenario.onActivity(activity -> assertTrue(isConfigUiInitialized(activity)));
             scenario.recreate();
             scenario.onActivity(activity -> {
                 second.set(activity);
-                assertTrue(isConfigUiInitialized(activity));
             });
+            awaitConfigLoadComplete(scenario, getMainViewModel(second.get()));
+            scenario.onActivity(activity -> assertTrue(isConfigUiInitialized(activity)));
         }
 
         assertNotSame("recreate must create a new Activity instance", first.get(), second.get());
@@ -71,6 +73,7 @@ public class MainActivityConfigLifecycleTest {
         try {
             try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
                 scenario.onActivity(oldActivity::set);
+                awaitConfigLoadComplete(scenario, getMainViewModel(oldActivity.get()));
                 scenario.onActivity(activity -> {
                     assertEquals(1, getConfigUiCompletionActionCount(activity));
                     resetConfigLoadForTest(getMainViewModel(activity));
@@ -121,6 +124,21 @@ public class MainActivityConfigLifecycleTest {
             }
         } finally {
             releaseLoad.countDown();
+        }
+    }
+
+    private static void awaitConfigLoadComplete(ActivityScenario<MainActivity> scenario,
+                                                 MainViewModel viewModel) throws Exception {
+        CountDownLatch complete = new CountDownLatch(1);
+        androidx.lifecycle.Observer<Boolean> observer = value -> {
+            if (Boolean.TRUE.equals(value)) complete.countDown();
+        };
+        scenario.onActivity(activity -> viewModel.configLoadComplete.observeForever(observer));
+        try {
+            assertTrue("config load completion was not observed",
+                    complete.await(10, TimeUnit.SECONDS));
+        } finally {
+            scenario.onActivity(activity -> viewModel.configLoadComplete.removeObserver(observer));
         }
     }
 
