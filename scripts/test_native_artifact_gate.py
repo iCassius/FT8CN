@@ -531,17 +531,67 @@ class NativeArtifactGateTests(unittest.TestCase):
         )
 
 
-class NativeWorkflowIsolationTests(unittest.TestCase):
-    def test_foundation_tests_gate_code_without_activating_real_artifact_checks(self) -> None:
-        for workflow_name in ("android.yml", "android-prerelease.yml", "android-release.yml"):
+class NativeWorkflowActivationTests(unittest.TestCase):
+    def test_all_workflows_gate_the_final_apk_after_build_and_before_upload(self) -> None:
+        contracts = (
+            (
+                "android.yml",
+                '--artifact "ft8cn/app/build/outputs/apk/debug/app-debug.apk"',
+                "./gradlew :app:assembleDebug",
+                "python scripts/verify_apk_signature.py",
+                None,
+                False,
+            ),
+            (
+                "android-prerelease.yml",
+                '--artifact "${{ steps.apk.outputs.apk_path }}"',
+                "./gradlew :app:packageTestApk",
+                "python scripts/verify_apk_signature.py",
+                "python scripts/verify_apk_metadata.py",
+                True,
+            ),
+            (
+                "android-release.yml",
+                '--artifact "${{ steps.apk.outputs.apk_path }}"',
+                "./gradlew assembleRelease",
+                "python scripts/verify_apk_signature.py",
+                "python scripts/verify_apk_metadata.py",
+                True,
+            ),
+        )
+        common = (
+            "python scripts/verify_native_artifact.py",
+            "--jni-contract scripts/native_jni_contract.json",
+            "--expected-abis arm64-v8a,armeabi-v7a,x86,x86_64",
+            "--zipalign-mode required",
+        )
+        for workflow_name, artifact, build, signature, metadata, creates_release in contracts:
             workflow = (REPOSITORY_ROOT / ".github" / "workflows" / workflow_name).read_text(
                 encoding="utf-8"
             )
-            self.assertNotIn("python scripts/verify_native_artifact.py", workflow, workflow_name)
-        ordinary = (REPOSITORY_ROOT / ".github" / "workflows" / "android.yml").read_text(
+            for fragment in (*common, artifact):
+                self.assertEqual(workflow.count(fragment), 1, f"{workflow_name}: {fragment}")
+            gate_offset = workflow.index("python scripts/verify_native_artifact.py")
+            self.assertLess(workflow.index(build), gate_offset, workflow_name)
+            self.assertLess(workflow.index(signature), gate_offset, workflow_name)
+            if metadata is not None:
+                self.assertLess(workflow.index(metadata), gate_offset, workflow_name)
+            self.assertLess(gate_offset, workflow.index("uses: actions/upload-artifact@v4"), workflow_name)
+            if creates_release:
+                self.assertLess(gate_offset, workflow.index("gh release create"), workflow_name)
+
+    def test_formal_metadata_is_derived_from_the_canonical_gradle_version(self) -> None:
+        workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "android-release.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("python -m unittest scripts.test_native_artifact_gate", ordinary)
+        for fragment in (
+            'echo "version_code=${gradle_version#*:}"',
+            "--package com.bg7yoz.ft8cn",
+            '--version-name "${{ steps.version.outputs.version }}"',
+            '--version-code "${{ steps.version.outputs.version_code }}"',
+            "--require-zipalign",
+        ):
+            self.assertEqual(workflow.count(fragment), 1, fragment)
 
 
 if __name__ == "__main__":

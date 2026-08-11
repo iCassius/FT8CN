@@ -275,6 +275,68 @@ def main() -> None:
     if "FT8CN_BETA_" in release_ci:
         fail("formal release workflow must remain independent of beta signing secrets")
 
+    native_gate_common_fragments = (
+        "python scripts/verify_native_artifact.py",
+        "--jni-contract scripts/native_jni_contract.json",
+        "--expected-abis arm64-v8a,armeabi-v7a,x86,x86_64",
+        "--zipalign-mode required",
+    )
+    workflow_gate_contracts = (
+        (
+            "android.yml",
+            ci,
+            '--artifact "ft8cn/app/build/outputs/apk/debug/app-debug.apk"',
+            "./gradlew :app:assembleDebug",
+            "python scripts/verify_apk_signature.py",
+            None,
+            False,
+        ),
+        (
+            "android-prerelease.yml",
+            beta_ci,
+            '--artifact "${{ steps.apk.outputs.apk_path }}"',
+            "./gradlew :app:packageTestApk",
+            "python scripts/verify_apk_signature.py",
+            "python scripts/verify_apk_metadata.py",
+            True,
+        ),
+        (
+            "android-release.yml",
+            release_ci,
+            '--artifact "${{ steps.apk.outputs.apk_path }}"',
+            "./gradlew assembleRelease",
+            "python scripts/verify_apk_signature.py",
+            "python scripts/verify_apk_metadata.py",
+            True,
+        ),
+    )
+    for workflow_name, workflow, artifact, build, signature, metadata, creates_release in workflow_gate_contracts:
+        for fragment in (*native_gate_common_fragments, artifact):
+            if workflow.count(fragment) != 1:
+                fail(f"{workflow_name} must contain exactly one native artifact gate fragment: {fragment}")
+        gate_offset = workflow.index("python scripts/verify_native_artifact.py")
+        upload_offset = workflow.index("uses: actions/upload-artifact@v4")
+        if workflow.index(build) > gate_offset:
+            fail(f"{workflow_name} must build its final APK before the native artifact gate")
+        if workflow.index(signature) > gate_offset:
+            fail(f"{workflow_name} must verify the APK signature before the native artifact gate")
+        if metadata is not None and workflow.index(metadata) > gate_offset:
+            fail(f"{workflow_name} must verify APK metadata before the native artifact gate")
+        if gate_offset > upload_offset:
+            fail(f"{workflow_name} must run the native artifact gate before artifact upload")
+        if creates_release and gate_offset > workflow.index("gh release create"):
+            fail(f"{workflow_name} must run the native artifact gate before GitHub Release creation")
+
+    for fragment in (
+        'echo "version_code=${gradle_version#*:}"',
+        "--package com.bg7yoz.ft8cn",
+        '--version-name "${{ steps.version.outputs.version }}"',
+        '--version-code "${{ steps.version.outputs.version_code }}"',
+        "--require-zipalign",
+    ):
+        if release_ci.count(fragment) != 1:
+            fail(f"android-release.yml must contain exactly one formal metadata fragment: {fragment}")
+
     scan_tracked_files()
     scan_staged_diff()
     if args.history:
