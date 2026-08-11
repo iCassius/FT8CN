@@ -1,8 +1,8 @@
 # FT8CN 项目说明与架构总览
 
 > 文档状态：当前产品与技术事实说明<br>
-> 审计基线：`release@d8f8c5d`；功能代码审计开始前工作树干净，当前仅本文档组有未提交变化<br>
-> 审计日期：2026-07-30<br>
+> 审计基线：`codex/v0.93.005-16kb-integration@9fbda6f`；本地文档收口分支从远端 `codex/v0.93.005-integration@786ceed4` fast-forward 创建<br>
+> 审计日期：2026-08-11<br>
 > 适用对象：用户、测试人员、维护者、产品负责人、技术负责人
 
 ## 1. 一句话说明
@@ -41,7 +41,7 @@ FT8CN 是一款在 Android 手机上原生运行的移动 FT8 通联软件。它
 - FT8 解码依赖手机时间、音频质量、CPU 性能和预编译原生解码库；
 - 不同电台的 USB 复合设备、CAT 指令和音频路由差异很大，不能用一台电台的成功代替全部设备验证；
 - 模拟器构建、启动或数据库测试不等于真实音频解码、真实发射或完整 QSO；
-- 当前没有完成本轮真机、模拟器或性能 profile，不能把本轮构建结果写成 HIL。
+- 本轮独立证据覆盖自动化与 16KB AVD：API 37 / `PAGE_SIZE=16384` 启动成功，connected 测试 63 pass、1 intentional skip；4KB AVD、真机、真实电台、长时挂机、功耗和温升仍未完成，不能把本轮结果写成 HIL。
 
 ## 3. 主要用户流程
 
@@ -102,7 +102,7 @@ FT8CN 是一款在 Android 手机上原生运行的移动 FT8 通联软件。它
 - 网络模式发射后解码卡住已在真实 QSO 中彻底证实解决；
 - 当前版本已经完成 2 小时挂机、温升和功耗验收；
 - Wavelog 的所有 Endpoint 和 station ID 组合均已验证；
-- Android 15+ 16KB 页设备已经原生兼容；
+- 不应宣称所有 Android 15+ 设备、4KB 页设备和真实设备都已经完成 16KB 原生兼容验证；
 - GitHub Release 产物已经使用固定正式证书签名；
 - 当前自动化可以覆盖完整 FT8 主链。
 
@@ -276,13 +276,13 @@ MainActivity.InitData
 - Apache Commons Net；
 - NanoHTTPD；
 - osmdroid；
-- 四个 ABI 的预编译 `libft8cn.so`。
+- CMake 从仓库内 C/C++ 源码构建 `libft8cn.so`；发布 artifact 仍须逐 ABI 验证四个 ABI 的 ELF 与 JNI 契约。
 
 ### 9.3 维护边界
 
-- 原生库只有预编译产物，没有对应 C/C++ 源码；
-- 当前 `externalNativeBuild` 配置被注释；
-- 已观察到 16KB 页兼容警告；
+- 当前集成候选已纳入重建的 C/C++ native 源码和 `externalNativeBuild`；旧 `app/libs` 预编译库不再是本候选的 native 来源；
+- 16KB native 自动化门禁已通过：四 ABI 的 ELF `PT_LOAD` 对齐为 `0x4000`，JNI contract 为 31 个 required export + 2 个 optional export；
+- 16KB AVD 启动与 connected 证据已通过，但 4KB AVD、真机/HIL、长时功耗和温升仍待验证；
 - 部分第三方库以本地 jar/aar 方式维护，升级和依赖审计成本较高。
 
 ## 10. 近期变化
@@ -295,6 +295,7 @@ MainActivity.InitData
 - `e4d5e76`：合入 FT-710 支持分支；现场 A/B 支持的 USB CAT 只写核心应保留，但无响应轮询生命周期仍需修复；
 - `8493b71`：新增 Wavelog 日志同步和 Endpoint 兼容路径；station ID 判断仍有确认缺陷；
 - `c48b5be`：加强新版 Android 广播接收器注册和发布 workflow。
+- `9fbda6f`：将重建 native 候选提升为当前生产构建来源，并接入严格 oracle、四 ABI/16KB native artifact gate；该提交不替代 4KB AVD、真机/HIL 或功耗验收。
 
 以上是提交内容映射，不代表每项都已经在当前基线完成自动化、真机或 HIL 验证。
 
@@ -325,18 +326,16 @@ MainActivity.InitData
 
 ## 11. 当前验证事实
 
-### 11.1 本轮确认
+### 11.1 当前集成与独立验证事实
 
 | 项目 | 结果 | 能证明什么 | 不能证明什么 |
 |---|---|---|---|
-| Git 基线 | `release@d8f8c5d`；功能代码审计开始前 clean，当前仅文档有未提交变化 | 审计对象明确，功能代码未在文档阶段改变 | 不证明运行正确 |
-| `assembleDebug` | 成功，40 tasks；约 20 秒仅为本机当次增量构建观察值 | Debug 可编译打包 | 该耗时不是性能基线，也不证明单测、设备功能或性能 |
-| `testDebugUnitTest` | `NO-SOURCE` | 当前没有 JVM 单测可执行 | 不能写成“单测通过” |
-| Instrumented 测试 | 仅 1 个类、5 个用例，本轮未运行 | 仓库有呼号数据库回归测试 | 不证明当前设备执行结果 |
-| `lintDebug` | 5 errors / 343 warnings | 当前 lint 基线仍有问题 | 不是构建失败或运行崩溃的直接证明 |
-| `assembleRelease` | 成功，52 tasks | Release variant 可生成 APK | 不证明正式签名、升级安装或 Release workflow |
-| APK 签名 | `apksigner` 确认 Android Debug 证书 | 当前产物不是预期正式发布证书 | 不代表历史 APK 的证书 |
-| 设备与性能 | 无设备、无模拟器、无真机 profile | 本轮没有制造虚假 HIL 结论 | 不证明 QSO、挂机、功耗、发热 |
+| Git 基线 | `codex/v0.93.005-16kb-integration@9fbda6f`，由远端 `786ceed4` fast-forward；文档提交后形成新的本地 HEAD | 集成来源、开发 SHA 和提交链明确 | 不代表已 push、tag 或 Release |
+| native 自动化 | 16KB native `GO`，P0 `0`；strict oracle 通过；四 ABI `PT_LOAD=0x4000`；31 required + 2 optional JNI export | 当前 native 构建与 ABI/JNI/ELF 契约满足独立门禁 | 不证明真机、4KB AVD 或长时性能 |
+| 16KB AVD | API 37 / `PAGE_SIZE=16384`，fatal compatibility mode 关闭后启动成功；connected 63 pass / 1 intentional skip；AVD 已关闭 | 16KB 模拟器启动和测试证据 | 不证明 4KB AVD、真实 Android 设备或真实电台 |
+| 4KB AVD | 待验证 | 保留兼容性空缺为显式门禁 | 不能把 16KB 结果外推到 4KB |
+| 真机/HIL/性能 | 未执行 CAT/PTT/TX、完整 QSO、长时挂机、功耗或温升 profile | 发布边界保持诚实 | 不证明真实使用稳定性、功耗或温升 |
+| formal Release | `NO-GO`；本地缺受保护 formal keystore、可信证书和正式批准 | 正式发布仍由 workflow fail-fast 保护 | beta CI 签名成功也不等于 formal 授权 |
 
 ### 11.2 历史已有证据
 
@@ -376,7 +375,7 @@ MainActivity.InitData
 
 ### 自动化
 
-低。没有 JVM 单测，Instrumented 测试只有一个类，CI 不具备完整主链门禁。
+中等。当前 native oracle、JNI/ELF/16KB artifact gate 和独立 AVD 证据已建立，但 4KB AVD、真机/HIL 和完整 FT8 主链仍未闭环。
 
 ### 可维护性
 
@@ -384,7 +383,7 @@ MainActivity.InitData
 
 ### 发布能力
 
-当前不合格。Release 产物使用 Debug 证书，workflow、JDK、notes 路径和版本规则需要先修复。
+formal 当前仍不合格：本地缺受保护 formal 签名材料和批准；beta.8 workflow 只准备 GitHub Actions 受保护签名路径，必须等 CI 实际签名成功后才能发布 beta 资产。
 
 ## 13. 产品总监与技术总监总结
 

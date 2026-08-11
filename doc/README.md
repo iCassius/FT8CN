@@ -52,9 +52,10 @@
 
 ## 🛠️ 当前审计状态与下一步
 
-当前集成基线为 `codex/v0.93.005-integration`。`v0.93.005-beta.5` 已由 [GitHub Actions run 30760667432](https://github.com/iCassius/FT8CN/actions/runs/30760667432) 发布为 [GitHub Pre-release](https://github.com/iCassius/FT8CN/releases/tag/v0.93.005-beta.5)，但仍仅为 `AUTO_VERIFIED`：
+当前本地集成分支为 `codex/v0.93.005-16kb-integration`，来源为远端 `codex/v0.93.005-integration@786ceed4`，开发最终 SHA 为 `9fbda6f`。远端 beta.1 至 beta.7 已占用，下一可用 notes 为 `v0.93.005-beta.8`，尚未创建 tag/Release：
 
-1. 配置加载完成状态、发射 PTT/SCO 生命周期、网络/音频任务快照与 EOF 隔离已集成；JVM 8/8 和 AVD 43/43 通过，但真实设备/HIL 尚未完成。
-2. beta.5 使用 `com.bg7yoz.ft8cn.beta` 和 Android Debug 签名；其资产、hash 与签名事实见 [HANDOFF.md](HANDOFF.md)。正式签名迁移允许卸载旧版后干净安装，详情见 [RELEASE_SIGNING.md](RELEASE_SIGNING.md)。
-3. 不把构建、模拟器或历史结果表述为真机/HIL 结论；完整网络 QSO、长时间挂机、功耗和温升仍需在集成 APK 上单独验证。
-4. 后续任务与验收顺序以 [ROADMAP_TODO.md](ROADMAP_TODO.md) 为准；构建、自动化、模拟器、真机和 HIL 必须分开报告。
+1. 16KB native 自动化 `GO`、P0 `0`、strict oracle 通过；四 ABI `PT_LOAD=0x4000`，JNI contract 为 31 required + 2 optional export。
+2. API 37 / `PAGE_SIZE=16384` 的 16KB AVD 启动成功，fatal compatibility mode 已关闭；connected 测试 63 pass、1 intentional skip，AVD 已关闭。
+3. 4KB AVD、真实 Android 设备、电台 CAT/PTT/TX、完整 QSO、长时间挂机、功耗和温升仍未完成；自动化/AVD 不等于真机/HIL。
+4. beta.8 必须由 GitHub Actions 使用 beta-only 受保护签名材料实际构建并通过 workflow；formal Release 仍因本地缺少受保护正式签名材料而 `NO-GO`。
+5. 后续任务与验收顺序以 [ROADMAP_TODO.md](ROADMAP_TODO.md) 为准；构建、自动化、16KB/4KB AVD、真机和 HIL 必须分开报告。

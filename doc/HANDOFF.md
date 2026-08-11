@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-08-11　16KB native 集成与 beta.8 本地收口准备
+
+### 集成范围、基线与提交链
+
+- 从远端最新 `origin/codex/v0.93.005-integration@786ceed4c40cdec63338a4c524a6808a4d6a5ee1` 创建本地分支 `codex/v0.93.005-16kb-integration`，随后 fast-forward 到开发最终 SHA `9fbda6f99bb1395a429f32a936a1d9ea3b962327`。当前不 push、不 tag、不创建或修改 GitHub Release。
+- 开发 SHA 已包含 source/oracle/native/gate 的完整线性链：`a9cfe79` → `3b20aab` → `604f07c` → `3cab128` → `abd3570` → `0449038` → `4c7d66d` → `25ca568` → `b941e91` → `feb42cf` → `5729a87` → `9fbda6f`。没有重复 cherry-pick 源码或 oracle。
+- `feb42cf` 与 A2 `2b4a329` 的 patch-id 相同，`5729a87` 与 B2 `bdd77c0` 的 patch-id 相同；因此开发链已按 A2→B2 语义包含门禁实现，未再叠加重复提交。旧 `native16k-release-gates` 替代分支不纳入。
+
+### 16KB native 与独立测试边界
+
+- 当前代码已把重建 native 源码接入生产构建路径，移除 `app/libs` 旧预编译库作为本候选来源；这不等于所有 Android 设备或真实电台已完成验证。
+- 主会话提供的独立测试结论为：16KB native 自动化 `GO`、P0 `0`；API 37 / `PAGE_SIZE=16384` / fatal compatibility mode 关闭后启动成功；strict oracle 通过；四 ABI `PT_LOAD=0x4000`；31 个 required JNI export + 2 个 optional export；connected 测试 63 pass、1 intentional skip；AVD 已关闭。
+- 4KB AVD 尚未验证；真实 Android 设备、真实电台、CAT/PTT/TX、完整 QSO、2 小时挂机、功耗和温升/HIL 均待后续。自动化与 16KB AVD 不能写成真机兼容或性能结论。
+
+### beta.8 预发布与正式发布边界
+
+- 远端 tag/Release 核验确认 beta.1 至 beta.7 已占用，beta.7 peeled target 为 `786ceed4c40cdec63338a4c524a6808a4d6a5ee1`，beta.8 尚不存在；下一可用不可变编号为 `v0.93.005-beta.8`，本会话只准备 notes/workflow 契约，不创建 tag/Release。
+- beta.8 使用 `com.bg7yoz.ft8cn.beta`、`0.93.005-beta.8`、`93008` 和 beta-only 持久证书；实际签名必须由 GitHub Actions 受保护 secrets 完成，CI 签名成功前不能称为可发布资产。
+- formal Release 保持 `NO-GO`：本地缺少受保护 formal keystore、可信证书材料和正式批准。beta-only 与 formal signing 完全分离。
+
+### 本地验证与下一步
+
+- 本地 `:app:testDebugUnitTest --rerun-tasks` 与 `:app:assembleDebug --rerun-tasks` 通过。debug APK 为 `ft8cn/app/build/outputs/apk/debug/app-debug.apk`，`22,279,737` bytes，SHA-256 为 `2C0A864E7C2A93FD34DB43D25659276B7B9F67324CA9B66D7D074C6E95A66636`；metadata 为 `com.bg7yoz.ft8cn.beta` / `0.93.005-beta` / `93005`，zipalign 通过，签名为 Android Debug certificate（SHA-256 `5da76c45b0875913e0a08d7124f49a87bcf2283429c074c1ddc8eb495d3e8db3`）。该 APK 只是本地 debug 验证产物，不是 beta.8 发布资产。
+- 对 beta.8 显式版本参数运行 `:app:packageTestApk --rerun-tasks` 时按预期 fail-fast：本机没有 `FT8CN_BETA_*` 受保护签名材料，因此没有 beta.8 APK/hash；CI 必须实际签名后再运行 beta metadata、证书和 artifact gates。formal package 未运行，formal 仍为 `NO-GO`。
+- native artifact gate 对本地 debug APK 通过：四 ABI 均 `PT_LOAD=0x4000`、每个 ABI 33 exports、zipalign `PASS`；本地 native gate 单测 `27/27`，release gate 单测 `14/14`；release contract 默认与 `--history`、`git diff --check`、tracked sensitive/keystore/APK 扫描均通过。构建输出只留在被忽略的本地目录，不进入提交。
+- 将形成清晰的本地集成提交并把最终 HEAD 交回主会话；主会话再把该 HEAD 交给独立测试做最后验收。未获进一步授权前不 push、不 tag、不创建 Release。
+
+---
+
 ## 2026-08-08　v0.93.005-beta.7 发布文档最终收口
 
 ### 范围、基线与当前状态

@@ -16,7 +16,8 @@
   - **DXCC 恢复与测试落地**：恢复了被误改的 DXCC 呼号前缀最长匹配算法，保证归属地显示正确；并首次落地的 Instrumented 自动化测试，确保数据库底层逻辑的稳定性。
   - **测试版共存 (.beta)**：支持构建带有独立的包名 `com.bg7yoz.ft8cn.beta` 和名称 “FT8CN测试版” 的测试包，可与正式版无缝共存，方便挂机测试。
 - 🟢 **云同步扩展与构建发布 (v0.93.004)**：新增了 **Wavelog 日志同步** 支持，合并了 Cloudlog/Wavelog 的日志上传逻辑并支持连接免 Dummy QSO 验证；优化了 GitHub Actions 工作流，直接构建并发布 Release 版 APK。
-- 🟡 **v0.93.005 发布准备**：统一版本、JDK 17 CI、正式签名 fail-fast、Release notes 路径、TEST/BETA APK 命名和 Android 回退门禁；正式证书与真机/HIL 仍需发布环境单独确认。
+- 🟡 **v0.93.005 / 16KB native 集成候选**：开发 SHA `9fbda6f` 已接入重建 native 源码、严格 oracle 和四 ABI/16KB artifact gate；独立测试报告 16KB native 自动化 GO、P0=0，API 37/16KB AVD 启动成功，connected 63 pass/1 intentional skip。4KB AVD、真机/HIL、完整 QSO、长时挂机、功耗和温升仍待验证。
+- 🟡 **下一 beta**：远端 beta.1 至 beta.7 已占用，当前只准备不可变候选 `v0.93.005-beta.8`（`93008`）；实际 beta-only 签名必须由 GitHub Actions 完成，正式 Release 仍因缺受保护 formal 签名材料而阻断。
 
 详细的维护文档、发布历史和技术分析请查阅：
 - 📂 [维护文档目录索引 (doc/README.md)](doc/README.md)
@@ -40,7 +41,7 @@ git tag -a v0.93.005 -m "FT8CN v0.93.005"
 git push origin v0.93.005
 ```
 
-推送 `v*.*.*` 格式的 tag 后会进入 GitHub Actions 发布门禁；在用户确认签名迁移、提供长期 keystore 和可信证书前，正式 workflow 会阻断，不创建 Release。当前 `v0.93.004` 已存在且不可覆盖；现阶段只分发 TEST/BETA APK。
+推送 `v*.*.*` 格式的正式 tag 后会进入 GitHub Actions formal 发布门禁；在用户确认签名迁移、提供长期 keystore 和可信证书前，formal workflow 会阻断，不创建 Release。beta tag 使用独立 beta-only workflow；`v0.93.005-beta.8` 目前只准备 notes 和契约，未创建 tag/Release，必须先通过 CI 实际签名和所有 native 门禁。
 
 请前往 [Releases](https://github.com/iCassius/FT8CN/releases) 下载最新 APK 文件。
 

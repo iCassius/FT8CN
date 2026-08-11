@@ -1,11 +1,11 @@
 # FT8CN Roadmap 与可派发 TODO
 
-> 基线：`codex/v0.93.005-integration`（beta.5 已预发布，P0-D/P0-F 与真机门禁仍未完成）<br>
-> 日期：2026-08-03<br>
+> 基线：`codex/v0.93.005-16kb-integration@9fbda6f`（native/16KB 自动门禁与 16KB AVD 已有独立 GO；4KB AVD、真机/HIL 与功耗仍未完成）<br>
+> 日期：2026-08-11<br>
 > 原则：稳定性 > 兼容性 > 性能与省电 > 新功能<br>
 > 范围：本路线只描述要解决的问题、验收方法和派发边界，不代表任务已经实现或验证
 
-当前预发布基线为 `v0.93.005-beta.5`，tag target `3f6b0562806d016b0164fbd369234ea03797f4e0`。GitHub Actions run [`30760667432`](https://github.com/iCassius/FT8CN/actions/runs/30760667432) 已生成 [Pre-release](https://github.com/iCassius/FT8CN/releases/tag/v0.93.005-beta.5)：资产 `FT8CN-v0.93.005-beta-3f6b056.apk`，`21,199,657` bytes，SHA-256 `7fa6b632…decae21`，包名 `com.bg7yoz.ft8cn.beta`，版本 `0.93.005-beta` / `93005`，远端 Android Debug 证书 SHA-256 `0ad16c4f…cc71f`。JVM 8/8、AVD 43/43（失败/错误/跳过均为 0）属于 `AUTO_VERIFIED`，不是实机/HIL；P0-D、P0-F 和有线 legacy 连接契约仍待后续。
+当前远端 beta.1 至 beta.7 已占用，beta.7 peeled target 为 `786ceed4c40cdec63338a4c524a6808a4d6a5ee1`，下一可用不可变 beta 编号为 `v0.93.005-beta.8`（`93008`）；beta.8 目前只准备 notes/workflow 契约，未创建 tag 或 Release。独立测试结论为：16KB native 自动化 `GO`、P0 `0`、strict oracle 通过、四 ABI `PT_LOAD=0x4000`、31 required + 2 optional JNI export；API 37 / `PAGE_SIZE=16384` 16KB AVD 启动成功，connected 63 pass / 1 intentional skip，AVD 已关闭。4KB AVD、真机/HIL、完整 QSO、长时挂机、功耗和温升仍待验证。
 
 `v0.93.005-beta.1` 至 `v0.93.005-beta.4` 是失败且不可变的 tag，均无 Release；不得删除、移动或复用。后续预发布使用递增的新 tag 与同名 notes。
 
@@ -630,18 +630,18 @@
 **依赖**：P0/P1 测试基础。<br>
 **风险/回滚**：禁止一次大重构；每个抽取提交独立回滚。<br>
 
-### P2-02 恢复 native 源码与 16KB 兼容
+### P2-02 native 源码与 16KB/4KB 兼容门禁
 
-**状态**：外部依赖 / 待实现 / 待真机验证
+**状态**：代码与 16KB 自动门禁已完成 / 16KB AVD 已验证 / 4KB AVD 待验证 / 真机与性能待验证
 
-**为什么要改**：仓库只有预编译 `.so`，无法审查、重编译和修复 16KB 页兼容。<br>
-**如何改**：找回对应源码和构建参数；固定工具链；建立四 ABI 与 16KB 构建；加入 WAV 样本回归。<br>
+**为什么要改**：旧基线只有预编译 `.so`，无法审查、重编译和证明 16KB 页兼容；当前候选已恢复并接入 native 源码，但仍不能把 16KB AVD 结果外推到 4KB 设备或真机。<br>
+**如何改**：固定 NDK/CMake 与生产构建路径；保留 strict oracle；以四 ABI、JNI contract、ELF `PT_LOAD=0x4000` 和 APK ZIP 对齐作为自动门禁；再补 4KB AVD、真机与性能证据。<br>
 **用户价值**：新 Android 设备兼容性和解码维护能力可持续。<br>
 **涉及范围**：JNI、C/C++、CMake、ABI、解码测试。<br>
-**自动化验收**：可重复构建；符号和 JNI 接口一致；WAV 样本结果与基线一致。<br>
-**真机/性能验收**：4KB 与 16KB 页设备启动、解码和长时运行；性能不明显退化。<br>
-**依赖**：找到合法、匹配当前二进制的源码。<br>
-**风险/回滚**：数值实现差异会改变解码结果；保留旧 `.so` 作为测试对照，不直接覆盖稳定产物。<br>
+**自动化验收**：独立证据为 native 自动化 `GO`、P0 `0`、strict oracle 通过；四 ABI 的 ELF `PT_LOAD=0x4000`；31 个 required JNI export + 2 个 optional export；API 37 / `PAGE_SIZE=16384` 16KB AVD 启动成功，connected 63 pass / 1 intentional skip。<br>
+**真机/性能验收**：4KB AVD 仍 pending；真实 Android 设备、电台、CAT/PTT/TX、完整 QSO、2 小时挂机、功耗和温升仍 pending；自动化和 16KB AVD 不升级为 HIL。<br>
+**依赖**：当前 native source/build/oracle/gate 链已在开发 SHA `9fbda6f`；beta.8 的实际签名仍依赖 GitHub Actions 受保护 beta secrets。<br>
+**风险/回滚**：数值实现差异、ABI 或页大小差异仍可能改变解码结果；正式发布前保留独立 oracle、4KB AVD 和真机门禁，CI 失败不得创建 Release。<br>
 
 ### P2-03 主链测试体系
 
@@ -754,7 +754,7 @@ WP-01 与 WP-04 都会接触 `MainViewModel`，应串行或先明确文件分区
 ### P2
 
 - [ ] P2-01 小步拆分 MainViewModel 与 GeneralVariables
-- [ ] P2-02 native 源码与 16KB 兼容
+- [ ] P2-02 native 源码与 16KB/4KB 兼容（16KB 自动与 AVD 已通过；4KB/真机/性能待验证）
 - [ ] P2-03 主链测试体系
 - [ ] P2-04 R8、资源压缩与 ABI 拆包
 - [ ] P2-05 CTY.DAT 版本化缓存
@@ -763,13 +763,11 @@ WP-01 与 WP-04 都会接触 `MainViewModel`，应串行或先明确文件分区
 
 ## 9. 本轮验证基线
 
-- Git：`release@d8f8c5d`；功能代码审计开始前 clean，当前仅文档有未提交变化；
-- `assembleDebug`：成功，40 tasks；约 20 秒仅为本机当次增量构建观察值，不是性能基线；
-- `testDebugUnitTest`：`NO-SOURCE`；
-- Instrumented：仅 1 个测试类、5 个用例，本轮未运行；
-- `lintDebug`：5 errors / 343 warnings，属于当前已知基线；
-- `assembleRelease`：成功，52 tasks；
-- `apksigner`：当前 APK 为 Android Debug 证书；
-- 本轮没有设备、模拟器、真机 profile 或 HIL。
+- Git：`codex/v0.93.005-16kb-integration@9fbda6f`，由远端 `codex/v0.93.005-integration@786ceed4` fast-forward；文档收口后会形成新的本地 HEAD，未 push/tag/Release；
+- 独立 native 证据：16KB 自动化 `GO`、P0 `0`、strict oracle 通过；四 ABI `PT_LOAD=0x4000`；31 required + 2 optional JNI export；
+- 16KB AVD：API 37、`PAGE_SIZE=16384`、fatal compatibility mode 关闭后启动成功；connected 63 pass / 1 intentional skip；AVD 已关闭；
+- 4KB AVD：pending；
+- 真机/HIL/性能：未执行真实电台 CAT/PTT/TX、完整 QSO、长时挂机、功耗或温升 profile；均 pending；
+- formal Release：`NO-GO`，本地缺受保护 formal keystore、可信正式证书材料和正式批准；beta.8 仍需 GitHub Actions 实际签名成功。
 
 任何后续报告都应以这组事实为起点，不能把未运行的测试写成通过，也不能把构建成功写成真机验证。
