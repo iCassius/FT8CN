@@ -161,6 +161,14 @@ jobs:
           echo "apk_path=${APK_PATH}" >> "${GITHUB_OUTPUT}"
           echo "apk_name=${APK_NAME}" >> "${GITHUB_OUTPUT}"
 
+      - name: Verify native ABI, JNI, ELF and 16 KB ZIP alignment
+        run: |
+          python scripts/verify_native_artifact.py \
+            --artifact "${{ steps.apk.outputs.apk_path }}" \
+            --jni-contract scripts/native_jni_contract.json \
+            --expected-abis arm64-v8a,armeabi-v7a,x86,x86_64 \
+            --zipalign-mode required
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:

@@ -255,6 +255,26 @@ def main() -> None:
     if "FT8CN_BETA_" in release_ci:
         fail("formal release workflow must remain independent of beta signing secrets")
 
+    native_gate_fragments = (
+        "python scripts/verify_native_artifact.py",
+        '--artifact "${{ steps.apk.outputs.apk_path }}"',
+        "--jni-contract scripts/native_jni_contract.json",
+        "--expected-abis arm64-v8a,armeabi-v7a,x86,x86_64",
+        "--zipalign-mode required",
+    )
+    for workflow_name, workflow in (
+        ("android-prerelease.yml", beta_ci),
+        ("android-release.yml", release_ci),
+    ):
+        for fragment in native_gate_fragments:
+            if workflow.count(fragment) != 1:
+                fail(f"{workflow_name} must contain exactly one native release gate fragment: {fragment}")
+        native_gate_offset = workflow.index("python scripts/verify_native_artifact.py")
+        if native_gate_offset > workflow.index("uses: actions/upload-artifact@v4"):
+            fail(f"{workflow_name} must run the native release gate before artifact upload")
+        if native_gate_offset > workflow.index("gh release create"):
+            fail(f"{workflow_name} must run the native release gate before GitHub Release creation")
+
     scan_tracked_files()
     scan_staged_diff()
     if args.history:

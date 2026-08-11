@@ -11,32 +11,24 @@ from pathlib import Path
 from unittest import mock
 
 try:
-    from scripts.verify_native_artifact import (
-        DEFAULT_ABIS,
-        GateError,
-        NativeEntry,
-        find_zipalign,
-        load_contract,
-        read_native_entries,
-        run,
-        verify_entries,
-        verify_zip_alignment,
-    )
-except ModuleNotFoundError:
-    from verify_native_artifact import (
-        DEFAULT_ABIS,
-        GateError,
-        NativeEntry,
-        find_zipalign,
-        load_contract,
-        read_native_entries,
-        run,
-        verify_entries,
-        verify_zip_alignment,
-    )
+    from scripts import verify_native_artifact as native_gate
+except ImportError:
+    import verify_native_artifact as native_gate
+
+
+DEFAULT_ABIS = native_gate.DEFAULT_ABIS
+GateError = native_gate.GateError
+NativeEntry = native_gate.NativeEntry
+find_zipalign = native_gate.find_zipalign
+load_contract = native_gate.load_contract
+read_native_entries = native_gate.read_native_entries
+run = native_gate.run
+verify_entries = native_gate.verify_entries
+verify_zip_alignment = native_gate.verify_zip_alignment
 
 
 JNI_EXPORT = "Java_com_bg7yoz_ft8cn_fixture_Native_ping"
+REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 
 
 def make_elf64(alignment: int, symbols: tuple[str, ...] = (JNI_EXPORT,)) -> bytes:
@@ -181,8 +173,8 @@ class NativeArtifactGateTests(unittest.TestCase):
 
     def test_zipalign_command_uses_16kb_page_alignment(self) -> None:
         completed = mock.Mock(returncode=0, stdout="Verification successful", stderr="")
-        with tempfile.TemporaryDirectory() as temp, mock.patch(
-            "scripts.verify_native_artifact.subprocess.run", return_value=completed
+        with tempfile.TemporaryDirectory() as temp, mock.patch.object(
+            native_gate.subprocess, "run", return_value=completed
         ) as runner:
             root = Path(temp)
             apk = root / "app.apk"
@@ -194,8 +186,8 @@ class NativeArtifactGateTests(unittest.TestCase):
         self.assertEqual(command[1:6], ["-c", "-P", "16", "-v", "4"])
 
     def test_zipalign_unavailable_fails_explicitly(self) -> None:
-        with mock.patch.dict(os.environ, {}, clear=True), mock.patch(
-            "scripts.verify_native_artifact.shutil.which", return_value=None
+        with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(
+            native_gate.shutil, "which", return_value=None
         ):
             with self.assertRaisesRegex(GateError, "zipalign unavailable"):
                 find_zipalign()
@@ -228,6 +220,28 @@ class NativeArtifactGateTests(unittest.TestCase):
         path = Path(__file__).with_name("native_jni_contract.json")
         loaded = load_contract(path)
         self.assertEqual(len(loaded["libft8cn.so"]), 33)
+
+
+class NativeReleaseWorkflowActivationTests(unittest.TestCase):
+    def test_beta_and_formal_gate_the_final_apk_before_any_upload_or_release(self) -> None:
+        required_fragments = (
+            "python scripts/verify_native_artifact.py",
+            '--artifact "${{ steps.apk.outputs.apk_path }}"',
+            "--jni-contract scripts/native_jni_contract.json",
+            "--expected-abis arm64-v8a,armeabi-v7a,x86,x86_64",
+            "--zipalign-mode required",
+        )
+        for workflow_name in ("android-prerelease.yml", "android-release.yml"):
+            workflow = (REPOSITORY_ROOT / ".github" / "workflows" / workflow_name).read_text(
+                encoding="utf-8"
+            )
+            for fragment in required_fragments:
+                self.assertEqual(workflow.count(fragment), 1, f"{workflow_name}: {fragment}")
+            gate_offset = workflow.index("python scripts/verify_native_artifact.py")
+            artifact_upload_offset = workflow.index("uses: actions/upload-artifact@v4")
+            release_offset = workflow.index("gh release create")
+            self.assertLess(gate_offset, artifact_upload_offset, workflow_name)
+            self.assertLess(gate_offset, release_offset, workflow_name)
 
 
 if __name__ == "__main__":
