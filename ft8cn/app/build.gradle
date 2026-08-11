@@ -131,6 +131,7 @@ static def getCurrentTime() {
 android {
 
     compileSdk 34
+    ndkVersion "28.2.13676358"
 
     buildFeatures {
         buildConfig true
@@ -169,11 +170,8 @@ android {
 
         externalNativeBuild {
             cmake {
-                if (nativeCandidateBuild) {
-                    arguments '-DFT8CN_BUILD_INCOMPLETE_REFERENCE=ON'
-                } else {
-                    cppFlags '-JENABLE_XOM=false'//关闭XOM，
-                }
+                // Production and oracle builds use the same checked-in source.
+                // nativeCandidate only records oracle provenance in BuildConfig.
             }
         }
     }
@@ -214,20 +212,18 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
-    if (nativeCandidateBuild) {
-        externalNativeBuild {
-            cmake {
-                path file('src/main/cpp/CMakeLists.txt')
-                version '3.22.1'
-            }
+    externalNativeBuild {
+        cmake {
+            path file('src/main/cpp/CMakeLists.txt')
+            version '3.22.1'
         }
     }
 
     sourceSets {
         main {
-            // The candidate and production binaries share the same SONAME.
-            // Never package both in one APK; the default path remains prebuilt.
-            jniLibs.srcDirs = nativeCandidateBuild ? [] : ['libs']
+            // The checked-in CMake target is the only native source of truth.
+            // Do not package stale prebuilt binaries from app/libs.
+            jniLibs.srcDirs = []
         }
     }
     namespace 'com.bg7yoz.ft8cn'

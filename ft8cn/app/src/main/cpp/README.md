@@ -1,37 +1,38 @@
-# Recovered native source: reference only
+# Recovered native source and production build
 
 This directory was recovered from Git commit `65c3857` (`Ver. 0.89`). It is
-kept as an auditable starting point for restoring a reproducible native build;
-it is **not** the source of the current v0.93 `libft8cn.so` files.
+the checked-in source for the reproducible native build. The v0.93 resampler
+and its vendored libsamplerate 0.2.1 implementation were reconstructed in the
+native 16 KB work, and the resulting library is now built by Gradle/CMake.
 
-Current production APKs continue to package the four prebuilt libraries from
-`app/libs`. `app/build.gradle` deliberately does not point
-`externalNativeBuild.cmake.path` at this directory. Do not enable that path or
-copy an output from this directory over `app/libs` until behavior-equivalence
-validation has passed.
+`app/build.gradle` always points `externalNativeBuild.cmake.path` here and
+does not package `app/libs`. Do not restore the old prebuilt libraries or add a
+second JNI source directory: an APK must contain exactly one `libft8cn.so`
+per ABI, produced by this CMake target.
 
-Known contract gap:
+Native contract and validation:
 
-- The recovered source exports 27 JNI functions.
-- The current v0.93 libraries export 33 JNI functions.
-- The six missing functions are all methods of `FT8Resample`:
+- The reconstructed source exports the complete 31-declaration JNI contract,
+  including the six `FT8Resample` methods:
   `get8Resample32`, `get8Resample16`, `get32Resample32`, `get16Resample32`,
   `get32Resample16`, and `get16Resample16`.
-- The v0.93 binary contains `resample_lib.cpp` plus a statically linked
-  libsamplerate source tree that is absent from Git history. Debug line
-  information also proves that some existing decoder/listener sources moved
-  between v0.89 and v0.93, so matching only the JNI symbol names is not an
-  adequate replacement gate.
+- `scripts/native_baseline` compares the frozen production v2 oracle with the
+  same x86_64 process ABI on a 16 KB AVD. The comparator requires clean,
+  distinct builds, exact JNI contract coverage, and strict behavior equality;
+  subtraction remains call-safety-only when no semantic delta is observed.
+- Arm64, armeabi-v7a, and x86 are build/ELF-gate targets here; behavior
+  equivalence beyond the x86_64 oracle and real-device/HIL evidence remain
+  separate release evidence.
 
-For isolated compile validation, configure CMake with NDK r28 or newer and
-explicitly acknowledge the incomplete reference:
+Build with NDK `28.2.13676358` and CMake `3.22.1` through the Gradle wrapper:
 
 ```text
--DFT8CN_BUILD_INCOMPLETE_REFERENCE=ON
--DANDROID_PLATFORM=android-23
+cd ft8cn
+.\gradlew.bat :app:assembleDebug :app:assembleDebugAndroidTest `
+  -Pft8cn.nativeCandidate=true
 ```
 
-The CMake target forces 16 KiB ELF load-segment alignment for all four legacy
-ABIs. A successful compile only demonstrates source/build viability; it does
-not demonstrate FT8 encode/decode, FFT, subtraction, hashing, or resampling
-equivalence with the shipped v0.93 library.
+The `nativeCandidate` property is an oracle provenance marker; it does not
+select a second library. The CMake target forces 16 KiB ELF load-segment
+alignment for all four ABIs. A successful compile alone is not a release or
+HIL authorization.

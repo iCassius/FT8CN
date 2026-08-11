@@ -10,17 +10,9 @@ cmake_minimum_required(VERSION 3.18.1)
 
 project("ft8cn")
 
-# This tree was recovered from the v0.89 history. The v0.93 resampler is a
-# forensic reconstruction and the complete tree remains opt-in until the
-# native behavior-equivalence gate is complete.
-option(FT8CN_BUILD_INCOMPLETE_REFERENCE
-       "Build the recovered, behavior-unverified v0.93 native candidate"
-       OFF)
-if(NOT FT8CN_BUILD_INCOMPLETE_REFERENCE)
-    message(FATAL_ERROR
-            "Recovered native source is an unverified candidate. "
-            "Pass -DFT8CN_BUILD_INCOMPLETE_REFERENCE=ON only for isolated validation.")
-endif()
+# This tree was recovered from the v0.89 history and includes the reconstructed
+# v0.93 resampler. It is the sole production native source of truth; the
+# x86_64 behavior-equivalence gate is maintained under scripts/native_baseline.
 
 # Creates and names a library, sets it as either STATIC
 # or SHARED, and provides the relative paths to its source code.
