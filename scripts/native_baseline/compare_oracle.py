@@ -255,6 +255,11 @@ def compare_snapshots(
             f"oracle={expected_source['build_variant']!r}, "
             f"candidate={actual_source['build_variant']!r}"
         )
+    if actual_source.get("native_candidate") is not True:
+        errors.append(
+            "metadata.source.native_candidate: candidate must be captured from "
+            "the explicit native candidate build"
+        )
     if expected_source["git_dirty"] or actual_source["git_dirty"]:
         errors.append("metadata.source.git_dirty: oracle and candidate captures must be clean")
     if require_distinct_builds:

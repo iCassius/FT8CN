@@ -12,6 +12,11 @@ This directory provides a development gate for replacing the v0.93 prebuilt
 - A normal comparison requires a clean candidate commit, a different native
   library SHA-256, the same application/version/build variant, the same real
   process ABI, and `PAGE_SIZE=16384`.
+- The capture script always passes `-Pft8cn.nativeCandidate=true`; the
+  instrumentation provenance records that switch and capture rejects an APK
+  that does not declare it. The comparator enforces the same provenance on
+  the candidate snapshot. This prevents an oracle run from silently using the
+  legacy prebuilt library in `app/libs`.
 - Device name, SDK level, and build fingerprint are recorded under
   `non_authoritative_environment` and are not compared.
 - This is currently an **x86_64 development gate only**. Arm64 behavior and
@@ -33,10 +38,12 @@ pwsh -NoLogo -NoProfile -File scripts/native_baseline/capture_oracle.ps1 `
   -OutputPath scripts/native_baseline/candidates/x86_64-candidate.json
 ```
 
-The script builds both APKs, installs those exact files on the selected
-emulator, and cross-checks the current Git commit/dirty state, page size,
-process ABI, both APK hashes, and the selected `libft8cn.so` hash. A dirty
-capture is written for diagnostics but the comparator rejects it.
+The script builds both APKs with the explicit
+`-Pft8cn.nativeCandidate=true` switch, installs those exact files on the
+selected emulator, and cross-checks the current Git commit/dirty state, page
+size, process ABI, candidate provenance, both APK hashes, and the selected
+`libft8cn.so` hash. A dirty capture is written for diagnostics but the
+comparator rejects it.
 
 `-SkipBuild` is exceptional. It is rejected unless all three expected hashes
 are supplied explicitly:

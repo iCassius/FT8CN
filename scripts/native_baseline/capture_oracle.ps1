@@ -109,6 +109,7 @@ if (-not $SkipBuild) {
     Push-Location $androidProject
     try {
         & .\gradlew.bat :app:assembleDebug :app:assembleDebugAndroidTest `
+            "-Pft8cn.nativeCandidate=true" `
             "-Pft8cn.oracleGitCommit=$gitCommit" `
             "-Pft8cn.oracleGitDirty=$gitDirty" `
             --no-daemon --stacktrace
@@ -180,6 +181,9 @@ if ($metadata.source.git_dirty.ToString().ToLowerInvariant() -ne $gitDirty) {
 }
 if ($metadata.source.build_variant -ne 'debug') {
     throw "Unexpected captured build variant: $($metadata.source.build_variant)"
+}
+if ($metadata.source.native_candidate -ne $true) {
+    throw "Captured APK does not declare the native candidate build switch; refusing a prebuilt-library oracle"
 }
 if ($metadata.artifacts.target_apk_sha256 -ne $targetApkSha256) {
     throw "Installed target APK SHA-256 does not match the APK built by this script"

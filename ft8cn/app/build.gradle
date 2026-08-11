@@ -165,6 +165,7 @@ android {
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         buildConfigField("String", "ORACLE_GIT_COMMIT", "\"${oracleGitCommitValue}\"")
         buildConfigField("String", "ORACLE_GIT_DIRTY", "\"${oracleGitDirtyValue}\"")
+        buildConfigField("boolean", "NATIVE_CANDIDATE", nativeCandidateBuild ? "true" : "false")
 
         externalNativeBuild {
             cmake {

@@ -20,6 +20,7 @@ def snapshot():
                 "git_commit": "1" * 40,
                 "git_dirty": False,
                 "build_variant": "debug",
+                "native_candidate": True,
             },
             "artifacts": {
                 "target_apk_sha256": "2" * 64,
@@ -104,6 +105,14 @@ class CompareOracleTest(unittest.TestCase):
 
         self.assertTrue(any("git_commit" in error for error in errors))
         self.assertTrue(any("native_library_sha256" in error for error in errors))
+
+    def test_candidate_provenance_is_required(self):
+        actual = self.candidate()
+        del actual["metadata"]["source"]["native_candidate"]
+
+        errors, _ = compare_snapshots(snapshot(), actual)
+
+        self.assertTrue(any("native_candidate" in error for error in errors))
 
     def test_non_finite_tolerances_fail(self):
         expected = snapshot()

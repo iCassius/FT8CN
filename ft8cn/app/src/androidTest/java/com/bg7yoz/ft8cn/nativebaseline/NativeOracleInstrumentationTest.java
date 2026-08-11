@@ -170,6 +170,7 @@ public class NativeOracleInstrumentationTest {
         source.put("git_commit", BuildConfig.ORACLE_GIT_COMMIT);
         source.put("git_dirty", parseBuildBoolean(BuildConfig.ORACLE_GIT_DIRTY));
         source.put("build_variant", BuildConfig.BUILD_TYPE);
+        source.put("native_candidate", BuildConfig.NATIVE_CANDIDATE);
         metadata.put("source", source);
 
         Context testContext = InstrumentationRegistry.getInstrumentation().getContext();
