@@ -84,8 +84,11 @@ def hasBetaSigning = [
         betaCertSha256.toString() ==~ /(?i)[0-9a-f]{64}/
 def releaseStorePath = hasReleaseSigning ? rootProject.file(releaseStoreFile.toString()) : null
 def betaStorePath = hasBetaSigning ? rootProject.file(betaStoreFile.toString()) : null
+def isFormalReleaseTask = { String taskName ->
+    taskName.toLowerCase(Locale.ROOT) ==~ /(?:.*:)?(?:assemble|bundle|package|lint|compile).*release.*/
+}
 def releaseTaskRequested = gradle.startParameter.taskNames.any {
-    it.toLowerCase(Locale.ROOT).contains("release")
+    isFormalReleaseTask(it)
 }
 def betaTaskRequested = gradle.startParameter.taskNames.any {
     def taskName = it.toLowerCase(Locale.ROOT)
@@ -108,7 +111,7 @@ if (betaTaskRequested && !betaStorePath.isFile()) {
 }
 gradle.taskGraph.whenReady { graph ->
     def releaseInGraph = graph.allTasks.any {
-        it.path.toLowerCase(Locale.ROOT).contains("release")
+        isFormalReleaseTask(it.path)
     }
     if (releaseInGraph && !hasReleaseSigning) {
         throw new GradleException("A formal release task was requested without complete signing configuration. Debug signing is never valid for release.")
