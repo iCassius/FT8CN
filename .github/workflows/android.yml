@@ -29,6 +29,9 @@ jobs:
     - name: Test release certificate gates
       run: python -m unittest scripts.test_release_gates
 
+    - name: Test native artifact gate implementation
+      run: python -m unittest scripts.test_native_artifact_gate
+
     - name: Resolve canonical Gradle version
       shell: bash
       run: |
