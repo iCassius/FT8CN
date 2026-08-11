@@ -10,15 +10,15 @@ cmake_minimum_required(VERSION 3.18.1)
 
 project("ft8cn")
 
-# This tree was recovered from the v0.89 history and does not contain the six
-# FT8Resample JNI entry points shipped by the current v0.93 binary. Keep it
-# opt-in until the native behavior-equivalence gate is complete.
+# This tree was recovered from the v0.89 history. The v0.93 resampler is a
+# forensic reconstruction and the complete tree remains opt-in until the
+# native behavior-equivalence gate is complete.
 option(FT8CN_BUILD_INCOMPLETE_REFERENCE
-       "Build the recovered, behavior-unverified v0.89 native reference"
+       "Build the recovered, behavior-unverified v0.93 native candidate"
        OFF)
 if(NOT FT8CN_BUILD_INCOMPLETE_REFERENCE)
     message(FATAL_ERROR
-            "Recovered native source is an incomplete reference. "
+            "Recovered native source is an unverified candidate. "
             "Pass -DFT8CN_BUILD_INCOMPLETE_REFERENCE=ON only for isolated validation.")
 endif()
 
@@ -54,7 +54,21 @@ add_library( # Sets the name of the library.
         ft8Decoder.c
         ft8Encoder.c
         spectrum_data.c
+        resample_lib.cpp
+        third_party/libsamplerate/samplerate.c
+        third_party/libsamplerate/src_linear.c
+        third_party/libsamplerate/src_sinc.c
+        third_party/libsamplerate/src_zoh.c
               )
+
+target_include_directories(ft8cn PRIVATE third_party/libsamplerate)
+target_compile_definitions(ft8cn PRIVATE
+        ENABLE_SINC_BEST_CONVERTER
+        ENABLE_SINC_MEDIUM_CONVERTER
+        ENABLE_SINC_FAST_CONVERTER
+        HAVE_STDBOOL_H
+        PACKAGE="libsamplerate"
+        VERSION="0.2.1")
 
 # Searches for a specified prebuilt library and stores the path as a
 # variable. Because CMake includes system libraries in the search path by
