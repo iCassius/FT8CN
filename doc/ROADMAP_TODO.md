@@ -5,7 +5,7 @@
 > 原则：稳定性 > 兼容性 > 性能与省电 > 新功能<br>
 > 范围：本路线只描述要解决的问题、验收方法和派发边界，不代表任务已经实现或验证
 
-当前远端 beta.1 至 beta.7 已占用，beta.7 peeled target 为 `786ceed4c40cdec63338a4c524a6808a4d6a5ee1`，下一可用不可变 beta 编号为 `v0.93.005-beta.8`（`93008`）；beta.8 目前只准备 notes/workflow 契约，未创建 tag 或 Release。独立测试结论为：16KB native 自动化 `GO`、P0 `0`、strict oracle 通过、四 ABI `PT_LOAD=0x4000`、31 required + 2 optional JNI export；API 37 / `PAGE_SIZE=16384` 16KB AVD 启动成功，connected 63 pass / 1 intentional skip，AVD 已关闭。4KB AVD、真机/HIL、完整 QSO、长时挂机、功耗和温升仍待验证。
+远端 beta.1 至 beta.8 已占用；beta.8 是因 canonical integration 未先同步而失败的不可变 tag，下一独立候选为 `v0.93.005-beta.9`（`93009`），只准备 notes/workflow 契约。任何 beta tag 前必须先以非 force fast-forward 让 `origin/codex/v0.93.005-integration` 精确等于 tag peeled commit。独立测试结论为：16KB native 自动化 `GO`、P0 `0`、strict oracle 通过、四 ABI `PT_LOAD=0x4000`、31 required + 2 optional JNI export；API 37 / `PAGE_SIZE=16384` 16KB AVD 启动成功，connected 63 pass / 1 intentional skip，AVD 已关闭。4KB AVD、真机/HIL、完整 QSO、长时挂机、功耗和温升仍待验证。
 
 `v0.93.005-beta.1` 至 `v0.93.005-beta.4` 是失败且不可变的 tag，均无 Release；不得删除、移动或复用。后续预发布使用递增的新 tag 与同名 notes。
 
@@ -640,7 +640,7 @@
 **涉及范围**：JNI、C/C++、CMake、ABI、解码测试。<br>
 **自动化验收**：独立证据为 native 自动化 `GO`、P0 `0`、strict oracle 通过；四 ABI 的 ELF `PT_LOAD=0x4000`；31 个 required JNI export + 2 个 optional export；API 37 / `PAGE_SIZE=16384` 16KB AVD 启动成功，connected 63 pass / 1 intentional skip。<br>
 **真机/性能验收**：4KB AVD 仍 pending；真实 Android 设备、电台、CAT/PTT/TX、完整 QSO、2 小时挂机、功耗和温升仍 pending；自动化和 16KB AVD 不升级为 HIL。<br>
-**依赖**：当前 native source/build/oracle/gate 链已在开发 SHA `9fbda6f`；beta.8 的实际签名仍依赖 GitHub Actions 受保护 beta secrets。<br>
+**依赖**：当前 native source/build/oracle/gate 链已在开发 SHA `9fbda6f`；beta.9 的实际签名仍依赖 GitHub Actions 受保护 beta secrets，且发布前必须完成 canonical integration 同步。<br>
 **风险/回滚**：数值实现差异、ABI 或页大小差异仍可能改变解码结果；正式发布前保留独立 oracle、4KB AVD 和真机门禁，CI 失败不得创建 Release。<br>
 
 ### P2-03 主链测试体系
@@ -768,6 +768,6 @@ WP-01 与 WP-04 都会接触 `MainViewModel`，应串行或先明确文件分区
 - 16KB AVD：API 37、`PAGE_SIZE=16384`、fatal compatibility mode 关闭后启动成功；connected 63 pass / 1 intentional skip；AVD 已关闭；
 - 4KB AVD：pending；
 - 真机/HIL/性能：未执行真实电台 CAT/PTT/TX、完整 QSO、长时挂机、功耗或温升 profile；均 pending；
-- formal Release：`NO-GO`，本地缺受保护 formal keystore、可信正式证书材料和正式批准；beta.8 仍需 GitHub Actions 实际签名成功。
+- formal Release：`NO-GO`，本地缺受保护 formal keystore、可信正式证书材料和正式批准；beta.9 仍需 canonical integration 精确同步后由 GitHub Actions 实际签名成功。
 
 任何后续报告都应以这组事实为起点，不能把未运行的测试写成通过，也不能把构建成功写成真机验证。

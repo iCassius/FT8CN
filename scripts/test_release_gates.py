@@ -22,6 +22,11 @@ EXPECTED = "0123456789abcdef" * 4
 APKSIGNER_OUTPUT = f"V2 Signer: certificate SHA-256 digest: {EXPECTED}"
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 CANONICAL_GRADLE_VERSION = re.compile(r"^\d+\.\d+\.\d{3}:\d+$")
+EXPECTED_BETA_TAG = "v0.93.005-beta.9"
+EXPECTED_BETA_VERSION_NAME = "0.93.005-beta.9"
+EXPECTED_BETA_VERSION_CODE = "93009"
+CANONICAL_BETA_BRANCH = "codex/v0.93.005-integration"
+NON_CANONICAL_BETA_BRANCH = "codex/v0.93.005-16kb-integration"
 
 
 def extract_canonical_gradle_version(output: str) -> str:
@@ -53,10 +58,14 @@ class CertificateGateTests(unittest.TestCase):
         self.assertIsNone(resolve_expected_sha256("debug"))
 
     def test_package_version_metadata_parser_requires_exact_one_line(self) -> None:
-        output = "package: name='com.bg7yoz.ft8cn.beta' versionCode='93008' versionName='0.93.005-beta.8'"
+        output = (
+            "package: name='com.bg7yoz.ft8cn.beta' "
+            f"versionCode='{EXPECTED_BETA_VERSION_CODE}' "
+            f"versionName='{EXPECTED_BETA_VERSION_NAME}'"
+        )
         self.assertEqual(
             parse_package_line(output),
-            ("com.bg7yoz.ft8cn.beta", "93008", "0.93.005-beta.8"),
+            ("com.bg7yoz.ft8cn.beta", EXPECTED_BETA_VERSION_CODE, EXPECTED_BETA_VERSION_NAME),
         )
         with self.assertRaisesRegex(ValueError, "exactly one"):
             parse_package_line(output + "\n" + output)
@@ -178,8 +187,10 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
             "FT8CN_BETA_CERT_SHA256",
         ):
             self.assertIn(name, workflow)
-        self.assertIn("0.93.005-beta.8", workflow)
-        self.assertIn("93008", workflow)
+        self.assertIn(EXPECTED_BETA_TAG, workflow)
+        self.assertIn(EXPECTED_BETA_VERSION_NAME, workflow)
+        self.assertIn(EXPECTED_BETA_VERSION_CODE, workflow)
+        self.assertNotIn("v0.93.005-beta.8", workflow)
         self.assertIn("com.bg7yoz.ft8cn.beta", workflow)
         self.assertIn('gh release create "${TAG_NAME}" --prerelease', workflow)
         self.assertIn('notes_file="doc/release-notes/${GITHUB_REF_NAME}.md"', workflow)
@@ -189,21 +200,24 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
         self.assert_wrapper_is_executable_before_first_gradle_call("android-prerelease.yml")
         self.assert_full_history_and_remote_tag_target_contract("android-prerelease.yml")
         self.assert_version_output_is_filtered("android-prerelease.yml")
-        self.assertIn('refs/heads/codex/v0.93.005-integration', workflow)
+        self.assertIn(f'refs/heads/{CANONICAL_BETA_BRANCH}', workflow)
+        self.assertIn(f'Beta tag must point exactly at origin/{CANONICAL_BETA_BRANCH}.', workflow)
+        self.assertNotIn(NON_CANONICAL_BETA_BRANCH, workflow)
         self.assertIn('"${remote_branch_sha}" != "${head_sha}"', workflow)
         self.assertIn('GITHUB_SHA: ${{ steps.version.outputs.head_sha }}', workflow)
         self.assertNotIn("GITHUB_SHA:0:7", workflow)
 
-        beta8_notes = REPOSITORY_ROOT / "doc" / "release-notes" / "v0.93.005-beta.8.md"
-        self.assertTrue(beta8_notes.is_file())
-        beta8_text = beta8_notes.read_text(encoding="utf-8")
-        self.assertIn("# FT8CN v0.93.005-beta.8 Pre-release Notes", beta8_text)
-        self.assertIn("0.93.005-beta.8", beta8_text)
-        self.assertIn("93008", beta8_text)
-        self.assertIn("com.bg7yoz.ft8cn.beta", beta8_text)
-        self.assertIn("beta-only", beta8_text)
-        self.assertIn("卸载", beta8_text)
-        self.assertIn("HIL", beta8_text)
+        beta9_notes = REPOSITORY_ROOT / "doc" / "release-notes" / f"{EXPECTED_BETA_TAG}.md"
+        self.assertTrue(beta9_notes.is_file())
+        beta9_text = beta9_notes.read_text(encoding="utf-8")
+        self.assertIn(f"# FT8CN {EXPECTED_BETA_TAG} Pre-release Notes", beta9_text)
+        self.assertIn(EXPECTED_BETA_VERSION_NAME, beta9_text)
+        self.assertIn(EXPECTED_BETA_VERSION_CODE, beta9_text)
+        self.assertIn("com.bg7yoz.ft8cn.beta", beta9_text)
+        self.assertIn("beta-only", beta9_text)
+        self.assertIn("卸载", beta9_text)
+        self.assertIn("HIL", beta9_text)
+        self.assertIn(CANONICAL_BETA_BRANCH, beta9_text)
 
         for tag_name in ("v0.93.005-beta.1", "v0.93.005-beta.2", "v0.93.005-beta.3", "v0.93.005-beta.4", "v0.93.005-beta.5"):
             notes = REPOSITORY_ROOT / "doc" / "release-notes" / f"{tag_name}.md"

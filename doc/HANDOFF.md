@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-08-11　beta.8 CI 编排失败诊断与 beta.9 预检准备
+
+### 根因与边界
+
+- GitHub Actions run `31466603233` / job `93700681815` 的完整 job log 已取回。checkout、JDK、contract、`--history` 和敏感步骤均成功；唯一失败是 `Resolve beta tag and validate version` 的 canonical branch 检查。
+- workflow 对 `origin/codex/v0.93.005-integration` 的精确 HEAD 绑定是正确且必须保留的发布门禁。beta.8 失败的唯一根因是发布编排只推送了 `codex/v0.93.005-16kb-integration`，没有先把 canonical integration fast-forward 到同一 peeled commit；不是 branch gate、签名 gate、native gate 或版本 gate 需要放宽。
+- `v0.93.005-beta.8` tag 保持不可变并作为失败审计记录；不删除、移动、复用或修改其 tag、Release/asset（若后续存在）或历史 notes。beta.9 使用独立 tag、notes 和 `versionCode=93009`。
+
+### 已核验关系与安全顺序
+
+- 远端 refs：`codex/v0.93.005-integration@786ceed4c40cdec63338a4c524a6808a4d6a5ee1`、`codex/v0.93.005-16kb-integration@e42a5ebf9393d6a864b11c8549f951055ecea61d`；本地 `git merge-base --is-ancestor 786ceed4... e42a5eb...` 通过，故 e42a5eb 是 canonical integration 的 fast-forward 后继（14 个提交）。
+- beta tag 前的唯一安全操作顺序：先 push 新集成分支最终 HEAD；再将 `origin/codex/v0.93.005-integration` 以非 force fast-forward 更新到同一 HEAD；重新读取两个远端 ref 并核对相等；最后才创建并推送 `v0.93.005-beta.9` annotated tag。此交接只准备本地 notes/contract/test，不 push、tag 或创建/修改 Release。
+
+### 当前状态与下一步
+
+- beta.9 专用 notes、workflow 版本契约和回归门禁必须保持 beta-only 签名、native/16KB artifact gate、JVM、metadata、Release non-overwrite 与 canonical branch 精确绑定；三条 workflow 的静态顺序均需复验。
+- `v0.93.005-beta.9` 远端 tag 与 GitHub Release 当前均未发现；beta.8 历史 notes 未修改。完成本地门禁后形成最小 commit，交回主会话做架构验收和后续发布授权。
+
 ## 2026-08-11　16KB native 集成与 beta.8 本地收口准备
 
 ### 集成范围、基线与提交链

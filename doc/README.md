@@ -52,10 +52,10 @@
 
 ## 🛠️ 当前审计状态与下一步
 
-当前本地集成分支为 `codex/v0.93.005-16kb-integration`，来源为远端 `codex/v0.93.005-integration@786ceed4`，开发最终 SHA 为 `9fbda6f`。远端 beta.1 至 beta.7 已占用，下一可用 notes 为 `v0.93.005-beta.8`，尚未创建 tag/Release：
+当前本地集成 HEAD 仍是远端 `codex/v0.93.005-integration@786ceed4` 的 fast-forward 后继；`v0.93.005-beta.8` 已作为不可变失败 tag 保留，下一候选 notes 为 `v0.93.005-beta.9`：
 
 1. 16KB native 自动化 `GO`、P0 `0`、strict oracle 通过；四 ABI `PT_LOAD=0x4000`，JNI contract 为 31 required + 2 optional export。
 2. API 37 / `PAGE_SIZE=16384` 的 16KB AVD 启动成功，fatal compatibility mode 已关闭；connected 测试 63 pass、1 intentional skip，AVD 已关闭。
 3. 4KB AVD、真实 Android 设备、电台 CAT/PTT/TX、完整 QSO、长时间挂机、功耗和温升仍未完成；自动化/AVD 不等于真机/HIL。
-4. beta.8 必须由 GitHub Actions 使用 beta-only 受保护签名材料实际构建并通过 workflow；formal Release 仍因本地缺少受保护正式签名材料而 `NO-GO`。
+4. beta.9 必须先让远端 `codex/v0.93.005-integration` 精确等于 tag peeled commit，再由 GitHub Actions 使用 beta-only 受保护签名材料实际构建并通过 workflow；formal Release 仍因本地缺少受保护正式签名材料而 `NO-GO`。
 5. 后续任务与验收顺序以 [ROADMAP_TODO.md](ROADMAP_TODO.md) 为准；构建、自动化、16KB/4KB AVD、真机和 HIL 必须分开报告。

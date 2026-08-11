@@ -383,7 +383,7 @@ MainActivity.InitData
 
 ### 发布能力
 
-formal 当前仍不合格：本地缺受保护 formal 签名材料和批准；beta.8 workflow 只准备 GitHub Actions 受保护签名路径，必须等 CI 实际签名成功后才能发布 beta 资产。
+formal 当前仍不合格：本地缺受保护 formal 签名材料和批准；beta.9 workflow 只准备 GitHub Actions 受保护签名路径，且必须先满足 canonical integration 与 tag peeled commit 的精确 HEAD 绑定，等 CI 实际签名成功后才能发布 beta 资产。beta.8 失败 tag 保持不可变。
 
 ## 13. 产品总监与技术总监总结
 
