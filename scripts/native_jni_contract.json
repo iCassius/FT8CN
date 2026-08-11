@@ -1,8 +1,8 @@
 {
-  "schema": 1,
+  "schema": 2,
   "libraries": {
     "libft8cn.so": {
-      "jni_exports": [
+      "required_exports": [
         "Java_com_bg7yoz_ft8cn_ft8listener_FT8SignalListener_DecoderFt8Analysis",
         "Java_com_bg7yoz_ft8cn_ft8listener_FT8SignalListener_DecoderFt8FindSync",
         "Java_com_bg7yoz_ft8cn_ft8listener_FT8SignalListener_DecoderFt8Reset",
@@ -16,9 +16,7 @@
         "Java_com_bg7yoz_ft8cn_ft8signal_FT8Package_getHash10",
         "Java_com_bg7yoz_ft8cn_ft8signal_FT8Package_getHash12",
         "Java_com_bg7yoz_ft8cn_ft8signal_FT8Package_getHash22",
-        "Java_com_bg7yoz_ft8cn_ft8transmit_FT8TransmitSignal_GenerateFt8",
         "Java_com_bg7yoz_ft8cn_ft8transmit_GenerateFT8_ft8_1encode",
-        "Java_com_bg7yoz_ft8cn_ft8transmit_GenerateFT8_gfsk_1pulse",
         "Java_com_bg7yoz_ft8cn_ft8transmit_GenerateFT8_pack77",
         "Java_com_bg7yoz_ft8cn_ft8transmit_GenerateFT8_packFreeTextTo77",
         "Java_com_bg7yoz_ft8cn_ft8transmit_GenerateFT8_synth_1gfsk",
@@ -36,6 +34,10 @@
         "Java_com_bg7yoz_ft8cn_wave_FT8Resample_get32Resample32",
         "Java_com_bg7yoz_ft8cn_wave_FT8Resample_get8Resample16",
         "Java_com_bg7yoz_ft8cn_wave_FT8Resample_get8Resample32"
+      ],
+      "legacy_optional_exports": [
+        "Java_com_bg7yoz_ft8cn_ft8transmit_FT8TransmitSignal_GenerateFt8",
+        "Java_com_bg7yoz_ft8cn_ft8transmit_GenerateFT8_gfsk_1pulse"
       ]
     }
   }

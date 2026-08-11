@@ -9,6 +9,19 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    from scripts.verify_native_artifact import (
+        GateError as NativeGateError,
+        load_contract as load_native_contract,
+        verify_contract_against_java_sources,
+    )
+except ImportError:
+    from verify_native_artifact import (
+        GateError as NativeGateError,
+        load_contract as load_native_contract,
+        verify_contract_against_java_sources,
+    )
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SELF = Path(__file__).resolve()
@@ -194,6 +207,13 @@ def main() -> None:
     ci = (ROOT / ".github" / "workflows" / "android.yml").read_text(encoding="utf-8")
     beta_ci = (ROOT / ".github" / "workflows" / "android-prerelease.yml").read_text(encoding="utf-8")
     release_ci = (ROOT / ".github" / "workflows" / "android-release.yml").read_text(encoding="utf-8")
+    try:
+        verify_contract_against_java_sources(
+            load_native_contract(ROOT / "scripts" / "native_jni_contract.json"),
+            ROOT / "ft8cn" / "app" / "src" / "main" / "java",
+        )
+    except NativeGateError as exc:
+        fail(str(exc))
     root_ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
     for pattern in ("**/*.jks", "**/*.keystore", "**/*.p12", "**/*.pfx", "**/*.apk"):
         if pattern not in root_ignore:
@@ -274,6 +294,29 @@ def main() -> None:
             fail(f"{workflow_name} must run the native release gate before artifact upload")
         if native_gate_offset > workflow.index("gh release create"):
             fail(f"{workflow_name} must run the native release gate before GitHub Release creation")
+
+    formal_apk_gate_fragments = (
+        "python scripts/verify_apk_signature.py",
+        "python scripts/verify_apk_metadata.py",
+        "python scripts/verify_native_artifact.py",
+    )
+    formal_upload_offset = release_ci.index("uses: actions/upload-artifact@v4")
+    formal_release_offset = release_ci.index("gh release create")
+    for fragment in formal_apk_gate_fragments:
+        if release_ci.count(fragment) != 1:
+            fail(f"android-release.yml must contain exactly one formal APK gate: {fragment}")
+        offset = release_ci.index(fragment)
+        if offset > formal_upload_offset or offset > formal_release_offset:
+            fail(f"android-release.yml must run {fragment} before any artifact or Release upload")
+    for fragment in (
+        'echo "version_code=${gradle_version#*:}"',
+        "--package com.bg7yoz.ft8cn",
+        '--version-name "${{ steps.version.outputs.version }}"',
+        '--version-code "${{ steps.version.outputs.version_code }}"',
+        "--require-zipalign",
+    ):
+        if release_ci.count(fragment) != 1:
+            fail(f"android-release.yml must contain exactly one formal metadata fragment: {fragment}")
 
     scan_tracked_files()
     scan_staged_diff()
