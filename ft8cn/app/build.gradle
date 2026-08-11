@@ -8,6 +8,8 @@ plugins {
 
 def versionNameValue = rootProject.findProperty("ft8cn.versionName")?.toString()
 def versionCodeValue = rootProject.findProperty("ft8cn.versionCode")?.toString()
+def oracleGitCommitValue = rootProject.findProperty("ft8cn.oracleGitCommit")?.toString() ?: "unknown"
+def oracleGitDirtyValue = rootProject.findProperty("ft8cn.oracleGitDirty")?.toString() ?: "unknown"
 if (!versionNameValue || !versionCodeValue) {
     throw new GradleException("Missing canonical ft8cn.versionName/ft8cn.versionCode in ft8cn/gradle.properties")
 }
@@ -21,6 +23,12 @@ if (!isCanonicalVersion && !isBetaVersion) {
 }
 if (!(versionCodeValue ==~ /^\d+$/)) {
     throw new GradleException("ft8cn.versionCode must contain only decimal digits: ${versionCodeValue}")
+}
+if (!(oracleGitCommitValue == "unknown" || oracleGitCommitValue ==~ /(?i)[0-9a-f]{40}/)) {
+    throw new GradleException("ft8cn.oracleGitCommit must be a 40-character Git commit or unknown")
+}
+if (!(oracleGitDirtyValue in ["true", "false", "unknown"])) {
+    throw new GradleException("ft8cn.oracleGitDirty must be true, false, or unknown")
 }
 if (isCanonicalVersion) {
     def expectedVersionCode = (canonicalVersionMatch[0][1] as int) * 10000 + (canonicalVersionMatch[0][2] as int) * 1000 + (canonicalVersionMatch[0][3] as int)
@@ -154,6 +162,8 @@ android {
         versionCode versionCodeValue.toInteger()
         versionName versionNameValue
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        buildConfigField("String", "ORACLE_GIT_COMMIT", "\"${oracleGitCommitValue}\"")
+        buildConfigField("String", "ORACLE_GIT_DIRTY", "\"${oracleGitDirtyValue}\"")
 
         externalNativeBuild {
             cmake {

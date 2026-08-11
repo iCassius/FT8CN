@@ -5,6 +5,9 @@ import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
 import android.os.Build;
+import android.os.Bundle;
+import android.system.Os;
+import android.system.OsConstants;
 
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -26,10 +29,13 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
+import org.junit.Assume;
 import org.junit.runner.RunWith;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.lang.reflect.InvocationTargetException;
@@ -45,6 +51,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 /**
  * Captures deterministic behavior from the currently packaged production libft8cn.so.
@@ -55,14 +63,24 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @RunWith(AndroidJUnit4.class)
 public class NativeOracleInstrumentationTest {
-    static final String SCHEMA = "ft8cn-native-behavior-oracle-v1";
-    static final String OUTPUT_FILE = "native-behavior-oracle-v1.json";
+    static final String SCHEMA = "ft8cn-native-behavior-oracle-v2";
+    static final String OUTPUT_FILE = "native-behavior-oracle-v2.json";
+    static final String FIXTURE_OUTPUT_FILE = "native-decoder-mixed-v1.pcm16le";
     private static final long FIXED_UTC_MILLIS = 1710000000000L;
     private static final int SAMPLE_RATE = FT8Common.SAMPLE_RATE;
     private static final int SLOT_SAMPLES = FT8Common.FT8_SLOT_TIME * SAMPLE_RATE;
     private static final int SIGNAL_OFFSET_SAMPLES = 6000;
+    private static final int SECOND_SIGNAL_OFFSET_SAMPLES = 7200;
     private static final String STANDARD_MESSAGE = "CQ K1ABC FN20";
+    private static final String SECOND_STANDARD_MESSAGE = "CQ W9XYZ EN50";
     private static final String FREE_TEXT_MESSAGE = "TNX BOB 73 GL";
+    private static final String DECODER_FIXTURE_ASSET =
+            "nativebaseline/native-decoder-mixed-v1.pcm16le";
+    private static final String DECODER_FIXTURE_SHA256 =
+            "a6df8dbcb21f9ac67d72a2a2d39d45e3da846193b370f8108c806b140262a6be";
+    private static final String FIRST_PAYLOAD_HEX = "000000204def1a8a14080000";
+    private static final String SECOND_PAYLOAD_HEX = "000000206149dc0859880000";
+    private static final int MAX_DECODER_CANDIDATES = 120;
 
     @Test
     public void captureProductionNativeOracle() throws Exception {
@@ -80,15 +98,50 @@ public class NativeOracleInstrumentationTest {
                 floatDecode.getJSONObject("before_subtract").getJSONArray("valid_messages").length() > 0);
         assertTrue("DecoderGetA91 and subtract must be exercised",
                 floatDecode.getBoolean("subtract_exercised"));
-        assertTrue("decoded A91 must retain the 77 packed input bits",
-                floatDecode.getBoolean("decoded_a91_first_77_bits_match_input"));
+        assertTrue("decoded A91 values must retain one of the frozen fixture payloads",
+                floatDecode.getBoolean("decoded_a91_payloads_match_fixture_inputs"));
+        assertTrue("deep decode mode must be exercised",
+                floatDecode.getBoolean("deep_mode_exercised"));
         assertTrue("oracle file was not written", output.isFile() && output.length() > 0);
+    }
+
+    /**
+     * Maintainer-only bootstrap for the immutable decoder input fixture.
+     *
+     * <p>This is deliberately skipped unless the explicit instrumentation argument is present.
+     * It must only be run against the approved v0.93 production prebuilt library, never against a
+     * reconstruction candidate.</p>
+     */
+    @Test
+    public void captureProductionDecoderFixture() throws Exception {
+        Bundle arguments = InstrumentationRegistry.getArguments();
+        Assume.assumeTrue("production fixture capture was not explicitly authorized",
+                "YES".equals(arguments.getString("allow_production_fixture_capture")));
+        Context context = ApplicationProvider.getApplicationContext();
+        ProductionFixture fixture = synthesizeProductionFixture();
+        File output = new File(context.getFilesDir(), FIXTURE_OUTPUT_FILE);
+        try (FileOutputStream stream = new FileOutputStream(output, false)) {
+            stream.write(fixture.pcm16le);
+        }
+        JSONObject metadata = new JSONObject();
+        metadata.put("schema", "ft8cn-native-decoder-fixture-v1");
+        metadata.put("fixture_file", FIXTURE_OUTPUT_FILE);
+        metadata.put("fixture_sha256", sha256(fixture.pcm16le));
+        metadata.put("sample_rate", SAMPLE_RATE);
+        metadata.put("sample_count", SLOT_SAMPLES);
+        metadata.put("first_message", STANDARD_MESSAGE);
+        metadata.put("first_payload_hex", fixture.firstPayloadHex);
+        metadata.put("second_message", SECOND_STANDARD_MESSAGE);
+        metadata.put("second_payload_hex", fixture.secondPayloadHex);
+        writeUtf8(new File(context.getFilesDir(), FIXTURE_OUTPUT_FILE + ".json"),
+                metadata.toString(2) + "\n");
+        assertEquals(SLOT_SAMPLES * 2, output.length());
     }
 
     private static JSONObject captureSnapshot(Context context) throws Exception {
         JSONObject root = new JSONObject();
         root.put("schema", SCHEMA);
-        root.put("metadata", captureMetadata());
+        root.put("metadata", captureMetadata(context));
         root.put("declared_native_contract", captureDeclaredNativeContract());
 
         JSONObject packEncode = capturePackAndEncode();
@@ -96,20 +149,44 @@ public class NativeOracleInstrumentationTest {
         root.put("pack_encode", packEncode);
         root.put("resample", captureResample());
         root.put("spectrum", captureSpectrum(context));
-        root.put("decode", captureDecode(packEncode));
+        root.put("decode", captureDecode());
         return root;
     }
 
-    private static JSONObject captureMetadata() throws JSONException {
+    private static JSONObject captureMetadata(Context context) throws Exception {
         JSONObject metadata = new JSONObject();
         metadata.put("application_id", BuildConfig.APPLICATION_ID);
         metadata.put("version_name", BuildConfig.VERSION_NAME);
         metadata.put("version_code", BuildConfig.VERSION_CODE);
-        metadata.put("native_abi", Build.SUPPORTED_ABIS.length == 0 ? "unknown" : Build.SUPPORTED_ABIS[0]);
-        metadata.put("sdk_int", Build.VERSION.SDK_INT);
-        metadata.put("device", Build.DEVICE);
-        metadata.put("build_fingerprint", Build.FINGERPRINT);
-        metadata.put("oracle_inputs", "synthetic-public-test-v1");
+        metadata.put("oracle_inputs", "frozen-public-pcm-and-synthetic-v2");
+
+        String nativeAbi = currentProcessAbi();
+        JSONObject environment = new JSONObject();
+        environment.put("native_abi", nativeAbi);
+        environment.put("page_size", Os.sysconf(OsConstants._SC_PAGESIZE));
+        metadata.put("environment", environment);
+
+        JSONObject source = new JSONObject();
+        source.put("git_commit", BuildConfig.ORACLE_GIT_COMMIT);
+        source.put("git_dirty", parseBuildBoolean(BuildConfig.ORACLE_GIT_DIRTY));
+        source.put("build_variant", BuildConfig.BUILD_TYPE);
+        metadata.put("source", source);
+
+        Context testContext = InstrumentationRegistry.getInstrumentation().getContext();
+        String targetApk = context.getApplicationInfo().sourceDir;
+        String testApk = testContext.getApplicationInfo().sourceDir;
+        JSONObject artifacts = new JSONObject();
+        artifacts.put("target_apk_sha256", sha256(new File(targetApk)));
+        artifacts.put("test_apk_sha256", sha256(new File(testApk)));
+        artifacts.put("native_library_sha256", sha256ApkNativeLibrary(targetApk, nativeAbi));
+        metadata.put("artifacts", artifacts);
+
+        JSONObject nonAuthoritative = new JSONObject();
+        nonAuthoritative.put("sdk_int", Build.VERSION.SDK_INT);
+        nonAuthoritative.put("device", Build.DEVICE);
+        nonAuthoritative.put("build_fingerprint", Build.FINGERPRINT);
+        nonAuthoritative.put("supported_abis", new JSONArray(Build.SUPPORTED_ABIS));
+        metadata.put("non_authoritative_environment", nonAuthoritative);
         return metadata;
     }
 
@@ -293,41 +370,20 @@ public class NativeOracleInstrumentationTest {
         return result;
     }
 
-    private static JSONObject captureDecode(JSONObject packEncode) throws Exception {
-        byte[] payload = parseHex(packEncode.getString("standard_payload_hex"));
-        JSONArray toneJson = packEncode.getJSONArray("tones");
-        byte[] tones = new byte[toneJson.length()];
-        for (int i = 0; i < tones.length; i++) {
-            tones[i] = (byte) toneJson.getInt(i);
-        }
-
-        Method synth = nativeMethod(
-                GenerateFT8.class,
-                "synth_gfsk",
-                byte[].class,
-                int.class,
-                float.class,
-                float.class,
-                float.class,
-                int.class,
-                float[].class,
-                int.class);
-        float[] waveform = new float[SLOT_SAMPLES];
-        invoke(synth, null, tones, tones.length, 1000.0f, 2.0f,
-                GenerateFT8.symbol_period, SAMPLE_RATE, waveform, SIGNAL_OFFSET_SAMPLES);
-        int[] integerWaveform = new int[waveform.length];
-        for (int i = 0; i < waveform.length; i++) {
-            integerWaveform[i] = Math.round(waveform[i] * 32767.0f);
-        }
+    private static JSONObject captureDecode() throws Exception {
+        PcmFixture fixture = loadDecoderFixture();
 
         FT8SignalListener listener = new FT8SignalListener(null, null);
         try {
             JSONObject result = new JSONObject();
-            result.put("input_message", STANDARD_MESSAGE);
-            result.put("input_payload_hex", hex(payload));
-            result.put("waveform_profile", floatSignalProfile(waveform, 257));
-            result.put("float_input", decodeFloatAndSubtract(listener, waveform, payload));
-            result.put("integer_input", decodeInteger(listener, integerWaveform));
+            result.put("fixture_asset", DECODER_FIXTURE_ASSET);
+            result.put("fixture_sha256", sha256(fixture.pcm16le));
+            result.put("fixture_messages", new JSONArray()
+                    .put(STANDARD_MESSAGE)
+                    .put(SECOND_STANDARD_MESSAGE));
+            result.put("waveform_profile", floatSignalProfile(fixture.floatSamples, 257));
+            result.put("float_input", decodeFloatAndSubtract(listener, fixture.floatSamples));
+            result.put("integer_input", decodeInteger(listener, fixture.integerSamples));
             return result;
         } finally {
             listener.stopListen();
@@ -335,7 +391,7 @@ public class NativeOracleInstrumentationTest {
     }
 
     private static JSONObject decodeFloatAndSubtract(
-            FT8SignalListener listener, float[] waveform, byte[] expectedPayload) throws JSONException {
+            FT8SignalListener listener, float[] waveform) throws JSONException {
         long decoder = listener.InitDecoder(FIXED_UTC_MILLIS, SAMPLE_RATE, waveform.length, true);
         if (decoder == 0) {
             throw new AssertionError("InitDecoder returned a null handle for float input");
@@ -347,25 +403,33 @@ public class NativeOracleInstrumentationTest {
 
             JSONObject result = new JSONObject();
             result.put("before_subtract", before.json);
-            boolean subtractExercised = before.firstPayload != null;
+            boolean subtractExercised = before.subtractionInputs.size() > 0;
             result.put("subtract_exercised", subtractExercised);
             if (subtractExercised) {
-                result.put("decoded_a91_first_77_bits_match_input",
-                        equalBitPrefix(expectedPayload, before.firstPayload, 77));
-                A91List list = new A91List();
-                list.add(before.firstPayload, before.firstFrequency, before.firstTime);
-                ReBuildSignal.subtractSignal(decoder, list);
+                result.put("decoded_a91_payloads_match_fixture_inputs",
+                        payloadsMatchFixtureInputs(before.subtractionInputs));
+                ReBuildSignal.subtractSignal(decoder, before.subtractionInputs);
                 listener.setDecodeMode(decoder, false);
-                result.put("after_subtract", decodePass(listener, decoder).json);
+                DecodePass afterSubtract = decodePass(listener, decoder);
+                result.put("after_subtract", afterSubtract.json);
+                boolean semanticEffectObserved = !before.json.toString()
+                        .equals(afterSubtract.json.toString());
+                result.put("subtract_semantic_effect_observed", semanticEffectObserved);
+                result.put("subtract_coverage", semanticEffectObserved
+                        ? "semantic-delta-observed"
+                        : "call-safety-only-production-showed-no-observable-delta");
             } else {
-                result.put("decoded_a91_first_77_bits_match_input", false);
+                result.put("decoded_a91_payloads_match_fixture_inputs", false);
                 result.put("after_subtract", JSONObject.NULL);
+                result.put("subtract_semantic_effect_observed", false);
+                result.put("subtract_coverage", "not-exercised");
             }
 
             listener.DecoderFt8Reset(decoder, FIXED_UTC_MILLIS, waveform.length);
             listener.DecoderMonitorPressFloat(waveform, decoder);
-            listener.setDecodeMode(decoder, false);
-            result.put("after_reset", decodePass(listener, decoder).json);
+            listener.setDecodeMode(decoder, true);
+            result.put("deep_mode_exercised", true);
+            result.put("after_reset_deep", decodePass(listener, decoder).json);
             return result;
         } finally {
             listener.DeleteDecoder(decoder);
@@ -388,22 +452,24 @@ public class NativeOracleInstrumentationTest {
 
     private static DecodePass decodePass(FT8SignalListener listener, long decoder) throws JSONException {
         int candidateCount = listener.DecoderFt8FindSync(decoder);
+        if (candidateCount < 0 || candidateCount > MAX_DECODER_CANDIDATES) {
+            throw new AssertionError("DecoderFt8FindSync returned out-of-range count: "
+                    + candidateCount);
+        }
         List<DecodedRecord> records = new ArrayList<>();
-        byte[] firstPayload = null;
-        float firstFrequency = 0.0f;
-        float firstTime = 0.0f;
+        A91List subtractionInputs = new A91List();
         for (int index = 0; index < candidateCount; index++) {
             Ft8Message message = new Ft8Message(FT8Common.FT8_MODE);
             message.utcTime = FIXED_UTC_MILLIS;
             if (listener.DecoderFt8Analysis(index, decoder, message) && message.isValid) {
                 byte[] payload = listener.DecoderGetA91(decoder);
+                if (payload == null || payload.length != GenerateFT8.FTX_LDPC_K_BYTES) {
+                    throw new AssertionError("DecoderGetA91 returned invalid payload length: "
+                            + (payload == null ? "null" : payload.length));
+                }
                 DecodedRecord record = new DecodedRecord(message, payload);
                 records.add(record);
-                if (firstPayload == null) {
-                    firstPayload = payload;
-                    firstFrequency = message.freq_hz;
-                    firstTime = message.time_sec;
-                }
+                subtractionInputs.add(payload, message.freq_hz, message.time_sec);
             }
         }
         Collections.sort(records, Comparator.comparing(DecodedRecord::sortKey));
@@ -414,7 +480,7 @@ public class NativeOracleInstrumentationTest {
         JSONObject json = new JSONObject();
         json.put("candidate_count", candidateCount);
         json.put("valid_messages", valid);
-        return new DecodePass(json, firstPayload, firstFrequency, firstTime);
+        return new DecodePass(json, subtractionInputs);
     }
 
     private static Method nativeMethod(Class<?> owner, String name, Class<?>... parameterTypes)
@@ -437,6 +503,163 @@ public class NativeOracleInstrumentationTest {
             }
             throw error;
         }
+    }
+
+    private static ProductionFixture synthesizeProductionFixture() throws Exception {
+        Method pack77 = nativeMethod(GenerateFT8.class, "pack77", String.class, byte[].class);
+        Method encode = nativeMethod(GenerateFT8.class, "ft8_encode", byte[].class, byte[].class);
+        Method synth = nativeMethod(
+                GenerateFT8.class,
+                "synth_gfsk",
+                byte[].class,
+                int.class,
+                float.class,
+                float.class,
+                float.class,
+                int.class,
+                float[].class,
+                int.class);
+
+        SynthesizedMessage first = synthesizeMessage(
+                pack77, encode, synth, STANDARD_MESSAGE, 1000.0f, SIGNAL_OFFSET_SAMPLES);
+        SynthesizedMessage second = synthesizeMessage(
+                pack77, encode, synth, SECOND_STANDARD_MESSAGE, 1300.0f,
+                SECOND_SIGNAL_OFFSET_SAMPLES);
+        byte[] pcm16le = new byte[SLOT_SAMPLES * 2];
+        ByteBuffer output = ByteBuffer.wrap(pcm16le).order(ByteOrder.LITTLE_ENDIAN);
+        for (int i = 0; i < SLOT_SAMPLES; i++) {
+            float mixed = 0.45f * (first.waveform[i] + second.waveform[i]);
+            mixed = Math.max(-1.0f, Math.min(1.0f, mixed));
+            output.putShort((short) Math.round(mixed * 32767.0f));
+        }
+        return new ProductionFixture(
+                pcm16le, hex(first.payload), hex(second.payload), null, null);
+    }
+
+    private static SynthesizedMessage synthesizeMessage(
+            Method pack77,
+            Method encode,
+            Method synth,
+            String message,
+            float frequency,
+            int offset) throws Exception {
+        byte[] payload = new byte[GenerateFT8.FTX_LDPC_K_BYTES];
+        int packResult = (Integer) invoke(pack77, null, message, payload);
+        if (packResult < 0) {
+            throw new AssertionError("production fixture message could not be packed: " + message);
+        }
+        byte[] tones = new byte[GenerateFT8.num_tones];
+        invoke(encode, null, payload, tones);
+        float[] waveform = new float[SLOT_SAMPLES];
+        invoke(synth, null, tones, tones.length, frequency, 2.0f,
+                GenerateFT8.symbol_period, SAMPLE_RATE, waveform, offset);
+        return new SynthesizedMessage(payload, waveform);
+    }
+
+    private static PcmFixture loadDecoderFixture() throws Exception {
+        Context testContext = InstrumentationRegistry.getInstrumentation().getContext();
+        byte[] pcm16le;
+        try (InputStream input = testContext.getAssets().open(DECODER_FIXTURE_ASSET);
+             ByteArrayOutputStream output = new ByteArrayOutputStream(SLOT_SAMPLES * 2)) {
+            byte[] buffer = new byte[8192];
+            int count;
+            while ((count = input.read(buffer)) != -1) {
+                output.write(buffer, 0, count);
+            }
+            pcm16le = output.toByteArray();
+        }
+        if (pcm16le.length != SLOT_SAMPLES * 2) {
+            throw new AssertionError("decoder fixture length mismatch: " + pcm16le.length);
+        }
+        String digest = sha256(pcm16le);
+        if (!DECODER_FIXTURE_SHA256.equals(digest)) {
+            throw new AssertionError("decoder fixture SHA-256 mismatch: " + digest);
+        }
+        int[] integerSamples = new int[SLOT_SAMPLES];
+        float[] floatSamples = new float[SLOT_SAMPLES];
+        ByteBuffer input = ByteBuffer.wrap(pcm16le).order(ByteOrder.LITTLE_ENDIAN);
+        for (int i = 0; i < SLOT_SAMPLES; i++) {
+            short sample = input.getShort();
+            integerSamples[i] = sample;
+            floatSamples[i] = sample / 32768.0f;
+        }
+        return new PcmFixture(pcm16le, FIRST_PAYLOAD_HEX, SECOND_PAYLOAD_HEX,
+                integerSamples, floatSamples);
+    }
+
+    private static boolean payloadsMatchFixtureInputs(A91List values) {
+        byte[] first = parseHex(FIRST_PAYLOAD_HEX);
+        byte[] second = parseHex(SECOND_PAYLOAD_HEX);
+        for (A91List.A91 value : values.list) {
+            if (!equalBitPrefix(first, value.a91, 77)
+                    && !equalBitPrefix(second, value.a91, 77)) {
+                return false;
+            }
+        }
+        return values.size() > 0;
+    }
+
+    private static boolean parseBuildBoolean(String value) {
+        if ("true".equals(value)) {
+            return true;
+        }
+        if ("false".equals(value)) {
+            return false;
+        }
+        throw new AssertionError("oracle build provenance was not supplied by capture_oracle.ps1");
+    }
+
+    private static String currentProcessAbi() {
+        String architecture = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT);
+        switch (architecture) {
+            case "x86_64":
+            case "amd64":
+                return "x86_64";
+            case "aarch64":
+            case "arm64":
+                return "arm64-v8a";
+            case "x86":
+            case "i686":
+                return "x86";
+            case "arm":
+            case "armv7l":
+                return "armeabi-v7a";
+            default:
+                throw new AssertionError("unsupported process architecture: " + architecture);
+        }
+    }
+
+    private static String sha256ApkNativeLibrary(String apkPath, String abi) throws Exception {
+        try (ZipFile archive = new ZipFile(apkPath)) {
+            ZipEntry entry = archive.getEntry("lib/" + abi + "/libft8cn.so");
+            if (entry == null) {
+                throw new AssertionError("target APK has no libft8cn.so for process ABI " + abi);
+            }
+            try (InputStream input = archive.getInputStream(entry)) {
+                return sha256(input);
+            }
+        }
+    }
+
+    private static String sha256(File file) throws Exception {
+        try (InputStream input = new java.io.FileInputStream(file)) {
+            return sha256(input);
+        }
+    }
+
+    private static String sha256(byte[] data) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        return hex(digest.digest(data));
+    }
+
+    private static String sha256(InputStream input) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] buffer = new byte[8192];
+        int count;
+        while ((count = input.read(buffer)) != -1) {
+            digest.update(buffer, 0, count);
+        }
+        return hex(digest.digest());
     }
 
     private static JSONObject floatSignalProfile(float[] values, int probeCount) throws Exception {
@@ -582,15 +805,53 @@ public class NativeOracleInstrumentationTest {
 
     private static final class DecodePass {
         final JSONObject json;
-        final byte[] firstPayload;
-        final float firstFrequency;
-        final float firstTime;
+        final A91List subtractionInputs;
 
-        DecodePass(JSONObject json, byte[] firstPayload, float firstFrequency, float firstTime) {
+        DecodePass(JSONObject json, A91List subtractionInputs) {
             this.json = json;
-            this.firstPayload = firstPayload;
-            this.firstFrequency = firstFrequency;
-            this.firstTime = firstTime;
+            this.subtractionInputs = subtractionInputs;
+        }
+    }
+
+    private static class PcmFixture {
+        final byte[] pcm16le;
+        final String firstPayloadHex;
+        final String secondPayloadHex;
+        final int[] integerSamples;
+        final float[] floatSamples;
+
+        PcmFixture(
+                byte[] pcm16le,
+                String firstPayloadHex,
+                String secondPayloadHex,
+                int[] integerSamples,
+                float[] floatSamples) {
+            this.pcm16le = pcm16le;
+            this.firstPayloadHex = firstPayloadHex;
+            this.secondPayloadHex = secondPayloadHex;
+            this.integerSamples = integerSamples;
+            this.floatSamples = floatSamples;
+        }
+    }
+
+    private static final class ProductionFixture extends PcmFixture {
+        ProductionFixture(
+                byte[] pcm16le,
+                String firstPayloadHex,
+                String secondPayloadHex,
+                int[] integerSamples,
+                float[] floatSamples) {
+            super(pcm16le, firstPayloadHex, secondPayloadHex, integerSamples, floatSamples);
+        }
+    }
+
+    private static final class SynthesizedMessage {
+        final byte[] payload;
+        final float[] waveform;
+
+        SynthesizedMessage(byte[] payload, float[] waveform) {
+            this.payload = payload;
+            this.waveform = waveform;
         }
     }
 
