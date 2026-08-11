@@ -10,6 +10,7 @@ def versionNameValue = rootProject.findProperty("ft8cn.versionName")?.toString()
 def versionCodeValue = rootProject.findProperty("ft8cn.versionCode")?.toString()
 def oracleGitCommitValue = rootProject.findProperty("ft8cn.oracleGitCommit")?.toString() ?: "unknown"
 def oracleGitDirtyValue = rootProject.findProperty("ft8cn.oracleGitDirty")?.toString() ?: "unknown"
+def nativeCandidateBuild = rootProject.findProperty("ft8cn.nativeCandidate")?.toString() == "true"
 if (!versionNameValue || !versionCodeValue) {
     throw new GradleException("Missing canonical ft8cn.versionName/ft8cn.versionCode in ft8cn/gradle.properties")
 }
@@ -167,8 +168,11 @@ android {
 
         externalNativeBuild {
             cmake {
-                cppFlags '-JENABLE_XOM=false'//关闭XOM，
-
+                if (nativeCandidateBuild) {
+                    arguments '-DFT8CN_BUILD_INCOMPLETE_REFERENCE=ON'
+                } else {
+                    cppFlags '-JENABLE_XOM=false'//关闭XOM，
+                }
             }
         }
     }
@@ -209,16 +213,20 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
-//    externalNativeBuild {
-//        cmake {
-//            path file('src/main/cpp/CMakeLists.txt')
-//            version '3.18.1'
-//        }
-//    }
+    if (nativeCandidateBuild) {
+        externalNativeBuild {
+            cmake {
+                path file('src/main/cpp/CMakeLists.txt')
+                version '3.22.1'
+            }
+        }
+    }
 
     sourceSets {
         main {
-            jniLibs.srcDirs = ['libs']
+            // The candidate and production binaries share the same SONAME.
+            // Never package both in one APK; the default path remains prebuilt.
+            jniLibs.srcDirs = nativeCandidateBuild ? [] : ['libs']
         }
     }
     namespace 'com.bg7yoz.ft8cn'
