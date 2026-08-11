@@ -56,6 +56,14 @@ jobs:
       run: |
         python scripts/verify_apk_signature.py --apk "ft8cn/app/build/outputs/apk/debug/app-debug.apk" --expect debug
 
+    - name: Verify native ABI, JNI, ELF and 16 KB ZIP alignment
+      run: |
+        python scripts/verify_native_artifact.py \
+          --artifact "ft8cn/app/build/outputs/apk/debug/app-debug.apk" \
+          --jni-contract scripts/native_jni_contract.json \
+          --expected-abis arm64-v8a,armeabi-v7a,x86,x86_64 \
+          --zipalign-mode required
+
     - name: Upload ordinary debug APK
       uses: actions/upload-artifact@v4
       with:

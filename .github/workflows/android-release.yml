@@ -86,6 +86,7 @@ jobs:
             exit 1
           fi
           echo "version=${tag_version}" >> "${GITHUB_OUTPUT}"
+          echo "version_code=${gradle_version#*:}" >> "${GITHUB_OUTPUT}"
           echo "short_sha=${head_sha:0:7}" >> "${GITHUB_OUTPUT}"
           echo "notes_file=${notes_file}" >> "${GITHUB_OUTPUT}"
 
@@ -161,17 +162,34 @@ jobs:
           echo "apk_path=${APK_PATH}" >> "${GITHUB_OUTPUT}"
           echo "apk_name=${APK_NAME}" >> "${GITHUB_OUTPUT}"
 
+      - name: Verify formal APK signature and certificate
+        env:
+          FT8CN_RELEASE_CERT_SHA256: ${{ secrets.FT8CN_RELEASE_CERT_SHA256 }}
+        run: python scripts/verify_apk_signature.py --apk "${{ steps.apk.outputs.apk_path }}" --expect release
+
+      - name: Verify formal APK metadata
+        run: |
+          python scripts/verify_apk_metadata.py \
+            --apk "${{ steps.apk.outputs.apk_path }}" \
+            --package com.bg7yoz.ft8cn \
+            --version-name "${{ steps.version.outputs.version }}" \
+            --version-code "${{ steps.version.outputs.version_code }}" \
+            --require-zipalign
+
+      - name: Verify native ABI, JNI, ELF and 16 KB ZIP alignment
+        run: |
+          python scripts/verify_native_artifact.py \
+            --artifact "${{ steps.apk.outputs.apk_path }}" \
+            --jni-contract scripts/native_jni_contract.json \
+            --expected-abis arm64-v8a,armeabi-v7a,x86,x86_64 \
+            --zipalign-mode required
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.apk.outputs.apk_name }}
           path: ${{ steps.apk.outputs.apk_path }}
           if-no-files-found: error
-
-      - name: Verify formal APK signature
-        env:
-          FT8CN_RELEASE_CERT_SHA256: ${{ secrets.FT8CN_RELEASE_CERT_SHA256 }}
-        run: python scripts/verify_apk_signature.py --apk "${{ steps.apk.outputs.apk_path }}" --expect release
 
       - name: Upload APK to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
