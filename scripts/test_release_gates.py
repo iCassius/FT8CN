@@ -53,10 +53,10 @@ class CertificateGateTests(unittest.TestCase):
         self.assertIsNone(resolve_expected_sha256("debug"))
 
     def test_package_version_metadata_parser_requires_exact_one_line(self) -> None:
-        output = "package: name='com.bg7yoz.ft8cn.beta' versionCode='93007' versionName='0.93.005-beta.7'"
+        output = "package: name='com.bg7yoz.ft8cn.beta' versionCode='93008' versionName='0.93.005-beta.8'"
         self.assertEqual(
             parse_package_line(output),
-            ("com.bg7yoz.ft8cn.beta", "93007", "0.93.005-beta.7"),
+            ("com.bg7yoz.ft8cn.beta", "93008", "0.93.005-beta.8"),
         )
         with self.assertRaisesRegex(ValueError, "exactly one"):
             parse_package_line(output + "\n" + output)
@@ -178,8 +178,8 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
             "FT8CN_BETA_CERT_SHA256",
         ):
             self.assertIn(name, workflow)
-        self.assertIn("0.93.005-beta.7", workflow)
-        self.assertIn("93007", workflow)
+        self.assertIn("0.93.005-beta.8", workflow)
+        self.assertIn("93008", workflow)
         self.assertIn("com.bg7yoz.ft8cn.beta", workflow)
         self.assertIn('gh release create "${TAG_NAME}" --prerelease', workflow)
         self.assertIn('notes_file="doc/release-notes/${GITHUB_REF_NAME}.md"', workflow)
@@ -194,16 +194,16 @@ class ReleaseWorkflowTagFilterTests(unittest.TestCase):
         self.assertIn('GITHUB_SHA: ${{ steps.version.outputs.head_sha }}', workflow)
         self.assertNotIn("GITHUB_SHA:0:7", workflow)
 
-        beta7_notes = REPOSITORY_ROOT / "doc" / "release-notes" / "v0.93.005-beta.7.md"
-        self.assertTrue(beta7_notes.is_file())
-        beta7_text = beta7_notes.read_text(encoding="utf-8")
-        self.assertIn("# FT8CN v0.93.005-beta.7 Pre-release Notes", beta7_text)
-        self.assertIn("0.93.005-beta.7", beta7_text)
-        self.assertIn("93007", beta7_text)
-        self.assertIn("com.bg7yoz.ft8cn.beta", beta7_text)
-        self.assertIn("beta-only", beta7_text)
-        self.assertIn("卸载", beta7_text)
-        self.assertIn("HIL", beta7_text)
+        beta8_notes = REPOSITORY_ROOT / "doc" / "release-notes" / "v0.93.005-beta.8.md"
+        self.assertTrue(beta8_notes.is_file())
+        beta8_text = beta8_notes.read_text(encoding="utf-8")
+        self.assertIn("# FT8CN v0.93.005-beta.8 Pre-release Notes", beta8_text)
+        self.assertIn("0.93.005-beta.8", beta8_text)
+        self.assertIn("93008", beta8_text)
+        self.assertIn("com.bg7yoz.ft8cn.beta", beta8_text)
+        self.assertIn("beta-only", beta8_text)
+        self.assertIn("卸载", beta8_text)
+        self.assertIn("HIL", beta8_text)
 
         for tag_name in ("v0.93.005-beta.1", "v0.93.005-beta.2", "v0.93.005-beta.3", "v0.93.005-beta.4", "v0.93.005-beta.5"):
             notes = REPOSITORY_ROOT / "doc" / "release-notes" / f"{tag_name}.md"

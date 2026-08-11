@@ -33,9 +33,9 @@ SECRET_FILE_NAMES = {
     "keystore.properties",
 }
 PLACEHOLDER_RE = re.compile(r"(?i)(replace-with|your[-_]|<secret>|<key_|example|changeme)")
-BETA_TAG = "v0.93.005-beta.7"
-BETA_VERSION_NAME = "0.93.005-beta.7"
-BETA_VERSION_CODE = "93007"
+BETA_TAG = "v0.93.005-beta.8"
+BETA_VERSION_NAME = "0.93.005-beta.8"
+BETA_VERSION_CODE = "93008"
 BETA_SECRET_NAMES = (
     "FT8CN_BETA_KEYSTORE_B64",
     "FT8CN_BETA_STORE_FILE",
