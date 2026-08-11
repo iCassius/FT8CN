@@ -9,6 +9,19 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    from scripts.verify_native_artifact import (
+        GateError as NativeGateError,
+        load_contract as load_native_contract,
+        verify_contract_against_java_sources,
+    )
+except ImportError:
+    from verify_native_artifact import (
+        GateError as NativeGateError,
+        load_contract as load_native_contract,
+        verify_contract_against_java_sources,
+    )
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SELF = Path(__file__).resolve()
@@ -194,6 +207,13 @@ def main() -> None:
     ci = (ROOT / ".github" / "workflows" / "android.yml").read_text(encoding="utf-8")
     beta_ci = (ROOT / ".github" / "workflows" / "android-prerelease.yml").read_text(encoding="utf-8")
     release_ci = (ROOT / ".github" / "workflows" / "android-release.yml").read_text(encoding="utf-8")
+    try:
+        verify_contract_against_java_sources(
+            load_native_contract(ROOT / "scripts" / "native_jni_contract.json"),
+            ROOT / "ft8cn" / "app" / "src" / "main" / "java",
+        )
+    except NativeGateError as exc:
+        fail(str(exc))
     root_ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
     for pattern in ("**/*.jks", "**/*.keystore", "**/*.p12", "**/*.pfx", "**/*.apk"):
         if pattern not in root_ignore:
